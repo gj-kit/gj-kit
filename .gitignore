@@ -1,0 +1,14 @@
+# 시크릿 — 절대 커밋 금지
+.env
+.env.*
+!.env.example
+
+# 의존성/빌드
+node_modules/
+dist/
+coverage/
+*.tsbuildinfo
+
+# 도구/OS
+.DS_Store
+.turbo/

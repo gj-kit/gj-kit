@@ -1006,3 +1006,70 @@ integration-quick.md에서 requestBillingAuth의 method: "TRANSFER"가 명시적
 - 멱등키 헤더명: 결제창·취소 리서치는 'Idempotency-Key 헤더(최대 300자, 15일 유효)'로 확정 기술했으나, 위젯·테스트 리서치는 '정확한 헤더명 미확인, Idempotency-Key로 추측하지 말 것'이라고 명시 — 확신 수준이 정면 충돌
 - orderId 허용 문자: 위젯 리서치(SDK 문서 기준)는 '-, _, =' 허용, 결제창·빌링 리서치(레퍼런스 기준)는 '-, _'만 허용
 - successUrl 쿼리 파라미터: 위젯 리서치(integration-window 기준)는 paymentType 포함 4개, 결제창 리서치는 orderId/paymentKey/amount 3개만 기술
+# Phase 0 확인 결과 (2026-08-09, 문서 재확인 + 테스트 키 실측)
+
+> fable5 세션의 Phase 0 워크플로(문서 에이전트 4 + 라이브 API 에이전트 2)가 위 "열린 질문"들을 해소한 결과.
+> 라이브 실측은 `.env`의 API 개별연동 테스트 키(test_sk_)로 api.tosspayments.com에 실제 호출한 것이다.
+
+## 열린 질문 7개의 확정 답
+
+### 1. 멱등키 헤더 이름 — `Idempotency-Key` 확정 (문서 + 실측)
+
+- 공식 레퍼런스 verbatim: "요청 헤더에 `Idempotency-Key`를 추가하면 멱등한 요청을 보낼 수 있습니다." (reference/using-api/authorization)
+- 제약: 최대 300자(초과 시 400 INVALID_IDEMPOTENCY_KEY), 처음 사용일부터 15일 유효, 모든 POST에 적용(GET에서는 무시). 처리 중 재요청 시 409 IDEMPOTENT_REQUEST_PROCESSING → "다시 요청해서 응답을 확인하세요".
+- **멱등 판정 조합은 "멱등키 + API 키 + API 주소 + HTTP 메서드"이며 요청 body는 포함되지 않는다** (문서 명시). 같은 키+다른 body의 동작은 미문서화 — 첫 응답 재생으로 추정되므로 라이브러리는 키 재사용 시 body 동일성을 스스로 보장해야 한다.
+- 실측: POST cancel에 같은 키+같은 body 재전송 → HTTP 200, **바이트 단위 동일 body 재생**(cancels 1건 유지, balanceAmount 700 유지, 중복 취소 없음). 전용 replay 표시 헤더는 없으나 관측 가능한 표식 존재: 응답 헤더에 `idempotency-key` 에코, 재생 응답에 x-tosspayments-trace-id 2줄(원본 것 포함), 응답 시간 급감.
+
+### 2. customerKey 제약 — 서버 실제 한계는 300자, 특수문자 필수 아님 (실측)
+
+| 케이스 | 결과 |
+|---|---|
+| 50자 / 51자 / 300자 영숫자 | 전부 200 성공 → SDK 문서의 "50자"는 서버 강제 아님 |
+| 301자 | **500 FAILED_DB_PROCESSING** ("잘못된 요청 값으로 처리 중 DB 에러") — 400 검증 에러가 아니라 DB 한계 |
+| 2자 "ab" | 200 성공 |
+| 순수 영숫자 (특수문자 없음) | 200 성공 → "특수문자 최소 1개" 문구는 허용 집합 나열이 맞음 |
+| "bad key!" (공백+허용 외 문자) | **200 성공** — 서버가 허용 문자 집합을 강제하지 않음 |
+
+- 시사점: **서버는 사실상 검증하지 않으므로 라이브러리의 스마트 생성자가 실질 방어선이다.** validator는 문서 규격 `^[A-Za-z0-9\-_=.@]{2,300}$`으로 강제(301자가 500으로 터지는 것, 공백 키가 URL/타 API에서 깨질 위험 차단). 특수문자 필수 검증은 넣지 않는다.
+
+### 3. cancelAmount > balanceAmount — 403 NOT_CANCELABLE_AMOUNT 확정 (실측)
+
+- 잔액 1000에 cancelAmount 2000 → **HTTP 403 `{"code":"NOT_CANCELABLE_AMOUNT","message":"취소 할 수 없는 금액 입니다."}`**. 결제 상태 불변.
+- 400 INVALID_REFUND_AMOUNT가 아님 — 취소 API 공식 에러 표 기준 매핑이 실측으로 확인됨.
+
+### 4. 승인 시한 10분 vs 30분 — 모순 아님, 서로 다른 구간의 별개 시한 (문서 확정)
+
+- 관계를 명시한 verbatim (reference/using-api/webhook-events): "결제창이 유효한 **30분** 안에 구매자가 결제창에서 인증을 하지 않거나, 결제 인증이 유효한 **10분** 안에 상점에서 결제 승인 API를 호출하지 않으면 결제 상태가 `EXPIRED`로 변경됩니다."
+- 30분 = 결제창 실행(READY)부터 구매자 인증까지 (라이브러리가 통제 불가). 10분 = 인증 완료(successUrl 리다이렉트)부터 confirm 호출까지 (라이브러리가 안내할 대상).
+- 초과 시: 상태는 EXPIRED로 전이(READY→EXPIRED, IN_PROGRESS→EXPIRED 모두 존재, PAYMENT_STATUS_CHANGED 웹훅 발송), 만료 후 confirm 호출은 **404 NOT_FOUND_PAYMENT_SESSION** — 같은 만료 사건의 두 표현. 연동 방식(위젯/결제창)별 차이 없음.
+- 라이브러리 기준: successUrl 수신 즉시 confirm을 기본 패턴으로, 10분 초과 404는 재시도 불가한 최종 실패로 분류.
+
+### 5. requestBillingAuth method enum — 'CARD' | 'TRANSFER' 확정
+
+- SDK 문서 페이지는 값 목록을 명시하지 않으나, `@tosspayments/tosspayments-sdk` v2.7.1 타입 정의가 `BillingAuthRequest = CardBillingAuthRequest | TransferBillingAuthRequest` (각 `method: 'CARD'` / `method: 'TRANSFER'`) discriminated union으로 확정. 가이드 예제와 교차 일치.
+- selectableCardTypes / flowMode / easyPay / cardCompany는 **CardBillingAuthRequest 전용** — TRANSFER 타입에서는 제외해야 SDK 타입과 정합.
+- 카드 가이드의 "자동결제는 카드만 지원합니다" 주석은 구(舊) 주석 — 무시.
+
+### 6. 전액 취소 후 status — 부분취소 이력이 있으면 PARTIAL_CANCELED로 남는다 (실측 확정)
+
+- **부분취소(300) 후 잔액(700) 전액 취소 → HTTP 200, status `PARTIAL_CANCELED` 유지, balanceAmount 0.** GET 조회도 동일. 이 상태에서 재취소 → **403 NOT_CANCELABLE_AMOUNT** (ALREADY_CANCELED_PAYMENT 아님!).
+- 부분취소 이력 없이 한 번에 전액 취소 → status `CANCELED`, 재취소 → 400 ALREADY_CANCELED_PAYMENT.
+- 시사점: "완전 취소" 판정은 반드시 `balanceAmount === 0`으로. 재취소 에러 매핑도 두 코드를 모두 "이미 취소됨" 계열로 수용해야 한다.
+
+### 7. 테스트 환경 웹훅 — 발송됨(문서 확정), 그러나 자동화 불가 → 시뮬레이션 유틸 타당
+
+- 웹훅 가이드 verbatim: "테스트 결제를 해보세요. 등록한 URL로 웹훅이 발송됩니다" — 테스트 키에서도 웹훅 발송 확정.
+- 그러나 (a) localhost URL 등록 불가 명시, (b) 웹훅 등록/관리 API 전무(개발자센터 UI 전용), (c) 가상계좌 입금은 개발자센터 수동 버튼 필요 — 셋 다 자동화 불가.
+- 결론: CI 통합 테스트는 페이로드 시뮬레이션 기반으로 확정. 이벤트 스키마·헤더·서명 산식이 완전히 문서화되어 있어 서명 생성→검증 왕복, secret 대조, dedupe 전부 시뮬레이션 가능.
+
+## 추가 실측 확정 사항 (통합 테스트에 직접 활용)
+
+- **DELETE /v1/billing/{billingKey} 실존 확정**: HTTP 200 + 빈 body(0바이트). 삭제된 키로 승인 시도 → **400 ALREADY_REMOVED_BILLING_KEY** ("이미 삭제된 빌링키입니다"). billingKey의 `=` 문자는 경로에 raw로도, percent-encoding으로도 동작.
+- **테스트 환경 빌링 카드 형식** (문서와 다름 — BIN 6자리 단독은 거부됨):
+  - `433012` (6자리) → 400 INVALID_CARD_NUMBER
+  - `4330121234567890`, `5520221234567890` → 발급 200이지만 cardType "미확인" → 승인 시 400 NOT_SUPPORTED_CARD_TYPE
+  - **`9410001234567890` → 발급(cardType "신용", ownerType "개인", issuerCode 21) + 승인(200 DONE) 모두 성공 — 통합 테스트 표준 카드번호로 사용**
+  - 성공 body: `{"customerKey":"<uuid>","cardNumber":"9410001234567890","cardExpirationYear":"30","cardExpirationMonth":"12","customerIdentityNumber":"900101","cardPassword":"12"}`
+- **NOT_MATCHES_CUSTOMER_KEY 실측**: 다른 customerKey로 승인 → HTTP **400** `{"code":"NOT_MATCHES_CUSTOMER_KEY","message":"빌링 인증 고객키와 결제 요청 고객키가 일치하지 않습니다."}`. 결제 미발생.
+- **NOT_MATCHES_REFUNDABLE_AMOUNT 실측**: refundableAmount 고의 불일치 → HTTP 400, 취소 미실행(잔액 유지) — 낙관적 잠금으로 실제 동작 확인.
+- 멱등키 없이도 안전한 배치를 위해: 승인 성공 orderId 형식 `gjp0a<epoch>` 등 6-64자 영숫자면 충분.

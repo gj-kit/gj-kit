@@ -168,9 +168,11 @@ app.post('/admin/refunds', async (req, res) => {
         reason, expectedAmount: order.paidAmount,
         refundAccount: orThrow(refundAccount({ bank: '88', accountNumber: req.body.account, holderName: req.body.holder })),
       })
-    : c.kind === 'settled' && req.body.amount != null
-      ? await client.cancels.cancelPartially(c, { reason, amount: req.body.amount })
-      : await client.cancels.cancelFully(c, { reason, expectedAmount: order.paidAmount });
+    : c.kind === 'awaiting-deposit'                                 // 입금 전 — 전액취소만 가능
+      ? await client.cancels.cancelFully(c, { reason, expectedAmount: order.paidAmount })
+      : req.body.amount != null                                     // 여기부터 c는 settled로 내로잉 완료
+        ? await client.cancels.cancelPartially(c, { reason, amount: req.body.amount })
+        : await client.cancels.cancelFully(c, { reason, expectedAmount: order.paidAmount });
 
   if (isErr(result)) {
     if (result.error.source === 'network') {
@@ -239,7 +241,8 @@ app.get('/billing/callback', async (c) => {
 
   const profile = await billing.issue(auth.value);                       // [3] 발급 + store.save까지 보장
   if (isErr(profile)) {
-    if (profile.error.kind === 'store-save-failed') opsAlert(profile.error.issuedRecord); // 키 유실 방지 반출
+    if (profile.error.source === 'library' && profile.error.kind === 'store-save-failed')
+      opsAlert(profile.error.issuedRecord);                              // 키 유실 방지 반출
     return c.json(profile.error, 502);
   }
   return c.redirect('/subscription/active');

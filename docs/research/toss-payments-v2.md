@@ -1074,3 +1074,24 @@ integration-quick.md에서 requestBillingAuth의 method: "TRANSFER"가 명시적
 - **NOT_MATCHES_CUSTOMER_KEY 실측**: 다른 customerKey로 승인 → HTTP **400** `{"code":"NOT_MATCHES_CUSTOMER_KEY","message":"빌링 인증 고객키와 결제 요청 고객키가 일치하지 않습니다."}`. 결제 미발생.
 - **NOT_MATCHES_REFUNDABLE_AMOUNT 실측**: refundableAmount 고의 불일치 → HTTP 400, 취소 미실행(잔액 유지) — 낙관적 잠금으로 실제 동작 확인.
 - 멱등키 없이도 안전한 배치를 위해: 승인 성공 orderId 형식 `gjp0a<epoch>` 등 6-64자 영숫자면 충분.
+
+# Phase 5 실측 결과 (2026-08-09, 라이브 통합 테스트)
+
+## 멱등키 — 에러 응답도 멱등 재생됨 (확정, §7-5 후속 결정 근거)
+
+- **4xx 에러 응답(403 NOT_CANCELABLE_AMOUNT, 400 INVALID_REQUEST 모두)이 멱등키에 바인딩된다.** 같은 키로 유효한 body를 다시 보내도 원본 에러가 그대로 재생되고 실제 처리는 실행되지 않는다 (balanceAmount 불변으로 확인).
+- 재생 판별 시그널: 재생 응답의 `x-tosspayments-trace-id`가 "신규ID, 원본ID" 콤마 병기 형태 (비공식 — 공개 API로 노출 금지, 디버그용). `idempotency-key` 에코는 첫 요청에도 있어 판별 불가.
+- **v1.1 confirm 멱등키 자동화 정책**: 자동 생성 키의 동일 키 재시도는 "응답 미수신(네트워크/타임아웃)" 케이스에만 안전. 4xx 수신 후 파라미터를 고쳐 재시도할 때는 반드시 새 키 — 아니면 15일간 같은 에러만 재생된다. 현 라이브러리의 cancel 정책(자동 생성 + TransportFailure 시에만 동일 키 retry 티켓)이 실측으로 정당화됨.
+
+## 빌링(카드) 결제 응답의 secret — 문서와 달리 non-null
+
+- 리서치 문서는 Payment.secret을 가상계좌 DEPOSIT_CALLBACK 검증용으로만 기술하나, 실측(test_sk_)에서는 **type=BILLING, method=카드 결제의 승인/조회 응답에도 secret('ps_…')이 non-null로 내려온다.** 타입(PaymentBase.secret: string | null)은 이미 호환.
+
+## TossPayments-Test-Code — 빌링 승인 경로에서 동작 확인
+
+- POST /v1/billing/{billingKey}에 TossPayments-Test-Code: REJECT_CARD_PAYMENT 헤더 → 서버가 실제로 REJECT_CARD_PAYMENT 에러를 반환 (무시되지 않음). confirm 외 경로에서도 에러 시뮬레이션 유효.
+
+## 통합 테스트 현황
+
+- tests/integration/ 6파일 13테스트 전부 통과 (직렬, 분당 100건 스로틀). 시나리오: 정상 플로우(발급→승인→부분→전액취소 잔액 추적), expectedAmount 불일치 사전 Err(잔액 불변 실증), 잔액 초과 사전 Err + raw 우회 403 대조, 재취소 2종 분기(400/403), NOT_MATCHES_CUSTOMER_KEY raw 대조, 멱등 재생, Test-Code, 무효 키 401, 웹훅 시뮬레이션(서명 로테이션 왕복·secret 대조·dedupe·orderId refetch 실조회).
+- README 18개 ts 블록 전부 컴파일 검증 통과 (scripts/check-readme.mjs, pnpm check:readme로 재실행 가능).

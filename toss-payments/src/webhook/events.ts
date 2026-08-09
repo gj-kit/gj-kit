@@ -29,16 +29,26 @@ export interface PaymentStatusChangedEvent {
   };
 }
 
-/** 해외 간편결제(PayPal 등) 전용 — 국내 결제 취소에는 발송되지 않는다(문서). */
+/**
+ * 해외 간편결제(PayPal 등) 전용 — 국내 결제 취소에는 발송되지 않는다(문서).
+ *
+ * data는 문서상 'Cancel 객체'이며 상세 필드 구성은 열린 질문이다 — 문서화된 Cancel 필드
+ * 목록에 paymentKey/orderId가 없어 **nullable**로 둔다(필수 요구 시 정상 웹훅이 UNKNOWN
+ * 강등). 판별 기준은 cancelStatus만이다. Phase 5 실측 후 재협착 예정.
+ */
 export interface CancelStatusChangedEvent {
   readonly envelope: 'legacy';
   readonly eventType: 'CANCEL_STATUS_CHANGED';
   readonly createdAt: string;
   readonly data: {
-    readonly paymentKey: string;
-    readonly orderId: string;
+    /** 문서 근거 없음(Cancel 객체 필드 아님) — 있으면 refetch 1순위 키로만 활용. */
+    readonly paymentKey: string | null;
+    /** 문서 근거 없음(Cancel 객체 필드 아님) — 있으면 refetch 2순위 키로만 활용. */
+    readonly orderId: string | null;
     readonly cancelStatus: 'IN_PROGRESS' | 'DONE' | 'ABORTED';
     readonly cancelRequestId: string | null;
+    /** Cancel 객체의 취소 건 구분 키(문서) — 최대 64자, nullable 수용. */
+    readonly transactionKey: string | null;
   };
 }
 
@@ -321,10 +331,15 @@ export function createUnverified(event: UnverifiedWebhookEvent, meta: WebhookMet
         case 'ORDER_PAYMENT_STATUS_CHANGED':
           return client.getPayment(event.data.payment.paymentKey);
         case 'CANCEL_STATUS_CHANGED': {
-          const pk = parsePaymentKey(event.data.paymentKey);
-          if (pk.ok) return client.getPayment(pk.value);
-          const oid = parseOrderId(event.data.orderId);
-          if (oid.ok) return client.getPaymentByOrderId(oid.value);
+          // paymentKey/orderId는 문서 근거 없는 nullable 필드 — 있을 때만 폴백 순서로 시도
+          if (event.data.paymentKey !== null) {
+            const pk = parsePaymentKey(event.data.paymentKey);
+            if (pk.ok) return client.getPayment(pk.value);
+          }
+          if (event.data.orderId !== null) {
+            const oid = parseOrderId(event.data.orderId);
+            if (oid.ok) return client.getPaymentByOrderId(oid.value);
+          }
           return err(NO_PAYMENT_REFERENCE);
         }
         default:

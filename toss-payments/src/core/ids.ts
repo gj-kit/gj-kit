@@ -38,6 +38,12 @@ export type CancelReason = string & Brand<'CancelReason'>;
 /** 결제 키 — 1–200자 (문서: 최대 200자). */
 export type PaymentKey = string & Brand<'PaymentKey'>;
 /**
+ * 취소 요청 ID — 6–64자, `^[A-Za-z0-9\-_=]+$` (상점 발급 고유값).
+ * **중국·동남아 비동기(Alipay 등) 결제 취소에만 필수**다 — 공식 V2 '해외 간편결제
+ * 연동하기'(문서 ID 53)의 취소 Request Body 규격. 국내/일반 취소에는 불필요.
+ */
+export type CancelRequestId = string & Brand<'CancelRequestId'>;
+/**
  * 멱등키 — 1–300자 (초과 시 400 INVALID_IDEMPOTENCY_KEY).
  * 처음 사용일부터 15일 유효 — TTL 초과 후 재사용하면 새 요청으로 처리된다(문서).
  * 멱등 판정 조합은 "키 + API 키 + 주소 + 메서드"이며 **body는 포함되지 않는다**(문서 명시).
@@ -73,6 +79,7 @@ function validate<Field extends string>(
 
 const ORDER_ID_CHARSET = /^[A-Za-z0-9_-]+$/;
 const CUSTOMER_KEY_CHARSET = /^[A-Za-z0-9\-_=.@]+$/;
+const CANCEL_REQUEST_ID_CHARSET = /^[A-Za-z0-9\-_=]+$/;
 
 export function orderId(raw: string): Result<OrderId, InvalidInput<'orderId'>> {
   const r = validate(raw, 'orderId', { min: 6, max: 64, charset: ORDER_ID_CHARSET });
@@ -132,6 +139,17 @@ export function cancelReason(raw: string): Result<CancelReason, InvalidInput<'ca
 export function paymentKey(raw: string): Result<PaymentKey, InvalidInput<'paymentKey'>> {
   const r = validate(raw, 'paymentKey', { min: 1, max: 200 });
   return r.ok ? ok(raw as PaymentKey) : r;
+}
+
+export function cancelRequestId(
+  raw: string,
+): Result<CancelRequestId, InvalidInput<'cancelRequestId'>> {
+  const r = validate(raw, 'cancelRequestId', {
+    min: 6,
+    max: 64,
+    charset: CANCEL_REQUEST_ID_CHARSET,
+  });
+  return r.ok ? ok(raw as CancelRequestId) : r;
 }
 
 export function idempotencyKey(

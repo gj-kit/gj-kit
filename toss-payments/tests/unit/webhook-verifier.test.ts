@@ -298,6 +298,41 @@ describe('verify — 소스 IP 검사 (context.sourceIp 전달 시에만)', () =
     const blocked = await v.verify(LEGACY_BODY, headersFor(), { sourceIp: '13.124.18.147' });
     expect(blocked.ok).toBe(false);
   });
+
+  it('IPv4-mapped IPv6(::ffff:) 정규화 — dual-stack Node의 remoteAddress 형태로 정상 웹훅이 거부되면 안 된다', async () => {
+    // Node 기본 dual-stack 리스너의 req.socket.remoteAddress는 '::ffff:13.124.18.147' 형태
+    const mapped = await verifier().verify(LEGACY_BODY, headersFor(), {
+      sourceIp: '::ffff:13.124.18.147',
+    });
+    expect(mapped.ok).toBe(true);
+
+    // 대문자 접두사 표기도 수용 (정규화는 소문자 비교)
+    const upper = await verifier().verify(LEGACY_BODY, headersFor(), {
+      sourceIp: '::FFFF:13.124.18.147',
+    });
+    expect(upper.ok).toBe(true);
+
+    // 목록 밖 IP는 mapped 표기로도 여전히 거부 — 거부 에러의 ip는 원본 형태 유지
+    const blocked = await verifier().verify(LEGACY_BODY, headersFor(), {
+      sourceIp: '::ffff:1.2.3.4',
+    });
+    expect(blocked.ok).toBe(false);
+    if (!blocked.ok) {
+      expect(blocked.error).toEqual({ kind: 'untrusted-source-ip', ip: '::ffff:1.2.3.4' });
+    }
+
+    // 순수 IPv6 임의 주소는 거부 유지
+    const ipv6 = await verifier().verify(LEGACY_BODY, headersFor(), { sourceIp: '2001:db8::1' });
+    expect(ipv6.ok).toBe(false);
+  });
+
+  it('사용자 제공 allowedSourceIps 항목의 ::ffff: 표기도 정규화된다', async () => {
+    const v = verifier({ allowedSourceIps: ['::ffff:10.0.0.1'] });
+    const plain = await v.verify(LEGACY_BODY, headersFor(), { sourceIp: '10.0.0.1' });
+    expect(plain.ok).toBe(true);
+    const mapped = await v.verify(LEGACY_BODY, headersFor(), { sourceIp: '::ffff:10.0.0.1' });
+    expect(mapped.ok).toBe(true);
+  });
 });
 
 // ── 헤더/기타 ──────────────────────────────────────────────────────────────
@@ -365,6 +400,64 @@ describe('verify — 헤더 처리와 Unverified 등급', () => {
     expect(refetched.ok).toBe(false);
     if (refetched.ok) return;
     expect(refetched.error).toEqual({ source: 'library', kind: 'no-payment-reference' });
+  });
+
+  it('CANCEL_STATUS_CHANGED에 paymentKey/orderId가 없으면 refetch는 no-payment-reference (Cancel 객체 형태)', async () => {
+    const body = JSON.stringify({
+      eventType: 'CANCEL_STATUS_CHANGED',
+      createdAt: '2026-08-09T12:00:00.000000',
+      data: { cancelStatus: 'DONE', transactionKey: 'TXN123456789', cancelAmount: 1000 },
+    });
+    const r = await verifier().verify(body, headersFor());
+    expect(r.ok).toBe(true);
+    if (!r.ok || r.value.duplicate || r.value.webhook.trust !== 'unverified') return;
+    expect(r.value.webhook.event.eventType).toBe('CANCEL_STATUS_CHANGED');
+    const client: PaymentLookup = {
+      getPayment: () => Promise.reject(new Error('호출되면 안 된다')),
+      getPaymentByOrderId: () => Promise.reject(new Error('호출되면 안 된다')),
+    };
+    const refetched = await r.value.webhook.refetch(client);
+    expect(refetched.ok).toBe(false);
+    if (refetched.ok) return;
+    expect(refetched.error).toEqual({ source: 'library', kind: 'no-payment-reference' });
+  });
+
+  it('CANCEL_STATUS_CHANGED에 orderId만 있으면 refetch는 orderId 폴백을 쓴다', async () => {
+    const body = JSON.stringify({
+      eventType: 'CANCEL_STATUS_CHANGED',
+      createdAt: '2026-08-09T12:00:00.000000',
+      data: { cancelStatus: 'DONE', orderId: 'order-abc1' },
+    });
+    const r = await verifier().verify(body, headersFor());
+    expect(r.ok).toBe(true);
+    if (!r.ok || r.value.duplicate || r.value.webhook.trust !== 'unverified') return;
+    const calls: string[] = [];
+    const fresh = { paymentKey: 'pay_123', status: 'CANCELED' } as unknown as Payment;
+    const client: PaymentLookup = {
+      getPayment: () => Promise.reject(new Error('paymentKey 없음 — 호출되면 안 된다')),
+      getPaymentByOrderId: (orderId) => {
+        calls.push(`byOrder:${orderId}`);
+        return Promise.resolve(ok(fresh));
+      },
+    };
+    const refetched = await r.value.webhook.refetch(client);
+    expect(refetched.ok).toBe(true);
+    expect(calls).toEqual(['byOrder:order-abc1']);
+  });
+
+  it('deposit 판별 실패한 평탄 봉투(UNKNOWN)의 이벤트에 secret 원문이 남지 않는다', async () => {
+    const body = JSON.stringify({
+      createdAt: '2026-01-01T00:00:00+09:00',
+      secret: 'ps_SECRET_VALUE_123',
+      status: 'REFUND_PENDING', // deposit 4종 밖 → unverified UNKNOWN 폴백
+      transactionKey: 'tk_1',
+      orderId: 'order-123456',
+    });
+    const r = await verifier().verify(body, headersFor());
+    expect(r.ok).toBe(true);
+    if (!r.ok || r.value.duplicate) return;
+    expect(r.value.webhook.trust).toBe('unverified');
+    expect(JSON.stringify(r.value.webhook.event)).not.toContain('ps_SECRET_VALUE_123');
   });
 
   it('알 수 없는 이벤트도 Unverified UNKNOWN으로 verdict에 도달한다(전방 호환)', async () => {

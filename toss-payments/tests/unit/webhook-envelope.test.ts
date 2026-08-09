@@ -59,6 +59,8 @@ describe('parseWebhookEnvelope — 봉투 3종 구조 판별', () => {
     expect(cancel.value.event.eventType).toBe('CANCEL_STATUS_CHANGED');
     if (cancel.value.event.eventType !== 'CANCEL_STATUS_CHANGED') return;
     expect(cancel.value.event.data.cancelRequestId).toBe(null);
+    expect(cancel.value.event.data.paymentKey).toBe('pay_1');
+    expect(cancel.value.event.data.orderId).toBe('order-1');
 
     const billing = parseWebhookEnvelope(
       JSON.stringify({
@@ -70,6 +72,46 @@ describe('parseWebhookEnvelope — 봉투 3종 구조 판별', () => {
     expect(billing.ok && billing.value.kind === 'unverified').toBe(true);
     if (!billing.ok || billing.value.kind !== 'unverified') return;
     expect(billing.value.event.eventType).toBe('BILLING_DELETED');
+  });
+
+  it('CANCEL_STATUS_CHANGED — 공식 Cancel 객체 형태(paymentKey/orderId 없음)도 UNKNOWN 강등 없이 판별한다', () => {
+    // 문서상 data는 'Cancel 객체' — 그 필드 목록에 paymentKey/orderId가 없다(창작 필수 필드 금지)
+    const r = parseWebhookEnvelope(
+      JSON.stringify({
+        eventType: 'CANCEL_STATUS_CHANGED',
+        createdAt: '2026-08-09T12:00:00.000000',
+        data: {
+          cancelAmount: 1000,
+          cancelReason: '고객 요청',
+          transactionKey: 'TXN123456789',
+          cancelStatus: 'DONE',
+          cancelRequestId: 'req-123',
+          canceledAt: '2026-08-09T12:00:00+09:00',
+        },
+      }),
+    );
+    expect(r.ok && r.value.kind === 'unverified').toBe(true);
+    if (!r.ok || r.value.kind !== 'unverified') return;
+    expect(r.value.event.eventType).toBe('CANCEL_STATUS_CHANGED');
+    if (r.value.event.eventType !== 'CANCEL_STATUS_CHANGED') return;
+    expect(r.value.event.data.cancelStatus).toBe('DONE');
+    expect(r.value.event.data.paymentKey).toBeNull();
+    expect(r.value.event.data.orderId).toBeNull();
+    expect(r.value.event.data.cancelRequestId).toBe('req-123');
+    expect(r.value.event.data.transactionKey).toBe('TXN123456789');
+  });
+
+  it('CANCEL_STATUS_CHANGED — 판별 기준은 cancelStatus만: 미지 cancelStatus는 UNKNOWN', () => {
+    const r = parseWebhookEnvelope(
+      JSON.stringify({
+        eventType: 'CANCEL_STATUS_CHANGED',
+        createdAt: '2026-08-09T12:00:00.000000',
+        data: { cancelStatus: 'SOMETHING_NEW' },
+      }),
+    );
+    expect(r.ok && r.value.kind === 'unverified').toBe(true);
+    if (!r.ok || r.value.kind !== 'unverified') return;
+    expect(r.value.event.eventType).toBe('UNKNOWN');
   });
 
   it('평탄 구조(eventType 없음 + secret/transactionKey) — DEPOSIT_CALLBACK으로 판별하고 secret을 이벤트 밖으로 분리한다', () => {
@@ -191,5 +233,93 @@ describe('parseTossTimestamp — 3형식 관대 파서', () => {
       if (r.ok) continue;
       expect(r.error).toEqual({ kind: 'bad-timestamp', raw });
     }
+  });
+});
+
+describe('parseWebhookEnvelope — UNKNOWN 폴백의 secret 마스킹 (로그 유출 방지 불변식)', () => {
+  const SECRET = 'ps_SECRET_VALUE_123';
+
+  it('평탄 봉투 + DEPOSIT_STATUSES 밖 status → UNKNOWN이며 raw의 secret은 [redacted]', () => {
+    const r = parseWebhookEnvelope(
+      JSON.stringify({
+        createdAt: '2026-01-01T00:00:00+09:00',
+        secret: SECRET,
+        status: 'REFUND_PENDING', // deposit 4종 밖 — deposit 경로(secret 분리·소비)에 들지 못한다
+        transactionKey: 'tk_1',
+        orderId: 'order-123456',
+      }),
+    );
+    expect(r.ok).toBe(true);
+    if (!r.ok || r.value.kind !== 'unverified') return expect.unreachable('unverified여야 한다');
+    expect(r.value.event.eventType).toBe('UNKNOWN');
+    if (r.value.event.eventType !== 'UNKNOWN') return;
+    // UNKNOWN 이벤트 통째 로깅은 자연스러운 모니터링 패턴 — secret 원문이 남으면 웹훅 위조 재료가 된다
+    expect(JSON.stringify(r.value.event)).not.toContain(SECRET);
+    expect((r.value.event.raw as Record<string, unknown>)['secret']).toBe('[redacted]');
+    // 나머지 필드는 보존 — 전방 호환 디버깅 정보 유지
+    expect((r.value.event.raw as Record<string, unknown>)['orderId']).toBe('order-123456');
+  });
+
+  it('평탄 봉투 + transactionKey 누락(판별 실패) → UNKNOWN이며 secret 미유출', () => {
+    const r = parseWebhookEnvelope(
+      JSON.stringify({
+        createdAt: '2026-01-01T00:00:00+09:00',
+        secret: SECRET,
+        status: 'DONE',
+        orderId: 'order-123456', // transactionKey 없음
+      }),
+    );
+    expect(r.ok).toBe(true);
+    if (!r.ok || r.value.kind !== 'unverified') return;
+    expect(JSON.stringify(r.value.event)).not.toContain(SECRET);
+  });
+
+  it('legacy/v2 UNKNOWN 폴백도 최상위 secret을 마스킹한다 (방어 일관성)', () => {
+    // (a) eventType 있음 + data 없음 → legacy UNKNOWN 폴백
+    const noData = parseWebhookEnvelope(
+      JSON.stringify({ eventType: 'WEIRD_EVENT', createdAt: '2026-01-01T00:00:00+09:00', secret: SECRET }),
+    );
+    expect(noData.ok).toBe(true);
+    if (noData.ok && noData.value.kind === 'unverified') {
+      expect(JSON.stringify(noData.value.event)).not.toContain(SECRET);
+    }
+
+    // (b) 미지 eventType + data 있음 → parseLegacy unknown()
+    const legacyUnknown = parseWebhookEnvelope(
+      JSON.stringify({
+        eventType: 'BRAND_NEW_EVENT',
+        createdAt: '2026-01-01T00:00:00+09:00',
+        secret: SECRET,
+        data: {},
+      }),
+    );
+    expect(legacyUnknown.ok).toBe(true);
+    if (legacyUnknown.ok && legacyUnknown.value.kind === 'unverified') {
+      expect(JSON.stringify(legacyUnknown.value.event)).not.toContain(SECRET);
+    }
+
+    // (c) entityBody 있음 + 미지 eventType → parseV2 unknown()
+    const v2Unknown = parseWebhookEnvelope(
+      JSON.stringify({
+        eventType: 'mystery.changed',
+        createdAt: '2026-01-01T00:00:00+09:00',
+        eventId: 'evt-1',
+        entityType: 'mystery',
+        entityBody: {},
+        secret: SECRET,
+      }),
+    );
+    expect(v2Unknown.ok).toBe(true);
+    if (v2Unknown.ok && v2Unknown.value.kind === 'unverified') {
+      expect(JSON.stringify(v2Unknown.value.event)).not.toContain(SECRET);
+    }
+  });
+
+  it('secret이 없는 UNKNOWN raw는 원문 그대로 보존된다', () => {
+    const body = { createdAt: '2026-01-01T00:00:00+09:00', something: 'else' };
+    const r = parseWebhookEnvelope(JSON.stringify(body));
+    expect(r.ok).toBe(true);
+    if (!r.ok || r.value.kind !== 'unverified' || r.value.event.eventType !== 'UNKNOWN') return;
+    expect(r.value.event.raw).toEqual(body);
   });
 });

@@ -9,7 +9,7 @@ import type {
   SettledCancelable,
   TossServerClient,
 } from '../../src/server';
-import type { CancelReason, Payment } from '../../src/index';
+import type { CancelReason, CancelRequestId, Payment } from '../../src/index';
 
 const forge = <T>(): T => undefined as T; // 타입 테스트 전용 헬퍼
 
@@ -60,5 +60,28 @@ describe('§3.2 cancel — 오용 = 컴파일 에러', () => {
     void client.cancels.cancelPartially(settled, { reason, amount: 500 });
     void client.cancels.cancelPartially(vaDeposited, { reason, amount: 500, refundAccount: acct });
     void client.cancels.retry(forge<CancelRetryTicket>());
+  });
+
+  it('cancelRequestId — 스마트 생성자 브랜드만 수용(중국·동남아 비동기 취소)', () => {
+    const crid = forge<CancelRequestId>();
+    // 5개 오버로드 전부에서 옵션으로 컴파일된다
+    void client.cancels.cancelFully(settled, { reason, expectedAmount: 1000, cancelRequestId: crid });
+    void client.cancels.cancelFully(vaDeposited, {
+      reason,
+      expectedAmount: 10_000,
+      refundAccount: acct,
+      cancelRequestId: crid,
+    });
+    void client.cancels.cancelFully(awaiting, { reason, expectedAmount: 1000, cancelRequestId: crid });
+    void client.cancels.cancelPartially(settled, { reason, amount: 500, cancelRequestId: crid });
+    void client.cancels.cancelPartially(vaDeposited, {
+      reason,
+      amount: 500,
+      refundAccount: acct,
+      cancelRequestId: crid,
+    });
+
+    // @ts-expect-error 평문 문자열은 불가 — cancelRequestId() 스마트 생성자(6-64자 검증) 통과 필수
+    void client.cancels.cancelPartially(settled, { reason, amount: 500, cancelRequestId: 'raw-1' });
   });
 });

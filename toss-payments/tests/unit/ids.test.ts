@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   cancelReason,
+  cancelRequestId,
   customerKey,
   generateCustomerKey,
   generateIdempotencyKey,
@@ -115,6 +116,23 @@ describe('paymentKey — 1-200자', () => {
     expect(isOk(paymentKey('a'.repeat(200)))).toBe(true);
     expect(reasonOf(paymentKey('a'.repeat(201)))).toBe('too-long');
     expect(reasonOf(paymentKey(''))).toBe('empty');
+  });
+});
+
+describe('cancelRequestId — 6-64자, ^[A-Za-z0-9\\-_=]+$ (중국·동남아 비동기 취소 전용)', () => {
+  it('경계 길이', () => {
+    expect(isOk(cancelRequestId('a'.repeat(6)))).toBe(true);
+    expect(isOk(cancelRequestId('a'.repeat(64)))).toBe(true);
+    expect(reasonOf(cancelRequestId('a'.repeat(5)))).toBe('too-short');
+    expect(reasonOf(cancelRequestId('a'.repeat(65)))).toBe('too-long');
+    expect(reasonOf(cancelRequestId(''))).toBe('empty');
+  });
+
+  it('문자셋 — 영숫자/-/_/=만 허용', () => {
+    expect(isOk(cancelRequestId('my-cancel_req=01'))).toBe(true);
+    expect(reasonOf(cancelRequestId('req 0001'))).toBe('bad-charset');
+    expect(reasonOf(cancelRequestId('req.0001'))).toBe('bad-charset');
+    expect(reasonOf(cancelRequestId('취소요청0001'))).toBe('bad-charset');
   });
 });
 

@@ -7,6 +7,7 @@ import {
   createTossClient,
   parseApiSecretKey,
   parseBillingAuthCallback,
+  recoverBillingKeyRecord,
   type AuthKeyReceived,
   type BillingKeyRecord,
   type BillingKeyStore,
@@ -119,7 +120,7 @@ describe('billing.issue — store.save 성공 후에만 Ok', () => {
     expect(Object.values({ ...r.value })).not.toContain('bill_abcdef=');
   });
 
-  it('저장 실패 → Err에 발급된 record 동봉 (키 유실 방지)', async () => {
+  it('저장 실패 → Err에 발급 record 동봉 — billingKey는 봉인, recoverBillingKeyRecord로만 회수', async () => {
     const pair = mockFetch(() => ({ status: 200, body: issueResponse }));
     const boom = new Error('db down');
     const store: BillingKeyStore = {
@@ -134,7 +135,22 @@ describe('billing.issue — store.save 성공 후에만 Ok', () => {
     expect(isErr(r)).toBe(true);
     if (isErr(r) && 'kind' in r.error && r.error.kind === 'store-save-failed') {
       expect(r.error.cause).toBe(boom);
-      expect(r.error.issuedRecord.billingKey).toBe('bill_abcdef=');
+      // 에러 객체 통째 로깅(JSON.stringify) — billingKey 평문이 어디에도 새지 않는다
+      expect(JSON.stringify(r.error)).not.toContain('bill_abcdef=');
+      expect(Object.values({ ...r.error.issuedRecord })).not.toContain('bill_abcdef=');
+      expect(r.error.issuedRecord.customerKey).toBe(CK);
+      // 회수는 recoverBillingKeyRecord로만 — store.save 재시도용 원본 record 복원
+      const recovered = recoverBillingKeyRecord(r.error.issuedRecord);
+      expect(isOk(recovered)).toBe(true);
+      if (isOk(recovered)) {
+        expect(recovered.value.billingKey).toBe('bill_abcdef=');
+        expect(recovered.value.customerKey).toBe(CK);
+        expect(recovered.value.method).toBe('카드');
+      }
+      // 스프레드 복제본은 봉인 소실 — 명시적 Err
+      const detached = recoverBillingKeyRecord({ ...r.error.issuedRecord });
+      expect(isErr(detached)).toBe(true);
+      if (isErr(detached)) expect(detached.error.kind).toBe('record-detached');
     } else {
       expect.unreachable('store-save-failed여야 한다');
     }
@@ -187,6 +203,21 @@ describe('billing.approve — 봉인 쌍으로만 승인', () => {
     const body = JSON.parse(approveCall?.body ?? '{}') as Record<string, unknown>;
     expect(body['customerKey']).toBe(CK);
     expect(body['amount']).toBe(12_900);
+  });
+
+  it('approve 200 + 빈 body → 빈 BillingPayment 제조 금지 — TransportFailure(재시도 가능)', async () => {
+    const pair = mockFetch((_call, index) =>
+      index === 0 ? { status: 200, body: issueResponse } : { status: 200 }, // 승인 응답이 0바이트
+    );
+    const { billing, profile } = await issuedProfile(pair);
+    const r = await billing.approve(profile, order());
+    expect(isErr(r)).toBe(true);
+    if (isErr(r) && 'source' in r.error && r.error.source === 'network') {
+      expect(r.error.code).toBe('NETWORK_ERROR');
+      expect(r.error.retryable).toBe(true);
+    } else {
+      expect.unreachable('network 실패여야 한다 — 전부 undefined인 결제가 승인 성공으로 새면 안 된다');
+    }
   });
 
   it('스프레드 복제 profile(봉인 소실) → profile-detached, API 미호출', async () => {

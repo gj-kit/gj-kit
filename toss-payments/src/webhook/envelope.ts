@@ -89,6 +89,21 @@ function asString(value: unknown): string | null {
 }
 
 /**
+ * UNKNOWN 래핑 시 최상위 `secret`을 마스킹한다 — 불변식 보호.
+ *
+ * 평탄 DEPOSIT_CALLBACK 후보가 status/필드 불일치로 deposit 경로(secret이 event 밖으로
+ * 분리·소비되는 경로)에 들지 못하고 UNKNOWN으로 떨어지면, raw에 secret 원문이 그대로
+ * 남아 'UNKNOWN 이벤트 로깅'이라는 자연스러운 모니터링 패턴에서 secret이 유출된다 —
+ * 유출된 secret으로 입금 웹훅 위조가 가능하다(secret 대조 통과). 모든 UNKNOWN 폴백은
+ * raw 노출 전에 이 헬퍼를 거친다.
+ */
+function redactTopLevelSecret(body: Record<string, unknown>): Record<string, unknown> {
+  if (!('secret' in body)) return body;
+  const { secret: _stripped, ...safe } = body;
+  return { ...safe, secret: '[redacted]' };
+}
+
+/**
  * 웹훅 data → core Payment 매핑.
  *
  * 판별에 필요한 최소 필드(paymentKey/orderId/status)만 런타임 검사하고 나머지는
@@ -125,7 +140,7 @@ function parseLegacy(eventType: string, body: Record<string, unknown>): Unverifi
     eventType: 'UNKNOWN',
     rawEventType: eventType,
     createdAt,
-    raw: body,
+    raw: redactTopLevelSecret(body),
   });
   if (createdAt === null || !isRecord(data)) return unknown();
 
@@ -136,14 +151,12 @@ function parseLegacy(eventType: string, body: Record<string, unknown>): Unverifi
       return { envelope: 'legacy', eventType, createdAt, data: payment };
     }
     case 'CANCEL_STATUS_CHANGED': {
-      const paymentKey = asString(data['paymentKey']);
-      const orderId = asString(data['orderId']);
+      // 판별 기준은 cancelStatus만이다 — 문서상 data는 'Cancel 객체'이고 그 필드 목록에
+      // paymentKey/orderId가 없다(상세 구성은 열린 질문, 리서치 §웹훅 보강). 두 필드를
+      // 필수로 요구하면 공식 Cancel 객체 형태의 정상 웹훅이 UNKNOWN으로 강등된다.
+      // Phase 5 실측(테스트 키 해외결제 취소 웹훅)으로 페이로드 확정 후 재협착 예정.
       const cancelStatus = data['cancelStatus'];
-      if (
-        paymentKey === null ||
-        orderId === null ||
-        (cancelStatus !== 'IN_PROGRESS' && cancelStatus !== 'DONE' && cancelStatus !== 'ABORTED')
-      ) {
+      if (cancelStatus !== 'IN_PROGRESS' && cancelStatus !== 'DONE' && cancelStatus !== 'ABORTED') {
         return unknown();
       }
       return {
@@ -151,10 +164,11 @@ function parseLegacy(eventType: string, body: Record<string, unknown>): Unverifi
         eventType,
         createdAt,
         data: {
-          paymentKey,
-          orderId,
+          paymentKey: asString(data['paymentKey']),
+          orderId: asString(data['orderId']),
           cancelStatus,
           cancelRequestId: asString(data['cancelRequestId']),
+          transactionKey: asString(data['transactionKey']),
         },
       };
     }
@@ -240,7 +254,7 @@ function parseV2(
     eventType: 'UNKNOWN',
     rawEventType: eventType,
     createdAt,
-    raw: body,
+    raw: redactTopLevelSecret(body),
   });
   if (createdAt === null || eventId === null) return { kind: 'unverified', event: unknown() };
   if (eventType === 'payout.changed' && entityType === 'payout') {
@@ -293,7 +307,7 @@ export function parseWebhookEnvelope(
         eventType: 'UNKNOWN',
         rawEventType: eventType,
         createdAt: asString(json['createdAt']),
-        raw: json,
+        raw: redactTopLevelSecret(json),
       },
     });
   }
@@ -324,8 +338,15 @@ export function parseWebhookEnvelope(
       },
     });
   }
+  // UNKNOWN 폴백 — deposit 판별에 실패한 body에 secret이 남아 있을 수 있다 → 마스킹 필수
   return ok({
     kind: 'unverified',
-    event: { envelope: 'flat', eventType: 'UNKNOWN', rawEventType: '', createdAt, raw: json },
+    event: {
+      envelope: 'flat',
+      eventType: 'UNKNOWN',
+      rawEventType: '',
+      createdAt,
+      raw: redactTopLevelSecret(json),
+    },
   });
 }

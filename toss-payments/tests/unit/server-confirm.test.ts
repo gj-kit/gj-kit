@@ -245,6 +245,27 @@ describe('createConfirmFlow — verify/confirm (검증 강제)', () => {
     if (isOk(r)) expect(r.value.status).toBe('WAITING_FOR_DEPOSIT');
   });
 
+  it('confirm 200 + 빈 body → 빈 ConfirmedPayment 제조 금지 — TransportFailure(재시도 가능)', async () => {
+    const pair = mockFetch(() => ({ status: 200 })); // 0바이트 본문
+    const flow = await flowWithOrder(pair);
+    const r = await flow.confirmCallback(CALLBACK_URL);
+    expect(isErr(r)).toBe(true);
+    if (isErr(r) && 'source' in r.error && r.error.source === 'network') {
+      expect(r.error.code).toBe('NETWORK_ERROR');
+      expect(r.error.retryable).toBe(true);
+    } else {
+      expect.unreachable('network 실패여야 한다 — status undefined인 결제가 승인 성공으로 새면 안 된다');
+    }
+  });
+
+  it('confirm 200 + 비객체 JSON → TransportFailure — Ok 통과 금지', async () => {
+    const pair = mockFetch(() => ({ status: 200, body: 'OK' }));
+    const flow = await flowWithOrder(pair);
+    const r = await flow.confirmCallback(CALLBACK_URL);
+    expect(isErr(r)).toBe(true);
+    if (isErr(r) && 'source' in r.error) expect(r.error.source).toBe('network');
+  });
+
   it('confirm 실패 — NOT_FOUND_PAYMENT_SESSION(10분 초과 404)은 DEADLINE·비재시도', async () => {
     const pair = mockFetch(() => ({
       status: 404,

@@ -361,6 +361,7 @@
   - taxFreeAmount (body, number, 선택) — 취소할 금액 중 면세 금액, 기본값 0
   - taxExemptionAmount (body, number, 선택) — 과세 제외 금액(컵 보증금 등)
   - refundableAmount (body, number, 선택) — '현재 환불 가능한 금액입니다. 결제 취소를 안전하게 처리합니다' — 서버가 아는 잔액과 일치하는지 검증하는 안전장치 성격의 파라미터
+  - cancelRequestId (body, string, 조건부) — 상점이 발급하는 취소 요청 고유값, 6–64자 `[A-Za-z0-9\-_=]`. **중국 및 동남아(비동기) 결제 취소에만 필수** — 출처: 공식 V2 '해외 간편결제 연동하기'(MCP 문서 ID 53). 응답의 cancels[].cancelRequestId와 별개로 **요청 파라미터**로도 존재한다(2026-08-09 보강 — 기존에는 응답 필드로만 기록돼 있었음)
   - Idempotency-Key (header, string, 선택) — 최대 300자, 중복 취소 방지
   - Authorization (header, 필수) — Basic {base64(SECRET_KEY:)}
   - Content-Type: application/json

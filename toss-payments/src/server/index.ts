@@ -53,7 +53,12 @@ export type {
 } from './cancel';
 
 // §3.3 billing
-export { confirmPendingAuth, createBillingFlow, parseBillingAuthCallback } from './billing';
+export {
+  confirmPendingAuth,
+  createBillingFlow,
+  parseBillingAuthCallback,
+  recoverBillingKeyRecord,
+} from './billing';
 export type {
   AuthKeyReceived,
   BillingApproveError,
@@ -69,5 +74,6 @@ export type {
   PendingBillingAuth,
   BillingProfile,
   RevokeBillingKeyError,
+  SealedBillingKeyRecord,
   StoreFailure,
 } from './billing';

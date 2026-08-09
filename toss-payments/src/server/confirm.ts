@@ -21,7 +21,7 @@ import { err, ok, type Result } from '../core/result';
 import {
   getInternalHttp,
   missingInternalHttpFailure,
-  parsePayment,
+  parsePaymentChecked,
   type CallOptions,
   type KeyKind,
   type TossServerClient,
@@ -384,8 +384,11 @@ export function createConfirmFlow<E extends Env>(
       signal: callOptions?.signal,
     });
     if (!r.ok) return err(r.error);
+    // 2xx라도 빈 body/비객체 JSON이면 '빈 Payment' 제조 금지 — 필수 필드 가드 통과 후에만 Ok
+    const parsed = parsePaymentChecked(r.value);
+    if (!parsed.ok) return parsed;
     // 승인 성공 응답의 status는 DONE|WAITING_FOR_DEPOSIT(가상계좌) — 응답 협착 단언(문서 근거)
-    return ok(parsePayment(r.value) as ConfirmedPayment);
+    return ok(parsed.value as ConfirmedPayment);
   };
 
   return {

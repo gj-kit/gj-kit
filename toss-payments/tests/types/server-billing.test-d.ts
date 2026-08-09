@@ -1,6 +1,6 @@
 import { describe, it } from 'vitest';
 
-import { createBillingFlow } from '../../src/server';
+import { createBillingFlow, recoverBillingKeyRecord } from '../../src/server';
 import type {
   AuthKeyReceived,
   BillingFlow,
@@ -9,6 +9,7 @@ import type {
   BillingProfile,
   DirectCardIssueInput,
   PendingBillingAuth,
+  SealedBillingKeyRecord,
   TossServerClient,
 } from '../../src/server';
 
@@ -55,5 +56,21 @@ describe('§3.3 billing — 오용 = 컴파일 에러', () => {
     void capFlow.issueWithCard(cardInput);
     const auth = forge<AuthKeyReceived>();
     void capFlow.issue(auth); // base 메서드도 유지
+  });
+
+  it('store-save-failed의 issuedRecord — billingKey 필드가 타입에 존재하지 않는다(봉인)', () => {
+    const sealed = forge<SealedBillingKeyRecord>();
+    // @ts-expect-error billingKey는 봉인 상태 — recoverBillingKeyRecord로만 회수 가능
+    void sealed.billingKey;
+
+    // 회수 함수는 원본 record를 돌려준다
+    const recovered = recoverBillingKeyRecord(sealed);
+    if (recovered.ok) {
+      const key: string = recovered.value.billingKey;
+      void key;
+    }
+
+    // @ts-expect-error 봉인 record를 store.save에 직접 넣을 수 없다 — billingKey 부재
+    void forge<BillingKeyStore>().save(sealed);
   });
 });

@@ -117,6 +117,67 @@ describe('createTossClient — 에러 매핑 (코드 테이블 판정, HTTP stat
     }
   });
 
+  it('2xx + 빈 body → 빈 Payment 제조 금지 — TransportFailure(NETWORK_ERROR, retryable)', async () => {
+    const { fetch } = mockFetch(() => ({ status: 200 })); // body 없음 → 0바이트 본문
+    const client = createTossClient(secretKey(), { fetch });
+    const r = await client.getPayment(orThrow(paymentKey('pk-x')));
+    expect(isErr(r)).toBe(true);
+    if (isErr(r) && r.error.source === 'network') {
+      expect(r.error.code).toBe('NETWORK_ERROR');
+      expect(r.error.retryable).toBe(true);
+      expect(String((r.error.cause as Error).message)).toContain('필수 필드');
+    } else {
+      expect.unreachable('network 실패여야 한다 — paymentKey undefined인 Payment가 Ok로 새면 안 된다');
+    }
+  });
+
+  it('2xx + 비객체 JSON("OK" 문자열) → TransportFailure — Ok 통과 금지', async () => {
+    const { fetch } = mockFetch(() => ({ status: 200, body: 'OK' })); // JSON 문자열 본문
+    const client = createTossClient(secretKey(), { fetch });
+    const r = await client.getPayment(orThrow(paymentKey('pk-x')));
+    expect(isErr(r)).toBe(true);
+    if (isErr(r)) expect(r.error.source).toBe('network');
+  });
+
+  it('2xx인데 필수 필드(status) 누락 → TransportFailure — 부분 결손 응답도 차단', async () => {
+    const partial = rawPayment();
+    delete (partial as Record<string, unknown>)['status'];
+    const { fetch } = mockFetch(() => ({ status: 200, body: partial }));
+    const client = createTossClient(secretKey(), { fetch });
+    const r = await client.getPayment(orThrow(paymentKey('pk-x')));
+    expect(isErr(r)).toBe(true);
+    if (isErr(r)) expect(r.error.source).toBe('network');
+  });
+
+  it('비-2xx + 비토스 형식(HTML 에러 페이지) → source network(재시도 가능) — toss UNKNOWN_ERROR 오분류 금지', async () => {
+    const htmlFetch = (async () =>
+      new Response('<html><body>502 Bad Gateway</body></html>', { status: 502 })) as typeof fetch;
+    const client = createTossClient(secretKey(), { fetch: htmlFetch });
+    const r = await client.getPayment(orThrow(paymentKey('pk-x')));
+    expect(isErr(r)).toBe(true);
+    if (isErr(r) && r.error.source === 'network') {
+      expect(r.error.code).toBe('NETWORK_ERROR');
+      expect(r.error.retryable).toBe(true);
+      const message = String((r.error.cause as Error).message);
+      expect(message).toContain('HTTP 502');
+      expect(message).toContain('502 Bad Gateway');
+    } else {
+      expect.unreachable('network 실패여야 한다 — 게이트웨이 응답을 toss로 오분류하면 안 된다');
+    }
+  });
+
+  it('비-2xx + 빈 body → source network — retryable:false 각인 금지', async () => {
+    const { fetch } = mockFetch(() => ({ status: 504 })); // 빈 본문 504
+    const client = createTossClient(secretKey(), { fetch });
+    const r = await client.getPayment(orThrow(paymentKey('pk-x')));
+    expect(isErr(r)).toBe(true);
+    if (isErr(r) && r.error.source === 'network') {
+      expect(r.error.retryable).toBe(true);
+    } else {
+      expect.unreachable('network 실패여야 한다');
+    }
+  });
+
   it('타임아웃 → TransportFailure TIMEOUT (AbortSignal.timeout 결합)', async () => {
     const hangingFetch = ((_url: unknown, init?: RequestInit) =>
       new Promise<Response>((_resolve, reject) => {

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { cancelReason, isErr, isOk, orThrow, isTestKey } from '../../src/server';
+import { cancelReason, cancelRequestId, isErr, isOk, orThrow, isTestKey } from '../../src/server';
 import {
   asCancelable,
   createTossClient,
@@ -211,6 +211,35 @@ describe('cancels — 요청 형식', () => {
     expect(r.value.idempotencyKey).toBe(sent);
   });
 
+  it('cancelRequestId 지정 시 body에 전송된다 (중국·동남아 비동기 취소 필수 파라미터)', async () => {
+    const pair = mockFetch(() => ({
+      status: 200,
+      body: rawPayment({
+        status: 'PARTIAL_CANCELED',
+        balanceAmount: 900,
+        lastTransactionKey: 'txn-cancel-1',
+        cancels: [rawCancelTransaction({ cancelAmount: 100, cancelRequestId: 'my-cancel-req-000001' })],
+      }),
+    }));
+    const client = testClient(pair.fetch);
+    const r = await client.cancels.cancelPartially(settledTarget(), {
+      reason: reason(),
+      amount: 100,
+      cancelRequestId: orThrow(cancelRequestId('my-cancel-req-000001')),
+    });
+    expect(isOk(r)).toBe(true);
+    const body = JSON.parse(pair.calls[0]?.body ?? '{}') as Record<string, unknown>;
+    expect(body['cancelRequestId']).toBe('my-cancel-req-000001');
+  });
+
+  it('cancelRequestId 미지정 시 body에 실리지 않는다', async () => {
+    const pair = mockFetch(() => ({ status: 200, body: successBody() }));
+    const client = testClient(pair.fetch);
+    await client.cancels.cancelFully(settledTarget(), { reason: reason(), expectedAmount: 1000 });
+    const body = JSON.parse(pair.calls[0]?.body ?? '{}') as Record<string, unknown>;
+    expect('cancelRequestId' in body).toBe(false);
+  });
+
   it('testCode는 TossPayments-Test-Code 헤더로 전송된다', async () => {
     const pair = mockFetch(() => ({ status: 200, body: successBody() }));
     const client = testClient(pair.fetch);
@@ -327,6 +356,88 @@ describe('cancels — transport 실패 봉인 티켓 재시도', () => {
       pair.calls[0]?.headers['idempotency-key'],
     );
     if (second.ok) expect(second.value.idempotencyKey).toBe(ticket.idempotencyKey);
+  });
+
+  it('게이트웨이 504 + HTML body → source network + retry 티켓 — 응답 유실을 같은 멱등키로 회수', async () => {
+    // mockFetch는 body를 JSON.stringify하므로 HTML 원문 응답은 fetch를 직접 구현한다
+    const recorded: { headers: Record<string, string>; body: string | null }[] = [];
+    const fetchImpl = (async (_url: unknown, init?: RequestInit) => {
+      const headers: Record<string, string> = {};
+      new Headers(init?.headers).forEach((value, key) => {
+        headers[key.toLowerCase()] = value;
+      });
+      recorded.push({ headers, body: typeof init?.body === 'string' ? init.body : null });
+      if (recorded.length === 1) {
+        return new Response('<html><body>504 Gateway Time-out</body></html>', { status: 504 });
+      }
+      return new Response(
+        JSON.stringify(
+          rawPayment({
+            status: 'CANCELED',
+            balanceAmount: 0,
+            lastTransactionKey: 'txn-cancel-1',
+            cancels: [rawCancelTransaction()],
+          }),
+        ),
+        { status: 200 },
+      );
+    }) as typeof fetch;
+
+    const client = testClient(fetchImpl);
+    const first = await client.cancels.cancelFully(settledTarget(), {
+      reason: reason(),
+      expectedAmount: 1000,
+    });
+    expect(isErr(first)).toBe(true);
+    if (!isErr(first) || !('source' in first.error) || first.error.source !== 'network') {
+      return expect.unreachable('게이트웨이 응답은 toss가 아닌 network 실패여야 한다');
+    }
+    expect(first.error.retryable).toBe(true);
+    expect(String((first.error.cause as Error).message)).toContain('HTTP 504');
+    if (!('retry' in first.error)) {
+      return expect.unreachable('응답 유실 회수용 retry 티켓이 동봉돼야 한다');
+    }
+
+    const second = await client.cancels.retry(first.error.retry);
+    expect(isOk(second)).toBe(true);
+    expect(recorded.length).toBe(2);
+    expect(recorded[1]?.headers['idempotency-key']).toBe(recorded[0]?.headers['idempotency-key']);
+    expect(recorded[1]?.body).toBe(recorded[0]?.body);
+  });
+
+  it('게이트웨이 502 + 빈 body → source network + retry 티켓 (UNKNOWN_ERROR/toss 오분류 금지)', async () => {
+    const pair = mockFetch(() => ({ status: 502 })); // 빈 본문
+    const client = testClient(pair.fetch);
+    const r = await client.cancels.cancelFully(settledTarget(), {
+      reason: reason(),
+      expectedAmount: 1000,
+    });
+    expect(isErr(r)).toBe(true);
+    if (isErr(r) && 'source' in r.error && r.error.source === 'network') {
+      expect(r.error.retryable).toBe(true);
+      expect('retry' in r.error).toBe(true);
+    } else {
+      expect.unreachable('network 실패 + retry 티켓이어야 한다');
+    }
+  });
+
+  it('진짜 토스 5xx({code,message} JSON)는 여전히 toss 분류 — 티켓 없음', async () => {
+    const pair = mockFetch(() => ({
+      status: 500,
+      body: { code: 'FAILED_INTERNAL_SYSTEM_PROCESSING', message: '내부 시스템 처리 작업이 실패했습니다.' },
+    }));
+    const client = testClient(pair.fetch);
+    const r = await client.cancels.cancelFully(settledTarget(), {
+      reason: reason(),
+      expectedAmount: 1000,
+    });
+    expect(isErr(r)).toBe(true);
+    if (isErr(r) && 'source' in r.error && r.error.source === 'toss') {
+      expect(r.error.code).toBe('FAILED_INTERNAL_SYSTEM_PROCESSING');
+      expect('retry' in r.error).toBe(false);
+    } else {
+      expect.unreachable('toss 실패여야 한다');
+    }
   });
 
   it('스프레드 복제 티켓(봉인 소실)은 재실행 거부 — 명시적 Err', async () => {

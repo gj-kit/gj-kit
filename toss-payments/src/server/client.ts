@@ -116,6 +116,32 @@ export function parsePayment(data: unknown): Payment {
   return { ...record, raw: data } as unknown as Payment;
 }
 
+/**
+ * (내부) parsePayment의 Result 버전 — Payment를 반환해야 하는 소비 지점(confirm/approve/조회)
+ * 전용 가드. 2xx인데 body가 비었거나(revoke처럼 빈 2xx가 정상인 API의 경로가 request()에서
+ * ok(null)로 흐른다) 비객체 JSON이거나 필수 필드가 없으면, '전부 undefined인 Payment'를
+ * 제조하는 대신 전송 계층 이상(TransportFailure, retryable)으로 표면화한다.
+ */
+export function parsePaymentChecked(data: unknown): Result<Payment, TransportFailure> {
+  const record = typeof data === 'object' && data !== null ? (data as Record<string, unknown>) : null;
+  if (
+    record === null ||
+    typeof record['paymentKey'] !== 'string' ||
+    typeof record['orderId'] !== 'string' ||
+    typeof record['status'] !== 'string'
+  ) {
+    return err({
+      source: 'network',
+      code: 'NETWORK_ERROR',
+      retryable: true,
+      cause: new Error(
+        '2xx 응답에 Payment 필수 필드(paymentKey/orderId/status)가 없습니다 — 응답 이상. 조회 API로 실제 상태를 재확인하세요.',
+      ),
+    });
+  }
+  return ok(parsePayment(record));
+}
+
 function createHttp(secretKey: string, options: TossClientOptions): TossHttp {
   const fetchImpl = options.fetch ?? globalThis.fetch;
   const baseUrl = options.baseUrl ?? 'https://api.tosspayments.com';
@@ -174,12 +200,21 @@ function createHttp(secretKey: string, options: TossClientOptions): TossHttp {
       }
 
       if (!response.ok) {
-        // 에러 응답 {code, message} 원문 무손실 보존 — 형식이 깨져도 원문 텍스트를 message에
+        // 에러 응답 {code, message} 원문 무손실 보존
         const body =
           typeof data === 'object' && data !== null
             ? (data as { readonly code?: unknown; readonly message?: unknown })
             : {};
-        const code = typeof body.code === 'string' ? body.code : 'UNKNOWN_ERROR';
+        if (typeof body.code !== 'string') {
+          // 비-2xx인데 토스 에러 형식({code, message})이 아님 — 게이트웨이/프록시/LB 응답
+          // (502 HTML, 504 빈 body 등). 진짜 토스 에러는 항상 {code, message} JSON이므로
+          // source:'toss'로 오분류하면 retryable:false 각인 + cancel의 retry 티켓 미발급
+          // (응답 유실 복구 구멍)이 된다 — 전송 계층 이상으로 분류한다.
+          return transportErr(
+            new Error(`비-2xx 비토스 형식 응답: HTTP ${response.status}, body: ${text.slice(0, 200)}`),
+          );
+        }
+        const code = body.code;
         const message = typeof body.message === 'string' ? body.message : text;
         const classified = classifyTossErrorCode(code);
         return err({
@@ -225,7 +260,8 @@ export function createTossClient(
 
   const lookup = async (path: string, signal: AbortSignal | undefined) => {
     const r = await http.request({ method: 'GET', path, signal });
-    return r.ok ? ok(parsePayment(r.value)) : r;
+    // 2xx라도 빈 body/비객체 JSON이면 '빈 Payment' 제조 금지 — 가드 통과 후에만 Ok
+    return r.ok ? parsePaymentChecked(r.value) : r;
   };
 
   const client: TossServerClient<Env, KeyKind> = {

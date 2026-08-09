@@ -88,6 +88,10 @@ export interface WebhookVerifierConfig {
    * 검사는 verify의 `context.sourceIp` 전달 시에만 수행한다(§7 확정) —
    * 프록시/로드밸런서 뒤에서는 X-Forwarded-For 신뢰 문제로 오탐하기 쉽기 때문.
    * Unverified 이벤트의 보조 방어선일 뿐 암호학적 검증을 대체하지 않는다.
+   *
+   * IPv4-mapped IPv6(`::ffff:x.x.x.x`)는 비교 전에 순수 IPv4 표기로 정규화한다 —
+   * Node dual-stack 리스너의 `req.socket.remoteAddress`가 이 형태이기 때문(목록 항목
+   * 쪽도 동일 정규화). 항목은 순수 IPv4 표기 권장.
    */
   readonly allowedSourceIps?: readonly string[] | false;
 }
@@ -211,6 +215,12 @@ function parseSignatureHeader(header: string | null): readonly string[] {
     .map((part) => part.slice(3));
 }
 
+/** IPv4-mapped IPv6('::ffff:x.x.x.x') → 순수 IPv4 표기 정규화. 그 외 형태는 그대로. */
+function normalizeSourceIp(ip: string): string {
+  const lower = ip.toLowerCase();
+  return lower.startsWith('::ffff:') ? lower.slice(7) : lower;
+}
+
 // ── verifier 본체 ──────────────────────────────────────────────────────────
 
 export function createWebhookVerifier(config: WebhookVerifierConfig): WebhookVerifier {
@@ -235,7 +245,13 @@ export function createWebhookVerifier(config: WebhookVerifierConfig): WebhookVer
     // (2) IP 검사 — context.sourceIp 전달 시에만 (§7 확정)
     if (context?.sourceIp !== undefined && config.allowedSourceIps !== false) {
       const allowed = config.allowedSourceIps ?? TOSS_WEBHOOK_SOURCE_IPS;
-      if (!allowed.includes(context.sourceIp)) {
+      // IPv4-mapped IPv6 정규화 — Node dual-stack 리스너(server.listen(port) → '::' 바인딩)의
+      // req.socket.remoteAddress는 IPv4 클라이언트를 '::ffff:13.124.18.147' 형태로 보고한다.
+      // 문자열 완전 일치만 하면 순수 IPv4 표기 허용목록과 전량 불일치 → 정상 웹훅 전량 거부.
+      // 허용목록 항목 쪽도 같은 정규화를 적용한다(사용자 제공 목록의 표기 자유 허용).
+      const ip = normalizeSourceIp(context.sourceIp);
+      if (!allowed.some((entry) => normalizeSourceIp(entry) === ip)) {
+        // 거부 에러의 ip는 원본 값 유지 — 디버깅 시 실제 수신 형태가 보이도록
         return err({ kind: 'untrusted-source-ip', ip: context.sourceIp });
       }
     }

@@ -375,6 +375,7 @@ export interface TossServerClient<E extends Env = Env, K extends KeyKind = KeyKi
       readonly refundAccount?: never;            // 가상계좌 아님 — 변수/스프레드 경유도 차단
       readonly taxFreeAmount?: number;
       readonly currency?: 'KRW' | 'USD' | 'JPY';
+      readonly cancelRequestId?: CancelRequestId;   // 중국·동남아 비동기(Alipay 등) 취소에만 필수 — 문서 ID 53
     }, options?: CallOptions<E>): Promise<Result<CancelOutcome, CancelError>>;
     cancelFully(target: DepositedVaCancelable, request: {
       readonly reason: CancelReason;
@@ -382,11 +383,13 @@ export interface TossServerClient<E extends Env = Env, K extends KeyKind = KeyKi
       readonly refundAccount: RefundAccount;     // 입금 완료 가상계좌 — 필수
       readonly taxFreeAmount?: number;
       readonly currency?: 'KRW' | 'USD' | 'JPY';
+      readonly cancelRequestId?: CancelRequestId;   // 중국·동남아 비동기(Alipay 등) 취소에만 필수 — 문서 ID 53
     }, options?: CallOptions<E>): Promise<Result<CancelOutcome, CancelError>>;
     cancelFully(target: AwaitingDepositCancelable, request: {
       readonly reason: CancelReason;
       readonly expectedAmount: number;
       readonly refundAccount?: never;            // 입금 전 — 환불할 금액이 없으므로 금지
+      readonly cancelRequestId?: CancelRequestId;   // 중국·동남아 비동기(Alipay 등) 취소에만 필수 — 문서 ID 53
     }, options?: CallOptions<E>): Promise<Result<CancelOutcome, CancelError>>;
 
     /** 부분 환불. AwaitingDepositCancelable 오버로드 없음 → 입금 전 부분취소는 컴파일 에러.
@@ -397,6 +400,7 @@ export interface TossServerClient<E extends Env = Env, K extends KeyKind = KeyKi
       readonly refundAccount?: never;
       readonly taxFreeAmount?: number;
       readonly currency?: 'KRW' | 'USD' | 'JPY';
+      readonly cancelRequestId?: CancelRequestId;   // 중국·동남아 비동기(Alipay 등) 취소에만 필수 — 문서 ID 53
     }, options?: CallOptions<E>): Promise<Result<CancelOutcome, CancelError>>;
     cancelPartially(target: DepositedVaCancelable, request: {
       readonly reason: CancelReason;
@@ -404,6 +408,7 @@ export interface TossServerClient<E extends Env = Env, K extends KeyKind = KeyKi
       readonly refundAccount: RefundAccount;
       readonly taxFreeAmount?: number;
       readonly currency?: 'KRW' | 'USD' | 'JPY';
+      readonly cancelRequestId?: CancelRequestId;   // 중국·동남아 비동기(Alipay 등) 취소에만 필수 — 문서 ID 53
     }, options?: CallOptions<E>): Promise<Result<CancelOutcome, CancelError>>;
 
     /** transport 실패 티켓 재실행 — 봉인된 동일 멱등키+body. 서버에 도달했었다면 멱등 재생, 아니면 재실행 */
@@ -593,10 +598,16 @@ export interface DirectCardIssueInput {
 export type BillingPayment = Payment & { readonly type: 'BILLING'; readonly status: 'DONE' };
 export interface StoreFailure { readonly source: 'library'; readonly kind: 'store-failure';
                                 readonly operation: 'save' | 'find' | 'delete'; readonly cause: unknown; }
+/** store-save-failed 동봉용 — billingKey는 봉인(비열거·비공개 심볼): JSON.stringify(error)로도 새지 않는다.
+ *  회수는 recoverBillingKeyRecord로만 가능(반환 record는 로그 금지, store.save 재시도 전용). */
+export interface SealedBillingKeyRecord extends Omit<BillingKeyRecord, 'billingKey'>, Brand<'SealedBillingKeyRecord'> {}
+export function recoverBillingKeyRecord(sealed: SealedBillingKeyRecord)
+  : Result<BillingKeyRecord, { readonly source: 'library'; readonly kind: 'record-detached'; readonly customerKey: string }>;
+
 export type IssueBillingKeyError =
   | TossApiFailure<BillingErrorCode> | TransportFailure
   | { readonly source: 'library'; readonly kind: 'store-save-failed'; readonly cause: unknown;
-      readonly issuedRecord: BillingKeyRecord }; // 키는 발급됨 — 유실 방지 반출
+      readonly issuedRecord: SealedBillingKeyRecord }; // 키는 발급됨 — 봉인 동봉(유실 방지 + 로그 유출 방지)
 export type BillingApproveError =
   | TossApiFailure<BillingErrorCode> | TransportFailure
   | { readonly source: 'library'; readonly kind: 'profile-detached';   // 봉인 소실 복제본 — load()로 재수화하라
@@ -632,7 +643,11 @@ app.get('/billing/callback', async (c) => {
 
   const profile = await billing.issue(auth.value);
   if (isErr(profile)) {
-    if (profile.error.kind === 'store-save-failed') opsAlert(profile.error.issuedRecord);  // 수동 복구
+    if (profile.error.kind === 'store-save-failed') {
+      // issuedRecord는 billingKey 봉인 상태 — 통째 로깅 안전. 재저장 시에만 회수한다
+      const rec = recoverBillingKeyRecord(profile.error.issuedRecord);
+      if (rec.ok) await retrySaveLater(rec.value);                       // 수동 복구 (record는 로그 금지)
+    }
     return c.json(profile.error, 502);
   }
   return c.redirect('/subscription/active');
@@ -784,8 +799,12 @@ export interface PaymentStatusChangedEvent {
 }
 export interface CancelStatusChangedEvent {      // PayPal 등 해외 간편결제 전용
   readonly envelope: 'legacy'; readonly eventType: 'CANCEL_STATUS_CHANGED'; readonly createdAt: string;
-  readonly data: { readonly paymentKey: string; readonly orderId: string;
-                   readonly cancelStatus: 'IN_PROGRESS' | 'DONE' | 'ABORTED'; readonly cancelRequestId: string | null };
+  /** data는 문서상 'Cancel 객체'(상세 필드는 열린 질문) — paymentKey/orderId는 문서 근거가 없어 nullable.
+   *  판별 기준은 cancelStatus만. refetch는 paymentKey→orderId 폴백, 둘 다 없으면 no-payment-reference.
+   *  Phase 5 실측(해외결제 취소 웹훅 수신) 후 재협착 예정. */
+  readonly data: { readonly paymentKey: string | null; readonly orderId: string | null;
+                   readonly cancelStatus: 'IN_PROGRESS' | 'DONE' | 'ABORTED'; readonly cancelRequestId: string | null;
+                   readonly transactionKey: string | null };
 }
 export interface BillingDeletedEvent {
   readonly envelope: 'legacy'; readonly eventType: 'BILLING_DELETED'; readonly createdAt: string;
@@ -1143,6 +1162,7 @@ export type WidgetCustomerKey = CustomerKey & Brand<'WidgetCustomerKey'>;
 export type OrderName      = string & Brand<'OrderName'>;       // 1–100자
 export type CancelReason   = string & Brand<'CancelReason'>;    // 1–200자
 export type PaymentKey     = string & Brand<'PaymentKey'>;      // 1–200자
+export type CancelRequestId = string & Brand<'CancelRequestId'>; // 6–64자, ^[A-Za-z0-9\-_=]+$ — 중국·동남아 비동기 취소에만 필수(문서 ID 53)
 export type IdempotencyKey = string & Brand<'IdempotencyKey'>;  // 1–300자 (15일 TTL: 초과 재사용 시 새 요청 처리 — TSDoc)
 
 export interface InvalidInput<Field extends string> {
@@ -1159,6 +1179,7 @@ export function generateCustomerKey(): WidgetCustomerKey;               // crypt
 export function orderName(raw: string): Result<OrderName, InvalidInput<'orderName'>>;
 export function cancelReason(raw: string): Result<CancelReason, InvalidInput<'cancelReason'>>;
 export function paymentKey(raw: string): Result<PaymentKey, InvalidInput<'paymentKey'>>;
+export function cancelRequestId(raw: string): Result<CancelRequestId, InvalidInput<'cancelRequestId'>>;
 export function idempotencyKey(raw: string): Result<IdempotencyKey, InvalidInput<'idempotencyKey'>>;
 export function generateIdempotencyKey(): IdempotencyKey;               // crypto.randomUUID
 ```

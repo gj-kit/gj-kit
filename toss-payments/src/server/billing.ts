@@ -19,7 +19,7 @@ import { err, ok, type Result } from '../core/result';
 import {
   getInternalHttp,
   missingInternalHttpFailure,
-  parsePayment,
+  parsePaymentChecked,
   type CallOptions,
   type TossServerClient,
 } from './client';
@@ -182,15 +182,29 @@ export interface StoreFailure {
   readonly cause: unknown;
 }
 
+/**
+ * store-save-failed 에러에 동봉되는 발급 record — **billingKey는 봉인 상태**(비공개 심볼,
+ * 비열거)다. `JSON.stringify(error)`·스프레드·`Object.values` 어디에도 billingKey 평문이
+ * 새지 않는다(BillingProfile과 동일한 봉인 규칙). 재저장하려면 {@link recoverBillingKeyRecord}로
+ * 원본 {@link BillingKeyRecord}를 회수해 store.save에 직접 재시도하라.
+ */
+export interface SealedBillingKeyRecord
+  extends Omit<BillingKeyRecord, 'billingKey'>,
+    Brand<'SealedBillingKeyRecord'> {}
+
 export type IssueBillingKeyError =
   | TossApiFailure<BillingErrorCode>
   | TransportFailure
-  /** 키는 발급됐다 — 유실 방지를 위해 발급 record를 동봉한다(수동 복구용). */
+  /**
+   * 키는 발급됐다 — 유실 방지를 위해 발급 record를 동봉한다(수동 복구용).
+   * issuedRecord의 billingKey는 봉인되어 있어 에러 객체를 통째로 로깅해도 유출되지 않는다 —
+   * 회수는 {@link recoverBillingKeyRecord}로만 가능하다.
+   */
   | {
       readonly source: 'library';
       readonly kind: 'store-save-failed';
       readonly cause: unknown;
-      readonly issuedRecord: BillingKeyRecord;
+      readonly issuedRecord: SealedBillingKeyRecord;
     }
   /** 봉인 소실 복제본(스프레드/직렬화) — 인증 플로우를 다시 시작해야 한다. */
   | {
@@ -349,6 +363,38 @@ function isOwnerType(v: unknown): v is '개인' | '법인' | '미확인' {
   return v === '개인' || v === '법인' || v === '미확인';
 }
 
+/** (내부) record → 에러 동봉용 봉인 record. billingKey를 공개 필드에서 제거하고 봉인한다. */
+function sealIssuedRecord(record: BillingKeyRecord): SealedBillingKeyRecord {
+  const { billingKey, ...rest } = record;
+  // 봉인이 이 생성 경로로만 부여된다 — 브랜드 단언 불가피
+  return seal({ ...rest }, billingKeySeal, billingKey) as SealedBillingKeyRecord;
+}
+
+/**
+ * store-save-failed 에러에 동봉된 봉인 record에서 원본 {@link BillingKeyRecord}를 회수한다 —
+ * 반환된 record는 열거 가능한 billingKey 평문을 담으므로 **로그에 남기지 말고** store.save
+ * 재시도에만 사용할 것. 스프레드/직렬화 복제본은 봉인이 소실되어 Err('record-detached')다.
+ */
+export function recoverBillingKeyRecord(
+  sealed: SealedBillingKeyRecord,
+): Result<
+  BillingKeyRecord,
+  { readonly source: 'library'; readonly kind: 'record-detached'; readonly customerKey: string }
+> {
+  const billingKey = readSeal(sealed, billingKeySeal);
+  if (billingKey === undefined) {
+    return err({ source: 'library', kind: 'record-detached', customerKey: sealed.customerKey });
+  }
+  return ok({
+    customerKey: sealed.customerKey,
+    billingKey,
+    method: sealed.method,
+    issuedAt: sealed.issuedAt,
+    card: sealed.card,
+    transfers: sealed.transfers,
+  });
+}
+
 /** (내부) record → 봉인된 BillingProfile. */
 function toProfile(record: BillingKeyRecord): BillingProfile {
   const maskedSource =
@@ -404,8 +450,14 @@ export function createBillingFlow<E extends Env, C extends BillingCapabilities =
     try {
       await store.save(record);
     } catch (cause) {
-      // 키는 발급됐다 — record를 동봉해 유실을 막는다(호출자 수동 복구)
-      return err({ source: 'library', kind: 'store-save-failed', cause, issuedRecord: record });
+      // 키는 발급됐다 — record를 동봉해 유실을 막는다(호출자 수동 복구).
+      // billingKey는 봉인 상태로 동봉 — 에러 통째 로깅에도 새지 않는다(recoverBillingKeyRecord로 회수)
+      return err({
+        source: 'library',
+        kind: 'store-save-failed',
+        cause,
+        issuedRecord: sealIssuedRecord(record),
+      });
     }
     return ok(toProfile(record));
   };
@@ -488,8 +540,11 @@ export function createBillingFlow<E extends Env, C extends BillingCapabilities =
         signal: callOptions?.signal,
       });
       if (!r.ok) return err(r.error);
+      // 2xx라도 빈 body/비객체 JSON이면 '빈 Payment' 제조 금지 — 필수 필드 가드 통과 후에만 Ok
+      const parsed = parsePaymentChecked(r.value);
+      if (!parsed.ok) return parsed;
       // 승인 성공 응답은 type BILLING, status DONE(문서) — 응답 협착 단언
-      return ok(parsePayment(r.value) as BillingPayment);
+      return ok(parsed.value as BillingPayment);
     },
 
     async revoke(profile, callOptions) {

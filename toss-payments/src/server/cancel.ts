@@ -9,6 +9,7 @@ import type { CancelErrorCode, TossApiFailure, TransportFailure } from '../core/
 import {
   generateIdempotencyKey,
   type CancelReason,
+  type CancelRequestId,
   type IdempotencyKey,
   type InvalidInput,
   type PaymentKey,
@@ -220,6 +221,8 @@ export interface TossCancels<E extends Env> {
       readonly refundAccount?: never;
       readonly taxFreeAmount?: number;
       readonly currency?: 'KRW' | 'USD' | 'JPY';
+      /** 중국·동남아 비동기(Alipay 등) 결제 취소에만 필수 — 상점 발급 고유값(문서 ID 53 §5). */
+      readonly cancelRequestId?: CancelRequestId;
     },
     options?: CallOptions<E>,
   ): Promise<Result<CancelOutcome, CancelError>>;
@@ -232,6 +235,8 @@ export interface TossCancels<E extends Env> {
       readonly refundAccount: RefundAccount;
       readonly taxFreeAmount?: number;
       readonly currency?: 'KRW' | 'USD' | 'JPY';
+      /** 중국·동남아 비동기(Alipay 등) 결제 취소에만 필수 — 상점 발급 고유값(문서 ID 53 §5). */
+      readonly cancelRequestId?: CancelRequestId;
     },
     options?: CallOptions<E>,
   ): Promise<Result<CancelOutcome, CancelError>>;
@@ -242,6 +247,8 @@ export interface TossCancels<E extends Env> {
       readonly expectedAmount: number;
       /** 입금 전 — 환불할 금액이 없으므로 금지. */
       readonly refundAccount?: never;
+      /** 중국·동남아 비동기(Alipay 등) 결제 취소에만 필수 — 상점 발급 고유값(문서 ID 53 §5). */
+      readonly cancelRequestId?: CancelRequestId;
     },
     options?: CallOptions<E>,
   ): Promise<Result<CancelOutcome, CancelError>>;
@@ -258,6 +265,8 @@ export interface TossCancels<E extends Env> {
       readonly refundAccount?: never;
       readonly taxFreeAmount?: number;
       readonly currency?: 'KRW' | 'USD' | 'JPY';
+      /** 중국·동남아 비동기(Alipay 등) 결제 취소에만 필수 — 상점 발급 고유값(문서 ID 53 §5). */
+      readonly cancelRequestId?: CancelRequestId;
     },
     options?: CallOptions<E>,
   ): Promise<Result<CancelOutcome, CancelError>>;
@@ -269,6 +278,8 @@ export interface TossCancels<E extends Env> {
       readonly refundAccount: RefundAccount;
       readonly taxFreeAmount?: number;
       readonly currency?: 'KRW' | 'USD' | 'JPY';
+      /** 중국·동남아 비동기(Alipay 등) 결제 취소에만 필수 — 상점 발급 고유값(문서 ID 53 §5). */
+      readonly cancelRequestId?: CancelRequestId;
     },
     options?: CallOptions<E>,
   ): Promise<Result<CancelOutcome, CancelError>>;
@@ -366,6 +377,7 @@ interface CancelRequestImpl {
   readonly refundAccount?: RefundAccount | undefined;
   readonly taxFreeAmount?: number | undefined;
   readonly currency?: 'KRW' | 'USD' | 'JPY' | undefined;
+  readonly cancelRequestId?: CancelRequestId | undefined;
 }
 
 function buildBody(target: CancelablePayment, request: CancelRequestImpl): Record<string, unknown> {
@@ -377,6 +389,8 @@ function buildBody(target: CancelablePayment, request: CancelRequestImpl): Recor
   if (request.amount !== undefined) body['cancelAmount'] = request.amount;
   if (request.taxFreeAmount !== undefined) body['taxFreeAmount'] = request.taxFreeAmount;
   if (request.currency !== undefined) body['currency'] = request.currency;
+  // 중국·동남아 비동기 결제 취소 필수 파라미터(문서 ID 53) — 미지정 시 body에 싣지 않는다
+  if (request.cancelRequestId !== undefined) body['cancelRequestId'] = request.cancelRequestId;
   if (request.refundAccount !== undefined) {
     body['refundReceiveAccount'] = {
       bank: request.refundAccount.bank,

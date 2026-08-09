@@ -1,0 +1,6 @@
+{
+  "extends": "../tsconfig.base.json",
+  // DOM lib 전역 추가 금지 — browser 모듈도 DOM 전역을 직접 참조하지 않게 작성한다
+  // (위젯 셀렉터는 string이므로 DOM 타입 불필요)
+  "include": ["src", "tests"]
+}

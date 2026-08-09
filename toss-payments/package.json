@@ -1,0 +1,67 @@
+{
+  "name": "@gj-kit/toss-payments",
+  "version": "0.0.0",
+  "description": "토스페이먼츠 결제위젯·API v2 연동 라이브러리 — 검증(금액 대조·상태 확인·서명 검증)을 타입으로 강제한다",
+  "license": "MIT",
+  "type": "module",
+  "sideEffects": false,
+  "engines": {
+    "node": ">=20"
+  },
+  "files": [
+    "dist"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    },
+    "./server": {
+      "types": "./dist/server.d.ts",
+      "node": {
+        "import": "./dist/server.js",
+        "require": "./dist/server.cjs"
+      }
+    },
+    "./webhook": {
+      "types": "./dist/webhook.d.ts",
+      "import": "./dist/webhook.js",
+      "require": "./dist/webhook.cjs"
+    },
+    "./browser": {
+      "types": "./dist/browser.d.ts",
+      "browser": "./dist/browser.js",
+      "import": "./dist/browser.js",
+      "require": "./dist/browser.cjs"
+    },
+    "./testing": {
+      "types": "./dist/testing.d.ts",
+      "import": "./dist/testing.js",
+      "require": "./dist/testing.cjs"
+    }
+  },
+  "scripts": {
+    "build": "tsup",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run --project unit",
+    "test:types": "vitest run --project types",
+    "test:integration": "vitest run --config vitest.integration.config.ts",
+    "test:all": "pnpm run test && pnpm run test:types && pnpm run test:integration"
+  },
+  "peerDependencies": {
+    "@tosspayments/tosspayments-sdk": "^2"
+  },
+  "peerDependenciesMeta": {
+    "@tosspayments/tosspayments-sdk": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@tosspayments/tosspayments-sdk": "^2",
+    "@types/node": "^24",
+    "tsup": "^8",
+    "typescript": "^5",
+    "vitest": "^3"
+  }
+}

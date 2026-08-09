@@ -1425,6 +1425,20 @@ export function isAlreadyFullyCanceledError(e: TossApiFailure): boolean;
 
 9. **패키지 README 언어** — 한국어 단일 / 한국어+영어 병기 (npm 공개 시 검색성).
 
+### §7 확정 결과 (2026-08-09 사용자 답변)
+
+| # | 결정 |
+|---|---|
+| 1 | **위젯 + 빌링 인증창만** — 결제창 일반 결제 래퍼는 v2로 |
+| 2 | **MIT** |
+| 3 | **Node >=20** (engines) |
+| 4 | **subpath 5종 유지** — `.`, `/server`, `/webhook`, `/browser`, `/testing` |
+| 5 | **confirm 멱등키 기본 미부착** — 일급 옵션만. Phase 5에서 에러 응답 멱등 재생 여부 실측 후 v1.1 재검토 |
+| 6 | **`billing.import(record)` API 추가** — 검증 + TSDoc 경고 포함 명시적 이관 경로 |
+| 7 (IP) | 세션 결정: `allowedSourceIps` 검사는 `context.sourceIp` 전달 시에만 수행 (기본 목록 내장, `false`로 끔) |
+| 8 (orThrow) | 세션 결정: 존치 — 부팅 전용 TSDoc 명시 |
+| 9 | **README 한국어 단일** |
+
 ---
 
 ## 부록 A. 잔존 리스크 (합성 후에도 남는 것 — Phase 4 리뷰 렌즈)

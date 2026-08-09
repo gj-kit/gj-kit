@@ -142,6 +142,19 @@ export function parsePaymentChecked(data: unknown): Result<Payment, TransportFai
   return ok(parsePayment(record));
 }
 
+/** AbortSignal.any는 Node 20.3+ — engines 하한(20.0)에서도 동작하도록 폴백 결합. */
+function combineSignals(a: AbortSignal, b: AbortSignal): AbortSignal {
+  if (typeof AbortSignal.any === 'function') return AbortSignal.any([a, b]);
+  const controller = new AbortController();
+  const forward = (s: AbortSignal) => {
+    if (s.aborted) controller.abort(s.reason);
+    else s.addEventListener('abort', () => controller.abort(s.reason), { once: true });
+  };
+  forward(a);
+  forward(b);
+  return controller.signal;
+}
+
 function createHttp(secretKey: string, options: TossClientOptions): TossHttp {
   const fetchImpl = options.fetch ?? globalThis.fetch;
   const baseUrl = options.baseUrl ?? 'https://api.tosspayments.com';
@@ -152,8 +165,7 @@ function createHttp(secretKey: string, options: TossClientOptions): TossHttp {
   return {
     async request(init) {
       const timeout = AbortSignal.timeout(timeoutMs);
-      const signal =
-        init.signal === undefined ? timeout : AbortSignal.any([timeout, init.signal]);
+      const signal = init.signal === undefined ? timeout : combineSignals(timeout, init.signal);
 
       const headers: Record<string, string> = { Authorization: authorization };
       if (init.bodyJson !== undefined) headers['Content-Type'] = 'application/json';

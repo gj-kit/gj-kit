@@ -224,6 +224,30 @@ describe('requestPayment — 리다이렉트 모드 고정', () => {
     const good = await rendered.requestPayment({ ...paymentRequest, metadata: five });
     expect(good).toEqual({ ok: true, value: { kind: 'redirecting' } });
   });
+
+  it('metadata 키 41자 / 값 2001자 → SDK 호출 전에 Err (문서: 키 40자·값 2000자)', async () => {
+    const { f, rendered } = await renderedFixture();
+    const longKey = await rendered.requestPayment({
+      ...paymentRequest,
+      metadata: { ['k'.repeat(41)]: 'v' },
+    });
+    expect(longKey.ok).toBe(false);
+    if (!longKey.ok) expect(longKey.error.code).toBe('INVALID_METADATA');
+
+    const longValue = await rendered.requestPayment({
+      ...paymentRequest,
+      metadata: { k: 'v'.repeat(2001) },
+    });
+    expect(longValue.ok).toBe(false);
+    if (!longValue.ok) expect(longValue.error.code).toBe('INVALID_METADATA');
+    expect(f.widgets.requestPayment).not.toHaveBeenCalled();
+
+    const boundary = await rendered.requestPayment({
+      ...paymentRequest,
+      metadata: { ['k'.repeat(40)]: 'v'.repeat(2000) },
+    });
+    expect(boundary).toEqual({ ok: true, value: { kind: 'redirecting' } });
+  });
 });
 
 describe('부속 위젯 API', () => {

@@ -46,9 +46,10 @@ function readSeal(target: object, key: symbol): string | undefined {
   return typeof value === 'string' ? value : undefined;
 }
 
-/** 마스킹 — customer-key-mismatch 에러에 원문 값을 싣지 않는다(로그 유출 방지). */
+/** 마스킹 — customer-key-mismatch 에러에 원문 값을 싣지 않는다(로그 유출 방지).
+ *  8자 이하는 앞뒤 노출만으로 원문 복원 여지가 커서 전체 마스킹한다. */
 function mask(value: string): string {
-  return value.length <= 4 ? '****' : `${value.slice(0, 2)}***${value.slice(-2)}`;
+  return value.length <= 8 ? '****' : `${value.slice(0, 2)}***${value.slice(-2)}`;
 }
 
 // ─── 콜백 파싱 → 세션 대조 ──────────────────────────────────────────────────

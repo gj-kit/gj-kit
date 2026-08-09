@@ -153,6 +153,8 @@ const ERROR_CODE_TABLE: Readonly<Record<string, ErrorCodeClassification>> = {
   FAILED_PARTIAL_REFUND: { category: 'TRANSIENT', ...RETRY },
   COMMON_ERROR: { category: 'TRANSIENT', ...RETRY },
   FAILED_PAYMENT_INTERNAL_SYSTEM_PROCESSING: { category: 'TRANSIENT', ...RETRY },
+  FAILED_BILL_KEY_AUTH_CREATION: { category: 'TRANSIENT', ...RETRY }, // 빌링 500 계열 — 문서상 일시 오류
+  FAILED_BILLING_AUTO_CANCEL: { category: 'TRANSIENT', ...RETRY },
   // AUTH
   UNAUTHORIZED_KEY: { category: 'AUTH', ...NO_RETRY },
   INVALID_API_KEY: { category: 'AUTH', ...NO_RETRY }, // 키 쌍 불일치 — 400인 점 주의

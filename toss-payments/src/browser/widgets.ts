@@ -259,12 +259,24 @@ function validatePaymentRequest(request: WidgetPaymentRequest): SdkError | null 
       message: 'failUrl은 오리진을 포함한 완전한 http(s) URL이어야 합니다.',
     };
   }
-  if (request.metadata !== undefined && Object.keys(request.metadata).length > MAX_METADATA_PAIRS) {
-    return {
-      kind: 'sdk',
-      code: 'INVALID_METADATA',
-      message: `metadata는 최대 ${MAX_METADATA_PAIRS}쌍까지 허용됩니다.`,
-    };
+  if (request.metadata !== undefined) {
+    const entries = Object.entries(request.metadata);
+    if (entries.length > MAX_METADATA_PAIRS) {
+      return {
+        kind: 'sdk',
+        code: 'INVALID_METADATA',
+        message: `metadata는 최대 ${MAX_METADATA_PAIRS}쌍까지 허용됩니다.`,
+      };
+    }
+    // 문서: 키 최대 40자, 값 최대 2000자.
+    const bad = entries.find(([k, v]) => k.length > 40 || v.length > 2000);
+    if (bad !== undefined) {
+      return {
+        kind: 'sdk',
+        code: 'INVALID_METADATA',
+        message: `metadata 키는 40자, 값은 2000자 이하여야 합니다 (위반 키: ${bad[0].slice(0, 40)}).`,
+      };
+    }
   }
   return null;
 }

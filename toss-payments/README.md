@@ -384,6 +384,8 @@ app.post('/webhooks/toss', express.raw({ type: '*/*' }), verifier.nodeHandler({
 
 `onBillingApproved` 같은 핸들러 키는 **타입에 없습니다** — 토스가 빌링 승인 웹훅을 제공하지 않기 때문입니다(§10 FAQ).
 
+> ⚠ **rawBody를 로그에 남기지 마세요.** DEPOSIT_CALLBACK 원문에는 검증용 `secret`이 들어 있습니다. 라이브러리는 검증 후 이벤트 객체에서 secret을 제거하지만, 수신 원문을 직접 로깅하면 그 방어가 무의미해집니다.
+
 ---
 
 ## 8. 테스트 유틸 — `/testing`

@@ -21,6 +21,17 @@ describe('코드 테이블 — HTTP status가 아닌 코드로 판정 (§5 표 �
     });
   });
 
+  it('빌링 500 계열(FAILED_BILL_KEY_AUTH_CREATION/FAILED_BILLING_AUTO_CANCEL): TRANSIENT + retryable', () => {
+    expect(classifyTossErrorCode('FAILED_BILL_KEY_AUTH_CREATION')).toEqual({
+      category: 'TRANSIENT',
+      retryable: true,
+    });
+    expect(classifyTossErrorCode('FAILED_BILLING_AUTO_CANCEL')).toEqual({
+      category: 'TRANSIENT',
+      retryable: true,
+    });
+  });
+
   it('REFUND_REJECTED: 400이지만 REJECTED + retryable=false', () => {
     expect(classifyTossErrorCode('REFUND_REJECTED')).toEqual({
       category: 'REJECTED',

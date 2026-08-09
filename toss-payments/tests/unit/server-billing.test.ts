@@ -93,6 +93,16 @@ describe('confirmPendingAuth — 세션 customerKey 대조', () => {
       expect(r.error.returned).toContain('***');
     }
   });
+
+  it('8자 이하 customerKey는 전체 마스킹된다 (부분 노출 시 원문 복원 여지)', () => {
+    const shortSession = orThrow(customerKey('abcdef'));
+    const r = confirmPendingAuth(authorizedPending(), shortSession);
+    expect(isErr(r)).toBe(true);
+    if (isErr(r)) {
+      expect(r.error.expected).toBe('****');
+      expect(r.error.expected).not.toContain('a');
+    }
+  });
 });
 
 describe('billing.issue — store.save 성공 후에만 Ok', () => {

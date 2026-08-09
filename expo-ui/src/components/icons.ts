@@ -24,8 +24,8 @@ export interface UiIcons {
   readonly error?: RenderIcon | undefined;
   /** 향후 Dialog 닫기 어포던스용 예약 — v1 미사용(§4.2). */
   readonly close?: RenderIcon | undefined;
-  /** Toast leading — variant별. 폴백: 미표시. */
-  readonly toast?: Partial<Record<ToastVariant, RenderIcon>> | undefined;
+  /** Toast leading — variant별. 폴백: 미표시. 키 레벨도 | undefined — EOP 소비자의 조건부 조립 허용. */
+  readonly toast?: { readonly [V in ToastVariant]?: RenderIcon | undefined } | undefined;
 }
 
 /** (내부) 정적 노드/렌더 함수 겸용 슬롯 해석. */

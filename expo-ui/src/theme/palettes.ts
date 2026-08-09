@@ -90,8 +90,10 @@ export const baseRadius: ThemeRadius = {
 };
 
 /**
- * fontSize는 전신 계승. lineHeight/weight는 전신 컴포넌트의 하드코딩 실측값을
- * 롤로 승격한 것 — 예: buttonLabel fontWeight '700', emptyTitle lineHeight 22.
+ * fontSize 6종(caption~heading)은 전신 tokens.json 계승, tab은 전신 underline 탭
+ * 실측(16/'600')의 롤 승격. lineHeight/weight는 대표 사용처의 하드코딩 실측값을
+ * 롤로 정규화한 값 — 롤에 정확히 대응하지 않던 사용처(EmptyState 제목 16/22 등)는
+ * 가장 가까운 롤로 흡수되며, 그 시각 델타 목록은 설계 문서 §10.3에 기록되어 있다.
  */
 export const baseTypography: ThemeTypography = {
   caption: { fontSize: 12, lineHeight: 16, fontWeight: '400' },
@@ -100,6 +102,7 @@ export const baseTypography: ThemeTypography = {
   body: { fontSize: 15, lineHeight: 22, fontWeight: '400' },
   title: { fontSize: 18, lineHeight: 24, fontWeight: '800' },
   heading: { fontSize: 22, lineHeight: 30, fontWeight: '800' },
+  tab: { fontSize: 16, lineHeight: 22, fontWeight: '600' },
 };
 
 /**

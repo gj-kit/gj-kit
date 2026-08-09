@@ -108,10 +108,11 @@ export function Tabs<T extends string>({
                 styles.tabLabel,
                 underline
                   ? {
+                      // 전신 underline 탭 서체(16/'600') 보존 — typography.tab 롤(§3.2).
                       color: active ? theme.colors.tabActive : theme.colors.tabInactive,
-                      fontSize: theme.typography.body.fontSize,
+                      fontSize: theme.typography.tab.fontSize,
                       fontWeight: active
-                        ? theme.typography.label.fontWeight
+                        ? theme.typography.tab.fontWeight
                         : theme.typography.body.fontWeight,
                     }
                   : {

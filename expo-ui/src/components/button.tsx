@@ -109,11 +109,16 @@ type ButtonOwnProps = {
   labelClassName?: string | undefined;
 } & CommonProps;
 
-/** label 또는 children 중 하나는 필수 — 내용 없는 버튼은 컴파일 에러(§6 ③). 아이콘 단독은 IconButton. */
+/**
+ * label 또는 children 중 하나는 필수 — 내용 없는 버튼은 컴파일 에러(§6 ③).
+ * children은 NonNullable — `children={maybeUndefined}`로 내용·a11y 라벨이 모두
+ * 비는 우회를 좁힌다(적대적 리뷰 확정 발견). 빈 문자열 등 런타임 공백까지는
+ * 타입으로 막을 수 없다(§6 ③ 경계). 아이콘 단독은 IconButton.
+ */
 export type ButtonProps = ButtonOwnProps &
   (
     | { label: string; children?: ReactNode | undefined }
-    | { label?: never; children: ReactNode }
+    | { label?: never; children: NonNullable<ReactNode> }
   );
 
 const getStyles = themedStyles((theme: Theme) => ({

@@ -4,9 +4,12 @@
 
 결제 연동 사고의 대부분은 "검증을 깜빡한" 코드에서 나옵니다 — 금액 대조 없이 승인, 상태 확인 없이 취소, 서명 검증 없이 웹훅 신뢰. 이 라이브러리는 *parse, don't validate* 철학을 따릅니다: 검증을 통과했다는 사실이 **브랜디드 타입**으로 남고, 검증을 건너뛴 값은 다음 단계 함수의 파라미터 타입을 충족하지 못해 **컴파일 에러**가 됩니다. 런타임 검사를 잊을 수는 있어도, 타입 체커를 통과하지 못하는 코드를 배포할 수는 없습니다.
 
+여기에 더해 v1.1의 `createTossPayments` 파사드는 **배선을 누락할 수 없게** 만듭니다: 배선하지 않은 플로우는 반환 타입에 프로퍼티 자체가 없어, "컴파일은 되는데 프로덕션에서 터지는" 부분 배선이 사용 시점 컴파일 에러가 됩니다(§2).
+
 - 모든 공개 작업은 `Result<T, E>`를 반환합니다 — throw 없음 (유일한 예외: 부팅 전용 `orThrow`).
 - 런타임 의존성 0, Node ≥ 20, Edge 런타임 호환(WebCrypto·fetch만 사용).
 - 브라우저 엔트리는 `@tosspayments/tosspayments-sdk` v2를 optional peer로 사용합니다.
+- 모든 부가 옵션은 **기본 꺼짐**이고, 옵션 내부의 실패가 결제 `Result`를 바꾸는 경로는 존재하지 않습니다(§3).
 
 ---
 
@@ -43,15 +46,297 @@ const client = createTossClient(orThrow(parseApiSecretKey(process.env.TOSS_SECRE
 
 ---
 
-## 2. 플로우 1 — 결제위젯: 주문 생성 → 위젯 → 승인
+## 2. 빠른 시작 — `createTossPayments` 파사드
 
-### 서버: 주문 생성 (금액 고정 + 저장이 한 호출)
+**골든 패스입니다.** 파사드는 순수 조립층으로, 기존 팩토리 4종(`createTossClient`/`createConfirmFlow`/`createBillingFlow`/`createWebhookVerifier`)에 전량 위임합니다 — 검증 로직 중복이 0이고, 파사드를 써도 검증 강제(브랜디드 타입·필수 스토어)는 그대로입니다. 파사드가 추가로 주는 것은 하나입니다: **배선하지 않은 플로우는 반환 타입에 프로퍼티 자체가 없다** — 부분 배선(키 쌍 혼동, depositSecrets 반쪽 배선, billingKeyStore 미배선)이 런타임이 아니라 사용 시점 컴파일 에러가 됩니다.
+
+```ts
+import { orThrow } from '@gj-kit/toss-payments';
+import { createTossEvents, createTossPayments, parseApiSecretKey } from '@gj-kit/toss-payments/server';
+
+const toss = createTossPayments({
+  secretKey: orThrow(parseApiSecretKey(process.env.TOSS_SECRET_KEY!)),  // 브랜드 키만 수용 — raw string 미수용
+  orders: {                                    // confirm 플로우 배선 — 금액 대조의 단일 진실 공급원
+    saveOrder: async (o) => { await db.tossOrder.create({ data: o }); },
+    loadOrder: (id) => db.tossOrder.findUnique({ where: { orderId: id } }),
+  },
+  depositSecrets: {                            // 1회 배선 → confirm측 자동 저장 + 웹훅측 대조 양쪽 커버(§3.1)
+    saveSecret: (id, s) => db.deposits.upsert(id, s),
+    getSecret: (id) => db.deposits.secretOf(id),
+  },
+  billingKeys: {                               // billing 플로우 배선 — 미지정 시 kit에 billing 부재
+    save: (r) => db.billingKeys.upsert(r),
+    find: (ck) => db.billingKeys.find(ck),
+    delete: (ck) => db.billingKeys.remove(ck),
+  },
+  webhook: {
+    dedupe: { claim: (id) => redis.set(`twh:${id}`, '1', { NX: true, EX: 432_000 }).then(Boolean) },
+    autoRefetch: true,                         // Unverified 이벤트에 조회 재확인 결과 자동 첨부(§3.5)
+  },
+  events: createTossEvents(),                  // 관측·부수 반응 버스 — 4곳(client/confirm/billing/webhook) 자동 배선(§3.3)
+});
+
+await toss.confirm.confirmCallback(req.url);   // OK — orders 배선됨
+toss.webhook.fetchHandler({ /* ... */ });      // OK — webhook 배선됨
+await toss.billing.approve(profile, order, {}); // OK — billingKeys 배선됨 (§3.6 capability 권장)
+```
+
+배선을 빼먹으면 그 플로우를 **쓰는 줄에서** 컴파일 에러가 납니다:
+
+```ts
+import { orThrow } from '@gj-kit/toss-payments';
+import { createTossPayments, parseApiSecretKey } from '@gj-kit/toss-payments/server';
+
+const confirmOnly = createTossPayments({
+  secretKey: orThrow(parseApiSecretKey(process.env.TOSS_SECRET_KEY!)),
+  orders,
+});
+
+await confirmOnly.confirm.createOrder({ amount: 1000, orderName: '플랜' }); // OK
+
+// @ts-expect-error billingKeys 미배선 — billing 프로퍼티 자체가 없다 (사용 시점 컴파일 에러)
+await confirmOnly.billing.approve(profile, order);
+```
+
+### 컴파일 에러 ↔ 원인 표
+
+조건부 타입의 에러 메시지는 "프로퍼티가 없다"고만 말하고 빠진 config를 직접 말하지 않습니다 — 이 표로 역추적하세요(각 프로퍼티의 TSDoc에도 같은 매핑이 있습니다).
+
+| 에러 메시지(요지) | 원인 | 해결 |
+|---|---|---|
+| `Property 'confirm' does not exist on type 'TossPaymentsKit<...>'` | config에 `orders` 미배선 | `orders: OrderStore` 추가 |
+| `Property 'billing' does not exist ...` | `billingKeys` 미배선 — 또는 위젯 시크릿 키 파사드(빌링은 API 키 전용) | `billingKeys: BillingKeyStore` 추가 / `sk` 파사드 분리 |
+| `Property 'webhook' does not exist ...` | `webhook` 미배선 | `webhook: { dedupe }` 추가 |
+| `No overload matches this call` | ① 위젯 시크릿 키 + `billingKeys`(키 쌍 규칙 선차단 — 서버 400 `INVALID_API_KEY`를 컴파일에 당겨옴) ② raw string 키(파서 미통과) | ① 빌링은 `sk` 파사드로 ② `orThrow(parseApiSecretKey(...))` |
+| `Expected 3 arguments, but got 2` (billing.approve) | `requireApproveIdempotencyKey` capability 켜짐 | `options.idempotencyKey` 전달(§3.6) |
+
+### 알아둘 것
+
+- **단일 키 = 파사드 1개.** 위젯 결제와 빌링을 병용하는 상점은 파사드 2개(`gsk`용/`sk`용)를 만드세요 — 키 쌍 규칙이 파사드 경계와 일치해, "confirm은 어느 클라이언트로?" 같은 암묵 규칙이 생기지 않습니다.
+- **config를 스프레드로 동적 구성하지 마세요.** `const` 추론이 풀려 조건부 프로퍼티 판정이 무너질 수 있습니다 — 동적 구성이 필요하면 개별 팩토리(§4)를 직접 쓰고, DI 컨테이너 등 간접 전달에는 `defineTossPaymentsConfig`로 정의 시점에 타입을 고정하세요.
+
+```ts
+import { defineTossPaymentsConfig, createTossPayments, parseApiSecretKey } from '@gj-kit/toss-payments/server';
+import { orThrow } from '@gj-kit/toss-payments';
+
+export const tossConfig = defineTossPaymentsConfig({
+  secretKey: orThrow(parseApiSecretKey(process.env.TOSS_SECRET_KEY!)),
+  orders,
+});
+const kit = createTossPayments(tossConfig);    // 배선 판정(confirm 존재) 보존
+await kit.confirm.confirmCallback(req.url);
+```
+
+---
+
+## 3. 옵션 카탈로그
+
+모든 옵션의 공통 계약 세 가지:
+
+1. **기본 꺼짐** — 미주입 시 현행 동작과 동일하고 추가 비용이 0에 수렴합니다.
+2. **결제 경로 무간섭(협상 불가)** — 옵션 내부의 실패(sink 예외, 이벤트 핸들러 throw, secret 저장 실패)가 결제 `Result`를 바꾸는 경로가 존재하지 않습니다.
+3. **추가만** — 전부 기존 시그니처의 옵셔널 확장입니다. 기존 코드는 그대로 컴파일됩니다.
+
+### 3.1 `depositSecrets` — 가상계좌 secret 자동 저장 + 웹훅 대조 1회 배선
+
+가상계좌의 입금 웹훅(`DEPOSIT_CALLBACK`)은 승인 시 받은 `Payment.secret` 대조로 검증합니다. **저장을 누락하면 그 주문의 입금 웹훅이 전부 `unknown-order`로 거부됩니다** — 고객이 입금했는데 주문이 영구 미이행되는 최악의 사고입니다. `DepositSecretStore` 하나로 저장(confirm측)과 조회(웹훅측)를 함께 배선하면 이 갭이 구조적으로 사라집니다.
+
+```ts
+import { createConfirmFlow, type DepositSecretStore } from '@gj-kit/toss-payments/server';
+import { createWebhookVerifier } from '@gj-kit/toss-payments/webhook';
+
+const depositSecrets: DepositSecretStore = {
+  saveSecret: (id, s) => db.deposits.upsert(id, s),   // upsert 시맨틱 — 기존 수동 저장과 병용해도 무해
+  getSecret: (id) => db.deposits.secretOf(id),
+};
+
+// 개별 조립 시 양쪽에 같은 객체를 — 파사드(§2)는 config.depositSecrets 1개로 자동 배선
+const flow = createConfirmFlow(client, orders, {
+  depositSecrets,
+  onDepositSecretSaveFailed: ({ orderId, paymentKey, cause }) => {
+    opsAlert({ orderId, paymentKey, cause });         // payload에 secret 원문 없음(로그 유출 방지)
+  },
+});
+const verifier = createWebhookVerifier({ dedupe, depositSecrets });
+```
+
+- **동작**: `confirm`/`confirmCallback`이 Ok이고 **`payment.method === '가상계좌'`일 때만** `saveSecret`을 await 합니다. secret 존재 여부로 판정하지 않습니다 — 실측상 BILLING 카드 결제 응답에도 secret이 non-null로 내려와, 존재 판정이면 빌링 결제마다 무의미한 저장이 발생합니다.
+- **실패 시맨틱**: `saveSecret`이 실패해도 confirm은 **Ok 유지**입니다. 승인은 토스 측에서 이미 완결이라, Err로 뒤집으면 "승인됐는데 실패 처리 + 사용자 재confirm"이라는 더 큰 사고가 됩니다. secret은 `getPaymentByOrderId` 재조회 응답에도 있어(실측) 유실이 영구적이지 않습니다 — 통지는 `onDepositSecretSaveFailed` 콜백 + `deposit.secret-save-failed` 이벤트로 흐르고, 콜백 미지정 시 실패 1건당 `console.warn` 1회가 나갑니다(이 라이브러리에서 유일하게 시끄러운 기본값 — 침묵 유실 방지).
+- **복구**: `getPaymentByOrderId(orderId)` → `Payment.secret` → `saveSecret` 재시도. 통지 payload에는 secret 원문이 실리지 않습니다.
+
+### 3.2 `audit` — 아웃바운드 전 req/res 증거 기록
+
+분쟁·CS 대응에는 traceId와 요청/응답 원문이 필요하지만, fetch를 직접 래핑해 로깅하면 Authorization·카드번호 유출이 전형 사고입니다. `audit` 옵션은 모든 confirm/cancel/billing/조회가 통과하는 **단일 관문**을 계측합니다 — 시도 1건 = `AuditEntry` 1건.
+
+```ts
+import { orThrow } from '@gj-kit/toss-payments';
+import { createFileAuditSink, createTossPayments, parseApiSecretKey } from '@gj-kit/toss-payments/server';
+
+const auditSink = createFileAuditSink('/var/log/toss-audit.jsonl');  // 참조 구현(JSONL, 단일 인스턴스 전제)
+const audited = createTossPayments({
+  secretKey: orThrow(parseApiSecretKey(process.env.TOSS_SECRET_KEY!)),
+  audit: { sink: auditSink, onSinkError: (cause) => opsAlert(cause) },
+});
+// fire-and-forget이라 프로세스 즉사 시 마지막 엔트리가 유실될 수 있다 — graceful shutdown에 flush/close
+process.on('SIGTERM', () => { void auditSink.close(); });
+```
+
+- **실패 시맨틱(협상 불가)**: `sink.record()`는 await되지 않습니다(fire-and-forget). sync throw·async rejection 모두 삼켜지고 `onSinkError`로만 통지됩니다 — **audit 오류가 결제 요청의 지연·실패에 영향을 주는 경로가 없습니다**(기록 실패 < 결제 실패).
+- **redaction은 비설정화** — 끄는 옵션이 없습니다:
+
+| 대상 | 처리 |
+|---|---|
+| `Authorization` 헤더 | **필드 자체가 없음** — `AuditEntry`에 헤더가 구조적으로 부재(마스킹이 아님) |
+| `cardNumber` `cardPassword` `customerIdentityNumber` `accountNumber` `secret` `billingKey` `authKey` `customerMobilePhone` | req/res body 재귀 순회, 대소문자 무시 매칭 → `'[REDACTED]'` 치환. 목록은 `AUDIT_REDACTED_KEYS` 상수로 export(감사·버전 관리 대상) |
+| `card`/`refundAccount` 하위의 `number` | 컨텍스트 규칙으로 치환(마스킹 카드번호·환불 계좌번호) |
+| 인바운드 웹훅 rawBody | **audit 범위 밖** — DEPOSIT_CALLBACK 원문에 secret이 있어 기록하지 않습니다(§9 경고와 동일 근거). audit은 아웃바운드 API 전용 |
+
+- ⚠ redaction 후에도 `responseBody`에 고객 이름·이메일 등 PII가 잔존할 수 있습니다 — 보관 주체·기간·접근 통제는 sink 소유자 책임입니다.
+
+### 3.3 `events` — 타입드 in-process pub/sub
+
+알림·재고·구독 연장 같은 도메인 부수 반응을 confirm 라우트와 웹훅 refetch 경로 양쪽에 각각 심으면 한쪽 누락이 사고가 됩니다. `events`는 단일 구독 지점을 제공합니다 — 파사드는 버스 1개를 client(`api.call`)·confirm·billing·webhook 4곳에 자동 배선합니다.
+
+```ts
+import { createTossEvents } from '@gj-kit/toss-payments/server';
+
+const events = createTossEvents({ onHandlerError: (info) => opsAlert(info) });
+
+events.on('payment.confirmed', async ({ payment }) => {
+  await sendReceiptMail(payment.orderId);   // 어느 진입점에서 승인돼도 여기 한 곳으로
+});
+events.on('api.call', (e) => {
+  metrics.timing('toss.api', e.durationMs, { path: e.path, outcome: e.outcome });
+});
+events.on('deposit.secret-save-failed', ({ orderId }) => {
+  opsAlert({ kind: 'deposit-secret-lost', orderId });  // §3.1 실패 통지의 이벤트 경로
+});
+```
+
+- **실패 시맨틱(협상 불가)**: 발화는 `Result` 확정 **후** 동기 fire-and-forget입니다 — 반환값 무시, await 없음. **이벤트가 플로우 결과를 바꾸는 경로가 타입상 존재하지 않습니다.** 핸들러는 개별 try/catch로 격리되고, sync throw·async rejection 모두 `onHandlerError`로만 보고됩니다.
+- ⚠ **이벤트로 원장(ledger)을 만들지 마세요.** 전달 보장은 at-most-once·in-process·비영속입니다 — 프로세스 재시작·서버리스 콜드스타트에서 유실됩니다. 원장은 `OrderStore`/DB + `Result` 트랜잭션 처리로, 이벤트는 관측·부수 반응 전용입니다.
+- ⚠ `'payment.confirmed'`의 payment에는 secret이 포함될 수 있습니다(실측: BILLING 카드도 non-null) — payload를 통짜 로깅하지 마세요. 기록 용도는 audit(§3.2)입니다(redaction 통과본만 기록됨).
+- 발행은 `createTossEvents()` 산출물에만 흐릅니다 — 구조적으로 흉내 낸 객체를 주입하면 발행 지점이 조용히 no-op입니다. 파사드에서 `events`를 미주입하면 `kit.events`는 no-op 구독 표면입니다(구독해도 발화 없음).
+
+### 3.4 `retry` — 실측 근거 하드 가드 자동 재시도
+
+범용 재시도 라이브러리는 토스의 실측 규칙을 모릅니다: **4xx 에러 응답도 멱등키에 15일 바인딩·재생**되므로, 4xx 후 같은 키 재시도는 15일간 같은 에러만 돌려받고, 키 없는 confirm 재전송은 이중 승인 위험입니다. `retry` 옵션은 안전한 경우만 코드에 하드코딩했습니다 — **설정으로도 확장할 수 없습니다**.
+
+```ts
+import { orThrow } from '@gj-kit/toss-payments';
+import { createTossPayments, parseApiSecretKey } from '@gj-kit/toss-payments/server';
+
+// 배치/큐 소비자용 파사드 — 요청(사용자 대기) 경로에는 켜지 마세요
+const batch = createTossPayments({
+  secretKey: orThrow(parseApiSecretKey(process.env.TOSS_SECRET_KEY!)),
+  retry: {
+    maxAttempts: 3,                          // 2 | 3 | 4 | 5 리터럴 — 폭주 설정 원천 차단
+    onRetry: ({ attempt, reason, nextDelayMs, path }) => {
+      metrics.count('toss.retry', { attempt, reason, path, nextDelayMs });
+    },
+  },
+});
+```
+
+재시도가 일어나는 조건은 다음 넷뿐입니다(코드 고정):
+
+1. **GET**: 전송 실패(transport)만 — 조회는 자체 멱등.
+2. **Idempotency-Key가 실제 부착된 POST/DELETE의 전송 실패**: 동일 키+동일 body 재전송은 서버에 도달했었다면 바이트 동일 재생, 미도달이면 재실행(실측 — 이중 실행 없음).
+3. **409 `IDEMPOTENT_REQUEST_PROCESSING`**(키 부착 시): 문서 지시("다시 요청해서 응답을 확인하세요") 준수. 재시도 후 원 요청이 4xx로 끝났으면 그 에러를 재생받고 종료합니다 — 처리 결과 확인이라는 올바른 동작입니다.
+4. **그 외 전부 재시도 없음**: 키 없는 POST(confirm 기본 정책)는 어떤 실패든 자동 재시도 절대 없음(이중 승인 방지 — `retryable: true`여도 무시). 토스 4xx/5xx 에러 응답도 재시도하지 않습니다(4xx는 멱등 재생 실측 확정, 5xx는 미실측 보수 배제) — 왜 `PROVIDER_ERROR`를 자동 재시도하지 않는지는 §5 참고.
+
+- confirm에 retry 효과를 받으려면 `options.idempotencyKey` 명시가 전제입니다(기본 미부착 — §12 FAQ).
+- 기본 지연은 `[500, 2_000, 8_000]ms` + full jitter ±25% — **최악 +10.5초**(+ 시도별 timeout 독립 적용)입니다. 사용자가 기다리는 confirm 경로에 켜야 한다면 `maxAttempts: 2`를 권장합니다. 409 폴링은 테스트 환경 분당 100건 쿼터를 소모합니다.
+- cancel의 `CancelRetryTicket`(§5)과 역할이 다릅니다: retry는 "요청 내" 자동화, 티켓은 "요청 간(큐 저장 후)" 수동 재실행 — 티켓 동봉은 그대로 유지됩니다.
+
+### 3.5 webhook `autoRefetch` — Unverified에 조회 재확인 결과 자동 첨부
+
+서명 없는 웹훅(`PAYMENT_STATUS_CHANGED` 등)의 payload를 그대로 믿으면 위조 POST 한 방에 이행이 뚫립니다. 재확인 조회를 "잊을 수 있는 호출"에서 "이미 되어 있는 값"으로 바꿉니다.
+
+```ts
+// 파사드: webhook.autoRefetch: true → 내부 client 자동 결속. 핸들러 골든 패스가 1줄이 된다:
+export const POST = toss.webhook.fetchHandler({
+  onPaymentStatusChanged: async (w) => {
+    if (w.prefetched?.ok) await syncStatus(w.prefetched.value);  // payload가 아닌 조회 결과로 갱신
+  },
+});
+```
+
+- **실행 시점(협상 불가)**: 어댑터(`fetchHandler`/`nodeHandler`)가 **200 응답을 확정한 후**, 핸들러 디스패치 직전입니다 — 조회 왕복이 10초 규약을 건드리지 않습니다. dedupe 통과분에만 수행됩니다(재전송 7회가 조회 7회가 되지 않음). 수동 `verify()` 경로는 불변입니다 — verify에 네트워크 호출을 심지 않습니다.
+- **실패 시맨틱**: `prefetched`가 Err여도 이벤트는 버려지지 않고 핸들러에 도달합니다(판단은 핸들러 몫 — 웹훅 자체가 최대 7회 재전송되므로 다음 전송이 자연 재시도). **prefetched 실패 시 payload 폴백은 금물입니다.**
+- **trust는 `'unverified'` 그대로입니다** — 조회 성공은 웹훅 발신자 진위를 증명하지 않습니다(위조 웹훅이 실존 orderId를 찍으면 조회는 성공합니다). 개별 조립 시에는 `autoRefetch: { client, eventTypes?: [...] }`로 결속하고, `eventTypes` 필터로 분당 100건 쿼터를 방어할 수 있습니다.
+
+### 3.6 `requireApproveIdempotencyKey` — 빌링 approve 멱등키 타입 필수화
+
+cron 중복 실행·큐 at-least-once에서 멱등키 없는 `billing.approve` 2회 = **이중 과금**입니다. 이 라이브러리에서 "옵션 누락 = 금전 사고"인 유일한 지점이라, capability로 켜면 `options`(와 `idempotencyKey`)가 타입 필수가 됩니다. **빌링 절의 골든 패스로 켜는 것을 권장합니다.**
+
+```ts
+import { idempotencyKey, orThrow } from '@gj-kit/toss-payments';
+import { createTossPayments, parseApiSecretKey } from '@gj-kit/toss-payments/server';
+
+const strict = createTossPayments({
+  secretKey: orThrow(parseApiSecretKey(process.env.TOSS_SECRET_KEY!)),
+  billingKeys: {
+    save: (r) => db.billingKeys.upsert(r),
+    find: (ck) => db.billingKeys.find(ck),
+    delete: (ck) => db.billingKeys.remove(ck),
+  },
+  billing: { capabilities: { requireApproveIdempotencyKey: true } },
+});
+
+// @ts-expect-error 멱등키 없는 approve — capability가 options를 타입 필수로 만든다(이중 과금 컴파일 차단)
+await strict.billing.approve(profile, order);
+
+await strict.billing.approve(profile, order, {
+  idempotencyKey: orThrow(idempotencyKey(`sub:2026-08:${profile.customerKey}`)),
+});
+```
+
+- **키 권장**: 청구 주기 결정적 값(`sub:${period}:${customerKey}`) — 재실행 시 첫 응답 재생으로 무해합니다.
+- ⚠ **4xx 실패 후 파라미터를 고쳐 재시도할 땐 반드시 새 키**(실측 — 동일 키는 15일간 같은 에러를 재생). 일시 오류가 결정적 키에 바인딩되면 해당 주기 재청구가 15일 막힙니다 — 재시도에는 `sub:${period}:${customerKey}:retry-${attempt}`처럼 attempt suffix를 붙이세요.
+- 켜지 않으면 기존 시그니처 그대로입니다(파괴 없음). orderId 기반 키 자동 유도는 의도적으로 제공하지 않습니다 — 결정적 키 + 4xx 재생 조합의 함정을 라이브러리가 사용자 몰래 떠안게 되기 때문입니다.
+
+### 3.7 `resolveConfirmFailure` — confirm 실패는 결제 실패가 아니다
+
+confirm의 Err에는 "승인됐는데 응답만 유실"(transport)과 "새로고침 이중 confirm"(`ALREADY_PROCESSED_PAYMENT`)이 섞여 있습니다. 일괄 실패 처리하면 **"돈은 나갔는데 실패 안내"** 라는 최악의 CS 사고가 납니다. 조회로 진실을 확정한 뒤 3분기하세요.
+
+```ts
+import { isErr } from '@gj-kit/toss-payments';
+
+const done = await confirmFlow.confirm(verified);
+if (isErr(done)) {
+  const resolved = await confirmFlow.resolveFailure(verified.orderId, done.error);
+  if (isErr(resolved)) return respond503();            // 조회도 실패 = 진실 미확정 — 성공/실패 어느 쪽으로도 단정 안내 금지
+  switch (resolved.value.resolution) {
+    case 'actually-confirmed':                         // 조회로 DONE|WAITING_FOR_DEPOSIT 확인 — 성공 처리
+      return completeOrder(resolved.value.payment);    // 가상계좌면 §3.1 secret 저장 경로도 재사용됨
+    case 'retry-payment':                              // NOT_FOUND_PAYMENT_SESSION(10분 초과) — 결제 재요청 유도
+      return redirectToCheckout();
+    case 'definitively-failed':                        // 조회로도 미승인 확정
+      return showFailure(resolved.value.error);
+  }
+}
+```
+
+- 판정 로직: transport 실패 또는 `ALREADY_PROCESSED_PAYMENT` → `getPaymentByOrderId` 조회 후 상태로 확정. `NOT_FOUND_PAYMENT_SESSION`(및 라이브러리의 시한 초과 선판정) → 조회 없이 `retry-payment`. 그 외 REJECT/AUTH 계열 → 즉시 `definitively-failed`.
+- 플로우 없이 쓰는 자유 함수 `resolveConfirmFailure(client, orderId, error)`도 export 됩니다. `ConfirmFlow.resolveFailure`는 플로우의 client를 재사용하고, `actually-confirmed`가 가상계좌면 depositSecrets 저장 경로를 재사용합니다(confirm 실패로 저장 기회를 잃은 secret의 복구 지점).
+
+---
+
+## 4. 개별 조립 — 팩토리 4종 직접 배선
+
+파사드(§2)가 골든 패스지만, config를 동적으로 구성해야 하거나 플로우 하나만 필요할 때는 개별 팩토리를 직접 씁니다. 검증 강제는 동일합니다 — 파사드는 이들을 호출할 뿐입니다.
+
+### 4.1 결제위젯: 주문 생성 → 위젯 → 승인
+
+#### 서버: 주문 생성 (금액 고정 + 저장이 한 호출)
 
 ```ts
 // lib/toss.ts
 import { orThrow } from '@gj-kit/toss-payments';
 import {
-  parseWidgetSecretKey, createTossClient, createConfirmFlow, type OrderStore,
+  parseWidgetSecretKey, createTossClient, createConfirmFlow,
+  type DepositSecretStore, type OrderStore,
 } from '@gj-kit/toss-payments/server';
 
 const widgetClient = createTossClient(orThrow(parseWidgetSecretKey(process.env.TOSS_WIDGET_SECRET_KEY!)));
@@ -59,7 +344,12 @@ const orders: OrderStore = {
   saveOrder: async (o) => { await db.tossOrder.create({ data: o }); },
   loadOrder: (id) => db.tossOrder.findUnique({ where: { orderId: id } }),
 };
-export const confirmFlow = createConfirmFlow(widgetClient, orders); // 스토어 없이는 플로우 생성 불가
+// §3.1 표준 배선 — 가상계좌 secret은 confirm 성공 시 자동 저장된다(수동 저장 한 줄이 필요 없음)
+export const depositSecrets: DepositSecretStore = {
+  saveSecret: (id, s) => db.deposits.upsert(id, s),
+  getSecret: (id) => db.deposits.secretOf(id),
+};
+export const confirmFlow = createConfirmFlow(widgetClient, orders, { depositSecrets }); // 스토어 없이는 플로우 생성 불가
 ```
 
 ```ts
@@ -74,7 +364,7 @@ export async function POST(req: Request) {
 }
 ```
 
-### 브라우저: 위젯 렌더 → 결제 요청
+#### 브라우저: 위젯 렌더 → 결제 요청
 
 ```ts
 import { loadWidgets, ANONYMOUS } from '@gj-kit/toss-payments/browser';
@@ -98,7 +388,7 @@ if (outcome.ok && outcome.value.kind === 'user-canceled') toast('결제를 취�
 
 `setAmount` 전에는 `renderPaymentMethods`가, 렌더 전에는 `requestPayment`가 **타입에 존재하지 않습니다** — SDK가 요구하는 호출 순서를 메서드 부재로 강제합니다.
 
-### 서버: successUrl 콜백 — 명시적 3단계
+#### 서버: successUrl 콜백 — 명시적 3단계 + 실패 3분기
 
 ```ts
 // app/api/payments/confirm/route.ts
@@ -116,13 +406,17 @@ export async function GET(req: Request) {
     return Response.redirect(new URL('/checkout/fail', req.url));
   }
 
-  const done = await confirmFlow.confirm(verified.value);       // [3] 승인 — VerifiedCheckout만 받는다
+  const done = await confirmFlow.confirm(verified.value);       // [3] 승인 — 가상계좌면 secret 자동 저장(§3.1)
   if (isErr(done)) {
-    if (done.error.source === 'toss' && done.error.retryable) return new Response(null, { status: 503 });
+    // §3.7 — confirm Err ≠ 결제 실패. 조회로 진실을 확정한 뒤 분기한다.
+    const resolved = await confirmFlow.resolveFailure(verified.value.orderId, done.error);
+    if (isErr(resolved)) return new Response(null, { status: 503 }); // 진실 미확정 — 단정 안내 금지
+    if (resolved.value.resolution === 'actually-confirmed')
+      return Response.redirect(new URL(`/orders/${resolved.value.payment.orderId}/complete`, req.url));
+    if (resolved.value.resolution === 'retry-payment')
+      return Response.redirect(new URL('/checkout?expired=1', req.url));
     return Response.redirect(new URL('/checkout/fail', req.url));
   }
-  // 가상계좌면 secret 저장 — DEPOSIT_CALLBACK 웹훅 검증의 원본
-  if (done.value.method === '가상계좌') await db.deposits.save(done.value.orderId, done.value.secret);
   return Response.redirect(new URL(`/orders/${done.value.orderId}/complete`, req.url));
 }
 ```
@@ -137,11 +431,9 @@ const result = await confirmFlow.confirmCallback(req.url);
 >
 > - **금액 검증은 공식 문서의 의무 사항** — successUrl 쿼리의 `amount`는 브라우저를 거쳐 온 값이라 위변조 가능합니다. `verify`는 `createOrder`가 저장 시점에 고정한 금액(단일 진실 공급원)과 대조하고, 통과해야만 `VerifiedCheckout` 브랜드를 부여합니다. `confirm(unverifiedCallback)`은 컴파일 에러입니다.
 > - **10분 시한** — 인증 완료 후 10분 안에 confirm하지 않으면 결제는 `EXPIRED`가 되고, 이후 confirm은 404 `NOT_FOUND_PAYMENT_SESSION`(재시도 불가 최종 실패)입니다. `verify`가 시한을 함께 판정합니다.
-> - 가상계좌 confirm의 결과는 `DONE`이 아니라 `WAITING_FOR_DEPOSIT`일 수 있습니다 — `ConfirmedPayment` 타입이 두 상태를 모두 담습니다.
+> - 가상계좌 confirm의 결과는 `DONE`이 아니라 `WAITING_FOR_DEPOSIT`일 수 있습니다 — `ConfirmedPayment` 타입이 두 상태를 모두 담습니다. secret 저장은 §3.1 배선이 소유하므로 라우트에 수동 저장 코드를 두지 마세요.
 
----
-
-## 3. 플로우 2 — 결제 취소: 조회 → asCancelable → 실행
+### 4.2 결제 취소: 조회 → asCancelable → 실행
 
 `paymentKey` 문자열로 바로 취소하는 API는 **존재하지 않습니다**. 반드시 조회 → 상태 검증 → 실행 3단계입니다.
 
@@ -176,7 +468,7 @@ app.post('/admin/refunds', async (req, res) => {
 
   if (isErr(result)) {
     if (result.error.source === 'network') {
-      await retryQueue.push(result.error.retry);                    // 재시도 티켓 — §6 에러 처리 참고
+      await retryQueue.push(result.error.retry);                    // 재시도 티켓 — §5 에러 처리 참고
       return res.status(503).end();
     }
     return res.status(422).json(result.error);
@@ -194,11 +486,9 @@ app.post('/admin/refunds', async (req, res) => {
 > - **가상계좌 분기는 오버로드로 강제** — 입금 완료 가상계좌는 `refundAccount` 필수, 일반 결제는 `?: never`로 금지, 입금 전(`WAITING_FOR_DEPOSIT`)은 전액취소만 가능(부분취소 오버로드 자체가 없음).
 > - **잔액 초과 취소는 API 호출 전에 차단** — 우회해서 보내면 서버가 403 `NOT_CANCELABLE_AMOUNT`를 반환합니다(실측). 동시 취소 경합은 서버 낙관적 잠금(`NOT_MATCHES_REFUNDABLE_AMOUNT`)이 잡아내며, 라이브러리는 조회 시점 잔액을 항상 `refundableAmount`로 전송합니다.
 
----
+### 4.3 자동결제(빌링): 인증 → 발급 → 승인
 
-## 4. 플로우 3 — 자동결제(빌링): 인증 → 발급 → 승인
-
-### 브라우저: 등록 인증창
+#### 브라우저: 등록 인증창
 
 ```ts
 import { requestBillingAuth } from '@gj-kit/toss-payments/browser';
@@ -214,7 +504,9 @@ await requestBillingAuth(ck, customer, {
 });
 ```
 
-### 서버: 콜백 → 세션 대조 → 발급 (명시적 단계)
+#### 서버: 콜백 → 세션 대조 → 발급 (명시적 단계)
+
+`requireApproveIdempotencyKey` capability를 켠 구성이 골든 패스입니다(§3.6) — 정기 승인에서 멱등키 누락이 컴파일 에러가 됩니다.
 
 ```ts
 import { isErr, customerKey } from '@gj-kit/toss-payments';
@@ -222,10 +514,12 @@ import {
   parseBillingAuthCallback, confirmPendingAuth, createBillingFlow,
 } from '@gj-kit/toss-payments/server';
 
-const billing = createBillingFlow(client, {                  // client는 API 시크릿 키('api') 클라이언트만
+const billingFlow = createBillingFlow(client, {              // client는 API 시크릿 키('api') 클라이언트만
   save: (r) => db.billingKeys.upsert(r),                     // 저장이 유일한 보관 수단 — 조회 API 없음
   find: (ck) => db.billingKeys.find(ck),
   delete: (ck) => db.billingKeys.remove(ck),
+}, {
+  capabilities: { requireApproveIdempotencyKey: true },      // §3.6 — 이중 과금 컴파일 차단
 });
 
 app.get('/billing/callback', async (c) => {
@@ -239,7 +533,7 @@ app.get('/billing/callback', async (c) => {
   const auth = confirmPendingAuth(parsed.value.pending, sessionCk.value); // [2] 세션 대조 → AuthKeyReceived
   if (isErr(auth)) return c.json({ error: 'customerKey mismatch' }, 403);
 
-  const profile = await billing.issue(auth.value);                       // [3] 발급 + store.save까지 보장
+  const profile = await billingFlow.issue(auth.value);                   // [3] 발급 + store.save까지 보장
   if (isErr(profile)) {
     if (profile.error.source === 'library' && profile.error.kind === 'store-save-failed')
       opsAlert(profile.error.issuedRecord);                              // 키 유실 방지 반출
@@ -249,7 +543,7 @@ app.get('/billing/callback', async (c) => {
 });
 ```
 
-### 서버: 정기 승인 (스케줄러는 직접 — 토스 미제공)
+#### 서버: 정기 승인 (스케줄러는 직접 — 토스 미제공)
 
 ```ts
 import { orThrow, customerKey, orderName, generateOrderId, idempotencyKey, isErr } from '@gj-kit/toss-payments';
@@ -263,7 +557,7 @@ async function chargeMonthly(rawCk: string, amount: number) {
     orderId: generateOrderId('sub'),
     orderName: orThrow(orderName('2026년 8월 구독')),
     amount,
-  }, { idempotencyKey: orThrow(idempotencyKey(`sub:2026-08:${rawCk}`)) }); // 이중 과금 방지
+  }, { idempotencyKey: orThrow(idempotencyKey(`sub:2026-08:${rawCk}`)) }); // capability가 이 인자를 필수로 만든다
 
   if (isErr(paid) && paid.error.source === 'toss' && paid.error.code === 'ALREADY_REMOVED_BILLING_KEY')
     await requestReauth(rawCk);                              // 갱신 API 없음 — 재발급 플로우 재시작
@@ -278,22 +572,22 @@ async function chargeMonthly(rawCk: string, amount: number) {
 > - **빌링키 갱신 API도 없다** — `refresh` 류 메서드는 의도적으로 없습니다. `ALREADY_REMOVED_BILLING_KEY`를 만나면 revoke 후 새 인증부터 다시입니다.
 > - **billingKey는 어디에도 노출되지 않는다** — `BillingProfile`의 공개 필드·JSON 직렬화에 billingKey가 없습니다. 스프레드/직렬화로 봉인이 소실된 복제본은 `approve`에서 `profile-detached` Err — `billing.load(customerKey)`로 재수화하세요.
 
----
-
-## 5. 플로우 4 — 웹훅 수신: raw body → verify → (필요시) refetch
+### 4.4 웹훅 수신: raw body → verify → prefetched
 
 ```ts
 import { createWebhookVerifier, parseSecurityKey } from '@gj-kit/toss-payments/webhook';
 import { orThrow } from '@gj-kit/toss-payments';
+import { depositSecrets } from '@/lib/toss';
 
 const verifier = createWebhookVerifier({
   dedupe: { claim: (id) => redis.set(`twh:${id}`, '1', { NX: true, EX: 432_000 }).then(Boolean) },
   securityKeys: [orThrow(parseSecurityKey(process.env.TOSS_SECURITY_KEY!))],  // 로테이션 시 [새 키, 옛 키]
-  depositSecrets: { getSecret: (orderId) => db.deposits.secretOf(orderId) },  // 승인 시 저장한 Payment.secret
+  depositSecrets,                                  // §3.1 — confirm측 자동 저장과 같은 store
+  autoRefetch: { client },                         // §3.5 — 어댑터 경유 Unverified에 prefetched 첨부
 });
 ```
 
-수동 배선(프레임워크 어댑터는 §7 참고):
+수동 배선(프레임워크 어댑터는 §6 참고 — 수동 verify 경로에는 `prefetched`가 첨부되지 않습니다):
 
 ```ts
 const result = await verifier.verify(rawBody, headers, { sourceIp: clientIp });
@@ -309,13 +603,13 @@ if (webhook.trust === 'unverified') {
 
 > **왜 이 단계를 건너뛸 수 없는가**
 >
-> - **토스는 모든 이벤트에 서명을 제공하지 않습니다** — 서명(HMAC)이 있는 이벤트는 `payout.changed`/`seller.changed`뿐이고, 가상계좌 입금(`DEPOSIT_CALLBACK`)은 승인 시 저장한 `secret` 대조, 나머지(결제 상태 변경 포함)는 **암호학적 검증 수단이 없습니다**. 그래서 이 라이브러리에는 단일 `Verified` 타입이 없고 신뢰 3등급(§7 표)을 정직하게 노출합니다. `unverified` 등급은 `refetch(client)` 한 줄로 조회 API 재확인을 거쳐야 신뢰 가능한 `Payment`가 됩니다.
+> - **토스는 모든 이벤트에 서명을 제공하지 않습니다** — 서명(HMAC)이 있는 이벤트는 `payout.changed`/`seller.changed`뿐이고, 가상계좌 입금(`DEPOSIT_CALLBACK`)은 승인 시 저장한 `secret` 대조, 나머지(결제 상태 변경 포함)는 **암호학적 검증 수단이 없습니다**. 그래서 이 라이브러리에는 단일 `Verified` 타입이 없고 신뢰 3등급(§6 표)을 정직하게 노출합니다. `unverified` 등급은 조회 API 재확인(`prefetched` 또는 `refetch`)을 거쳐야 신뢰 가능한 `Payment`가 됩니다.
 > - **verify는 raw body만 받습니다** — 파싱된 객체를 받는 오버로드는 없습니다. JSON 파싱을 먼저 하면 서명 검증이 원천 불가능해지기 때문입니다.
 > - **dedupe 스토어는 필수입니다** — 토스는 최대 7회 재전송하고, 가상계좌는 이벤트가 이중으로 옵니다. 중복은 Err가 아닌 정상 verdict(`duplicate: true`)입니다 — 400으로 응답하면 3일 19시간 동안 재전송이 계속됩니다.
 
 ---
 
-## 6. 에러 처리 — Result와 3종 판별
+## 5. 에러 처리 — Result와 3종 판별
 
 모든 실패는 `Result`의 `error`로 돌아오고, 최상위 판별자는 `source`입니다.
 
@@ -338,6 +632,15 @@ if (isErr(result) && result.error.source === 'toss') {
 }
 ```
 
+### 왜 `retryable: true`(PROVIDER_ERROR 등)를 retry 옵션이 자동 재시도하지 않나
+
+실측 확정 사실: **4xx 에러 응답도 멱등키에 15일 바인딩·재생됩니다.** 그래서 —
+
+- **같은 키 자동 재시도**는 15일간 원본 에러만 재생받습니다(무의미).
+- **새 키 자동 재발급 재시도**는 멱등 보호를 라이브러리가 스스로 폐기하는 것입니다 — 첫 요청이 부분 처리됐는지 판별할 수 없어, 이중 승인/이중 취소를 사용자 몰래 감수하게 됩니다.
+
+`retryable: true`의 의미는 "**새 멱등키 + 상황 판단**으로 재시도할 가치가 있다"이지 자동화 신호가 아닙니다. retry 옵션(§3.4)이 자동 재시도하는 경우는 응답 미수신(transport)과 409 `IDEMPOTENT_REQUEST_PROCESSING` 둘뿐이며, 이 판정은 설정으로 확장할 수 없습니다(`onRetry.reason`이 2종 리터럴로 봉인된 이유).
+
 ### 취소 재시도 티켓 — 응답 유실 시 안전한 재실행
 
 취소 요청이 `network` 실패하면 응답을 못 받았을 뿐 서버에는 도달했을 수 있습니다. 에러에 동봉된 `CancelRetryTicket`에는 실행 전에 봉인한 **동일 멱등키 + 동일 body**가 각인되어 있어, `client.cancels.retry(ticket)`은 서버에 도달했었다면 멱등 재생을, 아니면 재실행을 합니다 — 이중 취소가 발생하지 않습니다. 토스의 멱등 판정에 body가 포함되지 않으므로(문서 명시) body 동일성은 티켓 봉인이 보장합니다. 멱등키는 최초 사용 후 15일 유효 — 오래된 티켓 재실행은 새 요청으로 처리될 수 있습니다.
@@ -346,15 +649,17 @@ if (isErr(result) && result.error.source === 'toss') {
 const retried = await client.cancels.retry(ticket);
 ```
 
+confirm 실패의 복구는 §3.7 `resolveConfirmFailure`가 담당합니다 — transport 실패를 티켓 없이 조회로 확정합니다.
+
 ---
 
-## 7. 웹훅 신뢰 3등급과 프레임워크 어댑터
+## 6. 웹훅 신뢰 3등급과 프레임워크 어댑터
 
 | trust | 대상 이벤트 | 검증 수단 | 후속 조치 |
 |---|---|---|---|
 | `'signature'` | `payout.changed`, `seller.changed` | HMAC-SHA256 서명 (키 로테이션 배열 지원) | 그대로 신뢰 가능 |
 | `'secret'` | `DEPOSIT_CALLBACK` (가상계좌 입금) | 승인 시 저장한 `Payment.secret` 대조 | 그대로 신뢰 가능 |
-| `'unverified'` | 나머지 전부 (`PAYMENT_STATUS_CHANGED`, `BILLING_DELETED` 등) | **없음 — 토스가 미제공** | `refetch(client)`로 조회 API 재확인 |
+| `'unverified'` | 나머지 전부 (`PAYMENT_STATUS_CHANGED`, `BILLING_DELETED` 등) | **없음 — 토스가 미제공** | `prefetched`(§3.5) 또는 `refetch(client)`로 조회 API 재확인 |
 
 ### Next.js Route Handler (Fetch 표준 어댑터)
 
@@ -366,8 +671,13 @@ export const POST = verifier.fetchHandler({
     if (event.status === 'WAITING_FOR_DEPOSIT') await revertToAwaiting(event.orderId); // 입금 오류 역전이
   },
   onPaymentStatusChanged: async (w) => {                    // trust: 'unverified'
-    const fresh = await w.refetch(client);
-    if (fresh.ok) await syncStatus(fresh.value);            // 웹훅 payload가 아닌 조회 결과로 갱신
+    if (w.prefetched?.ok) {
+      await syncStatus(w.prefetched.value);                 // §3.5 autoRefetch — 이미 조회된 결과로 갱신
+    } else if (w.prefetched === undefined) {
+      const fresh = await w.refetch(client);                // autoRefetch 미설정 시 수동 승격
+      if (fresh.ok) await syncStatus(fresh.value);
+    }
+    // prefetched가 Err면 payload 폴백 금물 — 다음 재전송(최대 7회)이 자연 재시도다
   },
   onBillingDeleted: async (w) => { await deactivateSubscription(w.event.data.billingKey); },
 });
@@ -385,13 +695,13 @@ app.post('/webhooks/toss', express.raw({ type: '*/*' }), verifier.nodeHandler({
 }));
 ```
 
-`onBillingApproved` 같은 핸들러 키는 **타입에 없습니다** — 토스가 빌링 승인 웹훅을 제공하지 않기 때문입니다(§10 FAQ).
+`onBillingApproved` 같은 핸들러 키는 **타입에 없습니다** — 토스가 빌링 승인 웹훅을 제공하지 않기 때문입니다(§9 FAQ).
 
-> ⚠ **rawBody를 로그에 남기지 마세요.** DEPOSIT_CALLBACK 원문에는 검증용 `secret`이 들어 있습니다. 라이브러리는 검증 후 이벤트 객체에서 secret을 제거하지만, 수신 원문을 직접 로깅하면 그 방어가 무의미해집니다.
+> ⚠ **rawBody를 로그에 남기지 마세요.** DEPOSIT_CALLBACK 원문에는 검증용 `secret`이 들어 있습니다. 라이브러리는 검증 후 이벤트 객체에서 secret을 제거하지만, 수신 원문을 직접 로깅하면 그 방어가 무의미해집니다. 같은 이유로 audit(§3.2)도 인바운드 웹훅을 기록하지 않으며, `webhook.accepted` 이벤트(§3.3)는 secret이 제거된 요약 3필드만 담습니다.
 
 ---
 
-## 8. 테스트 유틸 — `/testing`
+## 7. 테스트 유틸 — `/testing`
 
 토스 테스트 환경은 웹훅을 localhost로 보낼 수 없고 등록 API도 없어, CI는 페이로드 시뮬레이션이 정답입니다. `/testing` 엔트리가 실수신과 동일한 형태의 픽스처를 만들어 줍니다.
 
@@ -399,6 +709,7 @@ app.post('/webhooks/toss', express.raw({ type: '*/*' }), verifier.nodeHandler({
 import {
   webhookFixture, signWebhookPayload,
   memoryOrderStore, memoryBillingKeyStore, memoryDedupeStore,
+  memoryDepositSecretStore, memoryAuditSink,
   TEST_BILLING_CARD,
 } from '@gj-kit/toss-payments/testing';
 
@@ -409,17 +720,20 @@ const verdict = await verifier.verify(rawBody, headers);
 // 유효 서명이 포함된 v2 이벤트 (생성→검증 왕복) — 서명이 WebCrypto라 async
 const signed = await webhookFixture.signedEvent({ eventType: 'payout.changed', entityBody: {}, securityKey: secKey });
 
-// 인메모리 스토어 — 플로우 팩토리의 필수 인자를 테스트에서 충족
-const flow = createConfirmFlow(client, memoryOrderStore());
-const billing = createBillingFlow(client, memoryBillingKeyStore());
+// 인메모리 스토어 — 플로우 팩토리·파사드의 필수 인자를 테스트에서 충족
+const flow = createConfirmFlow(client, memoryOrderStore(), { depositSecrets: memoryDepositSecretStore() });
+const billingFlow = createBillingFlow(client, memoryBillingKeyStore());
 const v = createWebhookVerifier({ dedupe: memoryDedupeStore() });
+
+// 감사 로그 검증 — 기록된 AuditEntry를 배열로 노출
+const sink = memoryAuditSink();
 ```
 
 `TEST_BILLING_CARD`(`9410001234567890`)는 테스트 환경에서 빌링키 발급(신용/개인)과 승인(DONE)이 **모두 성공하는 실측 확인 카드**입니다 — 문서의 BIN 6자리 단독은 400 `INVALID_CARD_NUMBER`, 다른 테스트 번호는 발급은 되지만 승인이 거절됩니다(`NOT_SUPPORTED_CARD_TYPE`).
 
 ---
 
-## 9. 기존 빌링키 이관 — `billing.import`
+## 8. 기존 빌링키 이관 — `billing.import`
 
 다른 시스템에서 이미 발급받은 빌링키가 있다면 `import`로 스토어에 이관합니다. 형식 검증 후 `store.save`를 거쳐 `BillingProfile`로 승격됩니다.
 
@@ -441,19 +755,22 @@ if (imported.ok) {
 
 ---
 
-## 10. FAQ
+## 9. FAQ
+
+**Q. 위젯 결제와 빌링을 한 서비스에서 같이 쓰려면 파사드를 어떻게 구성하나요?**
+파사드 2개를 만드세요 — 위젯 confirm용(`gsk` 키 + `orders`)과 빌링·취소·조회용(`sk` 키 + `billingKeys` 등). 단일 키 = 파사드 1개 원칙은 토스의 키 쌍 규칙(위젯 결제 confirm은 `gsk`, 빌링은 `sk`)과 경계가 일치해, "confirm은 어느 클라이언트로 나가나" 같은 암묵 규칙이 생기지 않게 하기 위한 것입니다. 위젯 키 파사드에 `billingKeys`를 넣으면 오버로드 불충족 컴파일 에러입니다(§2 표).
 
 **Q. 빌링 승인이 끝났는지 웹훅으로 알 수 있나요?**
-아니요. 토스는 빌링 승인 완료 웹훅을 제공하지 않습니다(빌링 관련 웹훅은 `BILLING_DELETED`뿐). `billing.approve`의 반환값이 완결 신호이고, 필요하면 `client.getPayment`으로 재확인하세요. 그래서 `WebhookHandlers`에 `onBillingApproved` 키가 타입 차원에서 존재하지 않습니다.
+아니요. 토스는 빌링 승인 완료 웹훅을 제공하지 않습니다(빌링 관련 웹훅은 `BILLING_DELETED`뿐). `billing.approve`의 반환값이 완결 신호이고, 필요하면 `client.getPayment`으로 재확인하세요. 그래서 `WebhookHandlers`에 `onBillingApproved` 키가 타입 차원에서 존재하지 않습니다. 승인 완료에 대한 인프로세스 부수 반응이 필요하면 `events`의 `'billing.approved'`(§3.3)를 구독하세요 — 단, 이벤트는 관측 전용이지 원장이 아닙니다.
 
 **Q. 승인 시한이 10분이라던데 30분이라는 문서도 있어요.**
-둘 다 맞고, 서로 다른 구간입니다. **30분** = 결제창 실행부터 구매자 인증까지(라이브러리 통제 밖), **10분** = 인증 완료(successUrl 리다이렉트)부터 confirm 호출까지. 어느 쪽이든 초과하면 `EXPIRED`로 전이되고 이후 confirm은 404 `NOT_FOUND_PAYMENT_SESSION`입니다. `createConfirmFlow`의 `approvalWindowMs`(기본 10분)가 후자를 로컬에서 선판정합니다.
+둘 다 맞고, 서로 다른 구간입니다. **30분** = 결제창 실행부터 구매자 인증까지(라이브러리 통제 밖), **10분** = 인증 완료(successUrl 리다이렉트)부터 confirm 호출까지. 어느 쪽이든 초과하면 `EXPIRED`로 전이되고 이후 confirm은 404 `NOT_FOUND_PAYMENT_SESSION`입니다. `createConfirmFlow`의 `approvalWindowMs`(기본 10분)가 후자를 로컬에서 선판정하고, 초과가 이미 벌어졌다면 `resolveFailure`(§3.7)가 `retry-payment` 분기로 안내합니다.
 
 **Q. 멱등키는 얼마나 유지되나요?**
-최초 사용일부터 **15일**입니다. 15일이 지난 키의 재사용은 새 요청으로 처리됩니다(중복 실행 위험). 멱등 판정 조합은 "키 + API 키 + 주소 + 메서드"이고 **body는 포함되지 않으므로**, 같은 키로 다른 body를 보내는 실수는 라이브러리의 취소 재시도 티켓 봉인이 방지합니다. confirm은 멱등키를 기본 부착하지 않습니다 — 필요 시 `options.idempotencyKey`로 명시하세요.
+최초 사용일부터 **15일**입니다. 15일이 지난 키의 재사용은 새 요청으로 처리됩니다(중복 실행 위험). 멱등 판정 조합은 "키 + API 키 + 주소 + 메서드"이고 **body는 포함되지 않으므로**, 같은 키로 다른 body를 보내는 실수는 라이브러리의 취소 재시도 티켓 봉인이 방지합니다. confirm은 멱등키를 기본 부착하지 않습니다 — 필요 시 `options.idempotencyKey`로 명시하세요(retry 옵션의 자동 재시도도 이 명시가 전제입니다 — §3.4). **4xx 에러 응답도 같은 키에 15일 재생됩니다** — 파라미터를 고쳐 재시도할 땐 반드시 새 키를 쓰세요(§5).
 
 **Q. 위젯 키와 API 키는 뭐가 다른가요?**
-연동 방식이 다릅니다. 결제위젯은 위젯 키 쌍(`gck`/`gsk`), API 개별 연동(빌링 포함)은 API 키 쌍(`ck`/`sk`)을 씁니다. 위젯으로 결제한 건의 confirm에 API 시크릿 키를 쓰면 400 `INVALID_API_KEY`입니다. 이 라이브러리는 키 4종을 별도 타입으로 분리하고 클라이언트에 키 종류를 각인해, 잘못된 조합(위젯 키로 빌링 플로우 생성 등)을 컴파일 에러로 만듭니다.
+연동 방식이 다릅니다. 결제위젯은 위젯 키 쌍(`gck`/`gsk`), API 개별 연동(빌링 포함)은 API 키 쌍(`ck`/`sk`)을 씁니다. 위젯으로 결제한 건의 confirm에 API 시크릿 키를 쓰면 400 `INVALID_API_KEY`입니다. 이 라이브러리는 키 4종을 별도 타입으로 분리하고 클라이언트에 키 종류를 각인해, 잘못된 조합(위젯 키로 빌링 플로우 생성 등)을 컴파일 에러로 만듭니다 — 파사드에서는 아예 오버로드 불충족입니다(§2).
 
 ---
 

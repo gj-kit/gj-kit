@@ -139,6 +139,12 @@ declare function deactivateSubscription(billingKey: string): Promise<void>;
 declare function syncStatus(payment: unknown): Promise<void>;
 declare function respond200(): unknown;
 declare function respond400(): unknown;
+declare function respond503(): unknown;
+declare function completeOrder(payment: unknown): unknown;
+declare function redirectToCheckout(): unknown;
+declare function showFailure(error: unknown): unknown;
+declare function sendReceiptMail(orderId: string): Promise<void>;
+declare const metrics: any;
 declare const clientIp: string;
 declare const rawBody: string;
 declare const headers: Headers;
@@ -163,6 +169,21 @@ declare const result: import('@gj-kit/toss-payments').Result<
 >;
 declare const secKey: import('@gj-kit/toss-payments/webhook').SecurityKey;
 declare const order: import('@gj-kit/toss-payments/server').BillingOrder;
+declare const orders: import('@gj-kit/toss-payments/server').OrderStore;
+declare const dedupe: import('@gj-kit/toss-payments/webhook').WebhookDedupeStore;
+declare const profile: import('@gj-kit/toss-payments/server').BillingProfile;
+declare const verified: import('@gj-kit/toss-payments/server').VerifiedCheckout;
+// 풀 배선 파사드 kit — 옵션 카탈로그 프래그먼트가 스코프에 있다고 가정하는 값
+declare const toss: import('@gj-kit/toss-payments/server').TossPaymentsKit<
+  __Env,
+  'api',
+  {
+    orders: import('@gj-kit/toss-payments/server').OrderStore;
+    billingKeys: import('@gj-kit/toss-payments/server').BillingKeyStore;
+    depositSecrets: import('@gj-kit/toss-payments/server').DepositSecretStore;
+    webhook: { dedupe: import('@gj-kit/toss-payments/webhook').WebhookDedupeStore };
+  }
+>;
 declare const isErr: typeof import('@gj-kit/toss-payments').isErr;
 declare const createConfirmFlow: typeof import('@gj-kit/toss-payments/server').createConfirmFlow;
 declare const createBillingFlow: typeof import('@gj-kit/toss-payments/server').createBillingFlow;

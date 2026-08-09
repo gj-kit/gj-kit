@@ -80,6 +80,12 @@ export interface ThemeTypography {
   readonly body: TypeRole;
   readonly title: TypeRole;
   readonly heading: TypeRole;
+  /**
+   * 내비게이션 탭 라벨(underline Tabs) 전용 롤 — 전신의 16px/'600'은 다른 어떤
+   * 롤과도 일치하지 않아 롤로 승격했다(적대적 리뷰 확정 발견 반영). 탭 전용
+   * 색 토큰(tabActive/tabInactive)을 유지한 §0 결정과 같은 원리.
+   */
+  readonly tab: TypeRole;
   /** 앱 커스텀 폰트 패밀리. 미지정 시 시스템 폰트. */
   readonly fontFamily?: string | undefined;
 }

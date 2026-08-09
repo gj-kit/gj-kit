@@ -73,6 +73,15 @@ export type {
   TossCancels,
 } from './cancel';
 
+// §2 파사드 — 배선을 누락할 수 없는 조립층 (기존 팩토리 4종에 전량 위임)
+export { createTossPayments, defineTossPaymentsConfig } from './facade';
+export type {
+  TossPaymentsApiConfig,
+  TossPaymentsBaseConfig,
+  TossPaymentsKit,
+  TossPaymentsWidgetConfig,
+} from './facade';
+
 // §3.3 billing
 export {
   confirmPendingAuth,

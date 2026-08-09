@@ -75,17 +75,27 @@ expo-ui/                       # @gj-kit/expo-ui
   "sideEffects": false,
   "peerDependencies": {
     "react": ">=18",
-    "react-native": ">=0.72",
+    "react-native": ">=0.79",
     "react-native-safe-area-context": ">=4"
   },
   "peerDependenciesMeta": {
     "react-native-safe-area-context": { "optional": true }
   },
+  // 최상위 main/module/types — node10 도구·구형 리졸버 구제 (리뷰 반영)
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  // 조건별 types — CJS 소비자는 d.cts, ESM은 d.ts (리뷰 확정 발견 반영:
+  // type:module 패키지에서 단일 types는 node16 CJS에서 TS1479 'Masquerading as ESM')
   "exports": {
-    ".":          { "types": "./dist/index.d.ts",    "import": "./dist/index.js",    "require": "./dist/index.cjs" },
-    "./theme":    { "types": "./dist/theme.d.ts",    "import": "./dist/theme.js",    "require": "./dist/theme.cjs" },
-    "./insets":   { "types": "./dist/insets.d.ts",   "import": "./dist/insets.js",   "require": "./dist/insets.cjs" },
-    "./tailwind": { "types": "./dist/tailwind.d.ts", "import": "./dist/tailwind.js", "require": "./dist/tailwind.cjs" },
+    ".":          { "import": { "types": "./dist/index.d.ts", "default": "./dist/index.js" },
+                    "require": { "types": "./dist/index.d.cts", "default": "./dist/index.cjs" } },
+    "./theme":    { "import": { "types": "./dist/theme.d.ts", "default": "./dist/theme.js" },
+                    "require": { "types": "./dist/theme.d.cts", "default": "./dist/theme.cjs" } },
+    "./insets":   { "import": { "types": "./dist/insets.d.ts", "default": "./dist/insets.js" },
+                    "require": { "types": "./dist/insets.d.cts", "default": "./dist/insets.cjs" } },
+    "./tailwind": { "import": { "types": "./dist/tailwind.d.ts", "default": "./dist/tailwind.js" },
+                    "require": { "types": "./dist/tailwind.d.cts", "default": "./dist/tailwind.cjs" } },
     "./package.json": "./package.json"
   }
 }
@@ -147,6 +157,8 @@ export interface TypeRole { readonly fontSize: number; readonly lineHeight: numb
 export interface ThemeTypography {
   readonly caption: TypeRole; readonly label: TypeRole; readonly button: TypeRole;
   readonly body: TypeRole; readonly title: TypeRole; readonly heading: TypeRole;
+  /** underline Tabs 라벨 전용 — 전신 16/'600'은 어느 롤과도 불일치해 승격(리뷰 확정 발견 반영, 2026-08-10). */
+  readonly tab: TypeRole;
   /** 앱 커스텀 폰트 패밀리. 미지정 시 시스템 폰트. */
   readonly fontFamily?: string | undefined;
 }
@@ -318,7 +330,7 @@ import { themes } from '../src/theme';
 | `colors.*` | 전 컴포넌트 배경/보더/텍스트/플레이스홀더. `shadow`는 모든 그림자색 |
 | `spacing.*` | Button 패딩(sm→md/md→lg/lg→xl), TextField 내부 패딩(lg/md), Surface·ContentFrame·Section·DialogPanel·상태 카드 padding/gap, 행 gap |
 | `radius.*` | Button·TextField·Surface·Skeleton·상태 카드 sm, Tabs 컨테이너 md, DialogPanel lg, IconButton·SearchField·SelectionIndicator pill |
-| `typography.*` | Text role 전부, Button 라벨=button(사이즈별 캡은 metrics), TextField 입력=body·라벨=label·헬퍼/카운터=caption, Section 제목=title·부제=caption, Dialog 제목=title, 상태 뷰=title/label/caption |
+| `typography.*` | Text role 전부, Button 라벨 fontSize=사이즈별 롤 차용(sm=label/md=button/lg=body — 전신 13/14/15 보존, 굵기=button 롤; 리뷰 발견 반영해 명시), TextField 입력=body·라벨=label·헬퍼/카운터=caption, Tabs segmented=label(활성 굵기 title)/underline=tab(비활성 굵기 body), SelectAllRow 라벨=button, Section 제목=title·부제=caption, Dialog 제목=title, 상태 뷰=title/label/caption |
 | `elevation.*` + `colors.shadow` | Surface elevation prop, StickyActionBar(md), Toast(md), segmented 활성 탭(sm) |
 | `metrics.*` | Button minHeight=control.*, TextField·SearchField minHeight=input, 아이콘 기본 크기=icon.*, maxFontSizeMultiplier 기본=maxFontScale |
 | `breakpoints.*` | tailwind preset screens (컴포넌트 소비는 없음 — 반응형은 앱 소유) |
@@ -421,9 +433,11 @@ type ButtonOwnProps = {
   labelClassName?: string | undefined;
 } & CommonProps;
 
-/** label 또는 children 중 하나는 필수 — 내용 없는 버튼은 컴파일 에러 (아이콘 단독은 IconButton). */
+/** label 또는 children 중 하나는 필수 — 내용 없는 버튼은 컴파일 에러 (아이콘 단독은 IconButton).
+ *  children은 NonNullable — children={maybeUndefined} 우회를 좁힌다(리뷰 확정 발견 반영).
+ *  빈 문자열 등 런타임 공백까지는 타입으로 막지 못한다(§6 ③ 경계). */
 export type ButtonProps = ButtonOwnProps &
-  ({ label: string; children?: ReactNode | undefined } | { label?: never; children: ReactNode });
+  ({ label: string; children?: ReactNode | undefined } | { label?: never; children: NonNullable<ReactNode> });
 export function Button(props: ButtonProps): ReactElement;
 ```
 
@@ -833,6 +847,21 @@ Platform 분기 테스트는 `Platform.OS` 모킹으로. README 예제는 toss-p
 | `tokens.json`/`tailwind-preset.cjs` | `createTailwindPreset(theme)` | tailwind.config 1곳 |
 | `utils/` 4파일 | `@gj-kit/expo-ui/insets` 동명 | 앱 파일 삭제, import 경로 교체 |
 
+### 10.1b 알려진 시각 델타 (의도된 정규화 — 이관 시 앱 테스트 단언 갱신 필요)
+
+전신의 하드코딩 서체가 롤 체계로 정규화되면서 생기는 의도적 시각 변화. memorylog2의 flatten 스타일 단언 테스트(StateViews.test.tsx 등)는 이 표대로 갱신한다:
+
+| 지점 | 전신 | 신규 | 근거 |
+|---|---|---|---|
+| EmptyState 제목 | 16/800/22 | title 롤 18/800/24 | 대응 롤 부재 — title로 흡수 |
+| EmptyState 본문·ErrorState 본문·Dialog 설명 | 13/400/20 | caption 롤 12/400/16 | label(13)은 700 굵기라 부적합 |
+| ErrorState 제목 | 14(RN기본)/700 | label 롤 13/700/18 | |
+| Section 부제 | 13/400 | caption 롤 12/400 | §5.8 구현 확정 |
+| TextField 세로 패딩 | 14 | spacing.md 12 | minHeight 48이 지배 — 체감 미미 |
+| Button lg 세로 패딩 | 14 | spacing.md 12 | minHeight 52가 지배 |
+| segmented 탭 행 높이 | 컨테이너 48 | 동일(상수 보존) | |
+| underline 탭 라벨 | 16/600 | **동일** — typography.tab 롤 승격으로 보존 | 리뷰 확정 발견 수정 |
+
 ### 10.2 파일별 수정 (완전 인벤토리)
 
 | 파일 | 수정 요지 |
@@ -877,3 +906,6 @@ Platform 분기 테스트는 `Platform.OS` 모킹으로. README 예제는 toss-p
 5. **Toast success/info 텍스트 색 차용** (구현 단계 발견) — success 배경엔 onPrimary, info 배경엔 colors.background를 텍스트 색으로 유용. onSuccess/onInfo 롤 부재 때문 — 커스텀 테마가 success를 primary 계열과 다르게 잡으면 대비 저하 가능. 롤 추가는 v2 검토(IntentScale과 함께).
 6. **그림자 이중 경로** (구현 단계 결정) — RNW 0.21이 shadow* props를 deprecated 처리(테스트 실측)해 웹은 boxShadow, 네이티브는 shadow*+elevation으로 분기 방출. RN 0.76+의 네이티브 boxShadow 채택 시 통합 검토.
 7. **웹 aria 병기** (구현 단계 발견) — RNW는 accessibilityState 객체를 DOM aria로 매핑하지 않아 aria-busy/aria-selected/aria-disabled를 병기함. 네이티브는 accessibilityState가 정본.
+8. **exports·peer 정정** (리뷰 확정 발견, 2026-08-10) — CJS TS 소비자(node16)의 타입 해석이 깨져 exports를 import/require 조건별 types(d.ts/d.cts)로 분리하고 최상위 main/module/types를 추가. peer react-native는 >=0.79로 정정(Metro가 exports 맵을 기본 지원하는 최소선 — 그 이하는 resolve 자체 불가라 선언 범위와 실지원의 거짓 불일치였음). toss-payments에도 동일 exports 결함 확인 — 별도 작업으로 분리.
+9. **CJS 산출물 테마 코드 복제** (리뷰 low) — tsup CJS는 코드 스플리팅이 없어 '.'·'./theme'·'./tailwind' 각각에 테마 코드가 인라인됨. Metro(require 조건)에서 서로 다른 엔트리의 lightTheme이 다른 객체 정체성을 가짐 — 브랜드는 타입 수준이고 WeakMap 캐시는 컴포넌트 모듈 단위라 동작 문제는 없으나, 엔트리 간 정체성 비교는 금물.
+10. **§6 강제의 알려진 경계** (리뷰 확정·low 반영) — ③ Button children은 NonNullable로 좁혔으나 빈 문자열 등 런타임 공백은 불가차단. ④ Tabs NoInfer는 items를 as const 없이 호이스팅한 변수로 주면 T가 string으로 넓어져 소멸(TS 구조적 한계). ⑩ Text 닫힌 색 유니언은 style 탈출구가 의도적으로 존재.

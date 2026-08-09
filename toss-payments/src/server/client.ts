@@ -4,23 +4,74 @@
  * Basic 인증 문자열 생성(`base64(secretKey + ":")` — 콜론 필수, BOM 금지)은 이 모듈
  * 내부에 캡슐화되며 공개 API가 없다 — INCORRECT_BASIC_AUTH_FORMAT 도달 불가 목표(§2).
  */
+import { redactForAudit } from '../core/audit';
+import type { AuditEntry, AuditOptions } from '../core/audit';
 import { classifyTossErrorCode } from '../core/errors';
 import type { TossApiFailure, TransportFailure } from '../core/errors';
+import { getInternalEmit } from '../core/events';
 import type { IdempotencyKey, OrderId, PaymentKey } from '../core/ids';
 import type { ApiSecretKey, Env, WidgetSecretKey } from '../core/keys';
 import type { Payment } from '../core/payment';
 import { err, ok, type Result } from '../core/result';
 import { createCancels, type TossCancels } from './cancel';
+import type { TossEventMap, TossEvents } from './events';
 
 export type KeyKind = 'api' | 'widget';
+
+/**
+ * retry — 실측 근거 하드 가드 자동 재시도 (설계 §3.4, 기본 꺼짐).
+ *
+ * 재시도 허용 조건은 **설정으로 확장 불가, 코드에 고정**이다(Phase 5 실측이 근거인 하드 불변식):
+ * 1. GET: TransportFailure만 재시도 (자체 멱등 — 문서).
+ * 2. Idempotency-Key가 실제 부착된 POST/DELETE:
+ *    (a) TransportFailure — 동일 키+동일 body 재전송은 서버 도달 시 바이트 동일 재생,
+ *        미도달 시 재실행(Phase 0 실측 — 이중 실행 없음).
+ *    (b) 409 IDEMPOTENT_REQUEST_PROCESSING — 문서 지시("다시 요청해서 응답을 확인하세요") 준수.
+ * 3. 키 없는 POST/DELETE(confirm 기본 정책): 어떤 실패든 자동 재시도 절대 없음 — 이중 승인
+ *    방지. `retryable: true`여도 무시. confirm에 retry 효과를 받으려면
+ *    `options.idempotencyKey` 명시가 전제다.
+ * 4. 토스 4xx/5xx 에러 응답: 재시도 안 함 — 4xx는 멱등 재생 실측 확정(같은 키 재시도 =
+ *    15일간 같은 에러 재생), 5xx는 재생 여부 미실측이라 보수 배제. PROVIDER_ERROR 등
+ *    `retryable: true`도 포함해 배제 — 그 재시도는 "새 멱등키 + 상황 판단"이 필요한
+ *    호출자 의사결정이다(§7-3).
+ *
+ * 역할 구분: 이 옵션은 "요청 내" 자동화다 — cancel의 CancelRetryTicket은 "요청 간(큐 저장
+ * 후)" 수동 재실행용으로 그대로 유지·동봉된다. 409 재시도 후 원 요청이 4xx로 끝났으면 그
+ * 에러를 재생받고 종료한다 — 처리 결과 확인이라는 올바른 동작이다.
+ *
+ * ⚠ 기본값 최악 지연 +10.5s(+ 시도별 timeout) — 요청 경로가 아닌 배치/큐 소비자에서 켜라.
+ * confirm 경로 권장값은 maxAttempts 2. 409 폴링은 테스트 환경 분당 100건 쿼터를 소모한다.
+ */
+export interface RetryOptions {
+  /** 총 시도 횟수(최초 포함). 기본 3. 리터럴 유니언 — 폭주 설정 원천 차단. */
+  readonly maxAttempts?: 2 | 3 | 4 | 5;
+  /** 시도 간 지연(ms). 기본 [500, 2_000, 8_000], full jitter ±25% 자동. 부족하면 마지막 값 재사용. */
+  readonly delaysMs?: readonly number[];
+  /**
+   * reason이 2종 리터럴로 고정 — toss retryable류로 확장하려면 공개 타입 변경이 필요하도록
+   * 봉인(§7-3). nextDelayMs는 jitter 적용 후 값. 이 콜백의 throw는 삼켜진다(요청 무간섭).
+   */
+  readonly onRetry?: (info: {
+    readonly attempt: number;
+    readonly reason: 'transport' | 'idempotent-processing';
+    readonly nextDelayMs: number;
+    readonly path: string;
+  }) => void;
+}
 
 export interface TossClientOptions {
   /** 기본 globalThis.fetch (Node 20+ 내장). 테스트에서는 모킹 주입 지점. */
   readonly fetch?: typeof fetch;
   /** 기본 https://api.tosspayments.com */
   readonly baseUrl?: string;
-  /** 기본 30_000ms — AbortSignal.timeout과 호출자 signal을 결합해 적용한다. */
+  /** 기본 30_000ms — AbortSignal.timeout과 호출자 signal을 결합해 적용한다(재시도 시 시도별 독립 적용). */
   readonly timeoutMs?: number;
+  /** §3.2 아웃바운드 req/res 증거 기록 — 기본 꺼짐. 시도 1건 = AuditEntry 1건. */
+  readonly audit?: AuditOptions;
+  /** §3.4 자동 재시도 — 기본 꺼짐(미설정 시 1회 시도, 현행 동작과 동일). */
+  readonly retry?: RetryOptions;
+  /** §3.3 이벤트 버스 — 'api.call' 전용(논리 요청당 최종 1회). createTossEvents 산출물만 발행이 흐른다. */
+  readonly events?: TossEvents;
 }
 
 export interface CallOptions<E extends Env> {
@@ -155,81 +206,174 @@ function combineSignals(a: AbortSignal, b: AbortSignal): AbortSignal {
   return controller.signal;
 }
 
-function createHttp(secretKey: string, options: TossClientOptions): TossHttp {
+/** (내부) 시도 1회의 산출 — 실패 메타는 result.error가 이미 보유하므로 성공 메타만 별도 운반. */
+interface AttemptResult {
+  readonly result: Result<unknown, TossApiFailure | TransportFailure>;
+  /** 2xx 성공 시에만 존재 — audit/events용 httpStatus·traceId. */
+  readonly okMeta?: { readonly httpStatus: number; readonly traceId: string | null };
+}
+
+/**
+ * (내부) 재시도 허용 판정 — 설계 §3.4 하드 가드 4조건, 설정으로 확장 불가(코드 고정).
+ * null = 재시도 금지. 근거는 RetryOptions TSDoc 참조.
+ */
+function retryReasonOf(
+  init: TossHttpInit,
+  result: Result<unknown, TossApiFailure | TransportFailure>,
+): 'transport' | 'idempotent-processing' | null {
+  if (result.ok) return null;
+  const keyed = init.idempotencyKey !== undefined;
+  if (result.error.source === 'network') {
+    // 가드 1·2a·3: GET(자체 멱등) 또는 키가 실제 부착된 POST/DELETE만 —
+    // 키 없는 POST/DELETE는 절대 불가(이중 승인/이중 실행 위험)
+    return init.method === 'GET' || keyed ? 'transport' : null;
+  }
+  // 가드 2b·4: 토스 에러 응답 중 재시도 가능은 키 부착 + 409 IDEMPOTENT_REQUEST_PROCESSING
+  // 단 하나. 그 외 4xx는 멱등 재생 실측 확정, 5xx는 미실측 보수 배제 — retryable:true도 무시.
+  return keyed && result.error.code === 'IDEMPOTENT_REQUEST_PROCESSING'
+    ? 'idempotent-processing'
+    : null;
+}
+
+/** (내부) full jitter ±25% — 음수/0은 0으로. */
+function applyJitter(baseMs: number): number {
+  if (baseMs <= 0) return 0;
+  return Math.round(baseMs * (0.75 + Math.random() * 0.5));
+}
+
+/** (내부) 호출자 abort 여부 — 함수 경유로 읽어 await 전 검사의 타입 내로잉 고착을 피한다. */
+function isAborted(signal: AbortSignal | undefined): boolean {
+  return signal?.aborted === true;
+}
+
+/** (내부) abort 가능한 대기 — 호출자 signal abort 시 즉시 resolve(재시도 루프가 직후 중단). */
+function sleep(ms: number, signal: AbortSignal | undefined): Promise<void> {
+  return new Promise((resolve) => {
+    if (signal?.aborted === true) {
+      resolve();
+      return;
+    }
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const onAbort = (): void => {
+      if (timer !== undefined) clearTimeout(timer);
+      resolve();
+    };
+    timer = setTimeout(() => {
+      signal?.removeEventListener('abort', onAbort);
+      resolve();
+    }, ms);
+    signal?.addEventListener('abort', onAbort, { once: true });
+  });
+}
+
+/** §3.4 확정 기본값 — 최악 지연 +10.5s(README 계산 예시와 일치). */
+const DEFAULT_RETRY_DELAYS_MS: readonly number[] = [500, 2_000, 8_000];
+
+function createHttp(secretKey: string, env: Env, options: TossClientOptions): TossHttp {
   const fetchImpl = options.fetch ?? globalThis.fetch;
   const baseUrl = options.baseUrl ?? 'https://api.tosspayments.com';
   const timeoutMs = options.timeoutMs ?? 30_000;
   // Basic 인증 캡슐화 — 콜론 필수(문서: 콜론 누락·UTF-8 BOM이 대표 실수)
   const authorization = `Basic ${btoa(`${secretKey}:`)}`;
 
-  return {
-    async request(init) {
-      const timeout = AbortSignal.timeout(timeoutMs);
-      const signal = init.signal === undefined ? timeout : combineSignals(timeout, init.signal);
+  const audit = options.audit;
+  const retry = options.retry;
+  // retry 미설정 = 1회 시도 — 현행 동작과 동일(기본 꺼짐 계약)
+  const maxAttempts = retry === undefined ? 1 : (retry.maxAttempts ?? 3);
+  const delaysMs = retry?.delaysMs ?? DEFAULT_RETRY_DELAYS_MS;
+  // 'api.call' 발행 계층 — createTossEvents 산출물이 아니면 null(발행 no-op)
+  const emit = getInternalEmit<TossEventMap>(options.events);
 
-      const headers: Record<string, string> = { Authorization: authorization };
-      if (init.bodyJson !== undefined) headers['Content-Type'] = 'application/json';
-      if (init.idempotencyKey !== undefined) headers['Idempotency-Key'] = init.idempotencyKey;
-      if (init.testCode !== undefined) headers['TossPayments-Test-Code'] = init.testCode;
-
-      const transportErr = (cause: unknown): Result<never, TransportFailure> =>
-        err({
-          source: 'network',
-          code: timeout.aborted ? 'TIMEOUT' : 'NETWORK_ERROR',
-          retryable: true,
-          cause,
-        });
-
-      let response: Response;
+  /**
+   * audit 기록 — fire-and-forget(협상 불가): await하지 않고 sync throw·async rejection
+   * 모두 catch → onSinkError. audit 오류가 결제 요청의 지연·실패에 영향을 주는 경로가 없다.
+   */
+  const recordAudit = (entry: AuditEntry): void => {
+    if (audit === undefined) return;
+    const notifySinkError = (cause: unknown): void => {
       try {
-        response = await fetchImpl(baseUrl + init.path, {
-          method: init.method,
-          headers,
-          ...(init.bodyJson !== undefined ? { body: init.bodyJson } : {}),
-          signal,
-        });
-      } catch (cause) {
-        return transportErr(cause);
+        audit.onSinkError?.(cause, entry);
+      } catch {
+        // onSinkError의 throw도 삼킨다
       }
+    };
+    try {
+      void Promise.resolve(audit.sink.record(entry)).then(undefined, notifySinkError);
+    } catch (cause) {
+      notifySinkError(cause);
+    }
+  };
 
-      const traceId = response.headers.get('x-tosspayments-trace-id');
+  /** 단일 시도 — 인증/타임아웃(시도별 독립)/에러 분류 소유. 기존 request() 본문과 동일. */
+  const attemptOnce = async (init: TossHttpInit): Promise<AttemptResult> => {
+    const timeout = AbortSignal.timeout(timeoutMs);
+    const signal = init.signal === undefined ? timeout : combineSignals(timeout, init.signal);
 
-      let text: string;
+    const headers: Record<string, string> = { Authorization: authorization };
+    if (init.bodyJson !== undefined) headers['Content-Type'] = 'application/json';
+    if (init.idempotencyKey !== undefined) headers['Idempotency-Key'] = init.idempotencyKey;
+    if (init.testCode !== undefined) headers['TossPayments-Test-Code'] = init.testCode;
+
+    const transportErr = (cause: unknown): AttemptResult => ({
+      result: err({
+        source: 'network',
+        code: timeout.aborted ? 'TIMEOUT' : 'NETWORK_ERROR',
+        retryable: true,
+        cause,
+      }),
+    });
+
+    let response: Response;
+    try {
+      response = await fetchImpl(baseUrl + init.path, {
+        method: init.method,
+        headers,
+        ...(init.bodyJson !== undefined ? { body: init.bodyJson } : {}),
+        signal,
+      });
+    } catch (cause) {
+      return transportErr(cause);
+    }
+
+    const traceId = response.headers.get('x-tosspayments-trace-id');
+
+    let text: string;
+    try {
+      text = await response.text();
+    } catch (cause) {
+      return transportErr(cause);
+    }
+
+    let data: unknown = null;
+    let parseFailed = false;
+    if (text.length > 0) {
       try {
-        text = await response.text();
-      } catch (cause) {
-        return transportErr(cause);
+        data = JSON.parse(text);
+      } catch {
+        parseFailed = true;
       }
+    }
 
-      let data: unknown = null;
-      let parseFailed = false;
-      if (text.length > 0) {
-        try {
-          data = JSON.parse(text);
-        } catch {
-          parseFailed = true;
-        }
+    if (!response.ok) {
+      // 에러 응답 {code, message} 원문 무손실 보존
+      const body =
+        typeof data === 'object' && data !== null
+          ? (data as { readonly code?: unknown; readonly message?: unknown })
+          : {};
+      if (typeof body.code !== 'string') {
+        // 비-2xx인데 토스 에러 형식({code, message})이 아님 — 게이트웨이/프록시/LB 응답
+        // (502 HTML, 504 빈 body 등). 진짜 토스 에러는 항상 {code, message} JSON이므로
+        // source:'toss'로 오분류하면 retryable:false 각인 + cancel의 retry 티켓 미발급
+        // (응답 유실 복구 구멍)이 된다 — 전송 계층 이상으로 분류한다.
+        return transportErr(
+          new Error(`비-2xx 비토스 형식 응답: HTTP ${response.status}, body: ${text.slice(0, 200)}`),
+        );
       }
-
-      if (!response.ok) {
-        // 에러 응답 {code, message} 원문 무손실 보존
-        const body =
-          typeof data === 'object' && data !== null
-            ? (data as { readonly code?: unknown; readonly message?: unknown })
-            : {};
-        if (typeof body.code !== 'string') {
-          // 비-2xx인데 토스 에러 형식({code, message})이 아님 — 게이트웨이/프록시/LB 응답
-          // (502 HTML, 504 빈 body 등). 진짜 토스 에러는 항상 {code, message} JSON이므로
-          // source:'toss'로 오분류하면 retryable:false 각인 + cancel의 retry 티켓 미발급
-          // (응답 유실 복구 구멍)이 된다 — 전송 계층 이상으로 분류한다.
-          return transportErr(
-            new Error(`비-2xx 비토스 형식 응답: HTTP ${response.status}, body: ${text.slice(0, 200)}`),
-          );
-        }
-        const code = body.code;
-        const message = typeof body.message === 'string' ? body.message : text;
-        const classified = classifyTossErrorCode(code);
-        return err({
+      const code = body.code;
+      const message = typeof body.message === 'string' ? body.message : text;
+      const classified = classifyTossErrorCode(code);
+      return {
+        result: err({
           source: 'toss',
           code,
           message,
@@ -237,14 +381,127 @@ function createHttp(secretKey: string, options: TossClientOptions): TossHttp {
           category: classified.category,
           retryable: classified.retryable,
           traceId,
+        }),
+      };
+    }
+
+    if (parseFailed) {
+      // 2xx인데 본문이 JSON이 아님 — 프록시 응답 등 전송 계층 이상으로 분류
+      return transportErr(new Error(`2xx 응답 본문 JSON 파싱 실패: ${text.slice(0, 200)}`));
+    }
+    return { result: ok(data), okMeta: { httpStatus: response.status, traceId } };
+  };
+
+  /** (내부) 시도 산출 → AuditEntry.outcome. 실패 메타는 에러 값이 이미 보유한다. */
+  const auditOutcomeOf = (attempt: AttemptResult): AuditEntry['outcome'] => {
+    if (attempt.result.ok) {
+      return {
+        kind: 'ok',
+        // okMeta는 result.ok일 때 항상 동반 생성된다 — ?? 0은 타입 좁힘용 도달 불가 폴백
+        httpStatus: attempt.okMeta?.httpStatus ?? 0,
+        responseBody: redactForAudit(attempt.result.value),
+      };
+    }
+    const failure = attempt.result.error;
+    if (failure.source === 'toss') {
+      return {
+        kind: 'toss-error',
+        httpStatus: failure.httpStatus,
+        code: failure.code,
+        message: failure.message,
+      };
+    }
+    return { kind: 'transport', code: failure.code };
+  };
+
+  return {
+    async request(init) {
+      // AuditEntry.path / onRetry.path / 'api.call'.path — pathname만(쿼리 미포함)
+      const path = init.path.split('?')[0] ?? init.path;
+      const requestStartedAt = Date.now();
+
+      // 요청 body는 시도 간 바이트 동일 — redaction 통과본을 1회만 계산해 재사용
+      let auditRequestBody: unknown = null;
+      if (audit !== undefined && init.bodyJson !== undefined) {
+        try {
+          auditRequestBody = redactForAudit(JSON.parse(init.bodyJson));
+        } catch {
+          auditRequestBody = null; // 라이브러리가 직렬화한 body라 도달 불가 — 방어적 폴백
+        }
+      }
+
+      let attempt = 0;
+      let last: AttemptResult;
+      for (;;) {
+        attempt += 1;
+        const attemptAt = new Date().toISOString();
+        const attemptStartedAt = Date.now();
+        last = await attemptOnce(init);
+
+        if (audit !== undefined) {
+          recordAudit({
+            id: globalThis.crypto.randomUUID(),
+            at: attemptAt,
+            env,
+            method: init.method,
+            path,
+            attempt,
+            idempotencyKey: init.idempotencyKey ?? null,
+            requestBody: auditRequestBody,
+            durationMs: Date.now() - attemptStartedAt,
+            traceId: last.result.ok
+              ? (last.okMeta?.traceId ?? null)
+              : last.result.error.source === 'toss'
+                ? last.result.error.traceId
+                : null,
+            outcome: auditOutcomeOf(last),
+          });
+        }
+
+        const reason = retryReasonOf(init, last.result);
+        // 호출자 abort 시 즉시 중단(대기 진입 전) — 마지막 실패를 원형 그대로 반환
+        if (reason === null || attempt >= maxAttempts || isAborted(init.signal)) break;
+
+        const baseDelay = delaysMs[Math.min(attempt - 1, delaysMs.length - 1)] ?? 0;
+        const nextDelayMs = applyJitter(baseDelay);
+        try {
+          retry?.onRetry?.({ attempt, reason, nextDelayMs, path });
+        } catch {
+          // 관측 콜백의 throw는 요청에 무간섭 — 삼킨다
+        }
+        await sleep(nextDelayMs, init.signal);
+        // 대기 중 abort → 새 시도 없이 즉시 중단, 마지막 실패 원형 반환
+        if (isAborted(init.signal)) break;
+      }
+
+      // 'api.call' — 논리 요청당 최종 1회(attempts 집계). Result 확정 후 fire-and-forget,
+      // 핸들러 격리는 이미터가 소유 — 이 발화가 반환값을 바꾸는 경로는 없다.
+      if (emit !== null) {
+        const finalResult = last.result;
+        emit.emit('api.call', {
+          method: init.method,
+          path,
+          outcome: finalResult.ok
+            ? 'ok'
+            : finalResult.error.source === 'toss'
+              ? 'toss-error'
+              : 'transport',
+          httpStatus: finalResult.ok
+            ? (last.okMeta?.httpStatus ?? null)
+            : finalResult.error.source === 'toss'
+              ? finalResult.error.httpStatus
+              : null,
+          durationMs: Date.now() - requestStartedAt,
+          traceId: finalResult.ok
+            ? (last.okMeta?.traceId ?? null)
+            : finalResult.error.source === 'toss'
+              ? finalResult.error.traceId
+              : null,
+          attempts: attempt,
         });
       }
 
-      if (parseFailed) {
-        // 2xx인데 본문이 JSON이 아님 — 프록시 응답 등 전송 계층 이상으로 분류
-        return transportErr(new Error(`2xx 응답 본문 JSON 파싱 실패: ${text.slice(0, 200)}`));
-      }
-      return ok(data);
+      return last.result;
     },
   };
 }
@@ -268,7 +525,7 @@ export function createTossClient(
   const env: Env = key.startsWith('live_') ? 'live' : 'test';
   const keyKind: KeyKind =
     key.startsWith('test_gsk_') || key.startsWith('live_gsk_') ? 'widget' : 'api';
-  const http = createHttp(key, options);
+  const http = createHttp(key, env, options);
 
   const lookup = async (path: string, signal: AbortSignal | undefined) => {
     const r = await http.request({ method: 'GET', path, signal });

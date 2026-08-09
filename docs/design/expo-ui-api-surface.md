@@ -318,7 +318,7 @@ import { themes } from '../src/theme';
 | `colors.*` | 전 컴포넌트 배경/보더/텍스트/플레이스홀더. `shadow`는 모든 그림자색 |
 | `spacing.*` | Button 패딩(sm→md/md→lg/lg→xl), TextField 내부 패딩(lg/md), Surface·ContentFrame·Section·DialogPanel·상태 카드 padding/gap, 행 gap |
 | `radius.*` | Button·TextField·Surface·Skeleton·상태 카드 sm, Tabs 컨테이너 md, DialogPanel lg, IconButton·SearchField·SelectionIndicator pill |
-| `typography.*` | Text role 전부, Button 라벨=button(사이즈별 캡은 metrics), TextField 입력=body·라벨=label·헬퍼/카운터=caption, Section 제목=title·부제=label, Dialog 제목=title, 상태 뷰=body/label |
+| `typography.*` | Text role 전부, Button 라벨=button(사이즈별 캡은 metrics), TextField 입력=body·라벨=label·헬퍼/카운터=caption, Section 제목=title·부제=caption, Dialog 제목=title, 상태 뷰=title/label/caption |
 | `elevation.*` + `colors.shadow` | Surface elevation prop, StickyActionBar(md), Toast(md), segmented 활성 탭(sm) |
 | `metrics.*` | Button minHeight=control.*, TextField·SearchField minHeight=input, 아이콘 기본 크기=icon.*, maxFontSizeMultiplier 기본=maxFontScale |
 | `breakpoints.*` | tailwind preset screens (컴포넌트 소비는 없음 — 반응형은 앱 소유) |
@@ -385,7 +385,8 @@ type CommonProps = {
 ### 5.1 Text (신규)
 
 ```ts
-export interface TextProps extends Omit<RNTextProps, 'style'> {
+// RN Text의 aria `role` prop을 가린다(이름 충돌) — 접근성 롤은 accessibilityRole로.
+export interface TextProps extends Omit<RNTextProps, 'style' | 'role'> {
   role?: TextRole | undefined;              // 기본 'body' — size/lineHeight/weight/fontFamily 전부 토큰
   color?: ColorKey | undefined;             // 닫힌 유니언 — 오타는 에러, raw 색은 style로 (§0)
   style?: StyleProp<TextStyle> | undefined;
@@ -581,7 +582,7 @@ export function ContentFrame(props: ContentFrameProps): ReactElement;
 export interface SectionProps extends Omit<CommonProps, 'unstyled'> {
   children?: ReactNode | undefined;
   title?: string | undefined;                   // typography.title
-  subtitle?: string | undefined;                // typography.label
+  subtitle?: string | undefined;                // typography.caption + textMuted (전신 13/400은 label과 굵기 불일치 — caption으로 정규화, 구현 확정)
   actions?: ReactNode | undefined;
   gap?: SpacingKey | number | undefined;        // 기본 'md'
   unstyled?: never;
@@ -873,3 +874,6 @@ Platform 분기 테스트는 `Platform.OS` 모킹으로. README 예제는 toss-p
 2. **react-native-web alias 테스트의 네이티브 갭** — 네이티브 렌더러 특유 동작(includeFontPadding 등)은 unit에서 미검증. 이관 후 memorylog2의 jest-expo 스위트가 간접 보완.
 3. **`style?: never`의 DX** — TextField에 style을 못 주는 것이 낯설 수 있음. TSDoc + 에러 메시지로 완화, containerStyle이 대체.
 4. **tarball 벤더링 운영** — 라이브러리 수정 시 재-pack·재커밋 필요. publish 전 과도기 한정.
+5. **Toast success/info 텍스트 색 차용** (구현 단계 발견) — success 배경엔 onPrimary, info 배경엔 colors.background를 텍스트 색으로 유용. onSuccess/onInfo 롤 부재 때문 — 커스텀 테마가 success를 primary 계열과 다르게 잡으면 대비 저하 가능. 롤 추가는 v2 검토(IntentScale과 함께).
+6. **그림자 이중 경로** (구현 단계 결정) — RNW 0.21이 shadow* props를 deprecated 처리(테스트 실측)해 웹은 boxShadow, 네이티브는 shadow*+elevation으로 분기 방출. RN 0.76+의 네이티브 boxShadow 채택 시 통합 검토.
+7. **웹 aria 병기** (구현 단계 발견) — RNW는 accessibilityState 객체를 DOM aria로 매핑하지 않아 aria-busy/aria-selected/aria-disabled를 병기함. 네이티브는 accessibilityState가 정본.

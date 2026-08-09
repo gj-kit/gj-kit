@@ -235,6 +235,16 @@ export interface Unverified {
   readonly meta: WebhookMeta;
   /** 조회 API 재확인 — Unverified를 신뢰 가능한 Payment로 승격하는 유일한 경로(한 줄, 단언 없음). */
   refetch(client: PaymentLookup): Promise<Result<Payment, LookupError | NoPaymentReference>>;
+  /**
+   * §3.5 autoRefetch 설정 + 어댑터(fetchHandler/nodeHandler) 경유 시에만 채워짐 —
+   * undefined = 옵션 꺼짐 또는 수동 verify 경로. Err여도 이벤트는 버려지지 않고 핸들러에
+   * 도달한다(판단은 핸들러 몫 — 웹훅 자체가 최대 7회 재전송되므로 다음 전송이 자연 재시도).
+   *
+   * ⚠ trust는 여전히 'unverified'다 — 조회 성공은 웹훅 발신자 진위를 증명하지 않는다
+   * (위조 웹훅이 실존 orderId를 찍으면 조회는 성공한다, §7-2). payload가 아닌 이 조회
+   * 결과로 상태를 갱신하라. prefetched 실패 시 payload 폴백은 금물.
+   */
+  readonly prefetched?: Result<Payment, LookupError | NoPaymentReference>;
 }
 
 export type AcceptedWebhook = SignatureVerified | SecretVerified | Unverified;

@@ -1,9 +1,13 @@
-import { describe, it } from 'vitest';
+import { describe, expectTypeOf, it } from 'vitest';
 
 import { createConfirmFlow } from '../../src/server';
 import type {
+  ConfirmError,
   ConfirmFlow,
+  ConfirmedPayment,
+  DepositSecretStore,
   OrderStore,
+  TossEvents,
   TossServerClient,
   UnverifiedCallback,
   VerifiedCheckout,
@@ -46,5 +50,49 @@ describe('§3.1 confirm — 오용 = 컴파일 에러', () => {
     const flow = forge<ConfirmFlow<'test'>>();
     const verified = forge<VerifiedCheckout>();
     void flow.confirm(verified);
+  });
+});
+
+describe('§3.1/§3.7 v1.1 additive — depositSecrets 옵션 + resolveFailure', () => {
+  it('ConfirmFlowOptions — depositSecrets/onDepositSecretSaveFailed/events는 전부 옵셔널(파괴 없음)', () => {
+    const client = forge<TossServerClient<'test', 'api'>>();
+    const store = forge<OrderStore>();
+    // 기존 호출 형태 그대로 유효
+    void createConfirmFlow(client, store);
+    void createConfirmFlow(client, store, { approvalWindowMs: 600_000 });
+    // 신규 옵션 결합
+    void createConfirmFlow(client, store, {
+      depositSecrets: forge<DepositSecretStore>(),
+      onDepositSecretSaveFailed: (info) => {
+        // 통지 payload에 secret 필드가 없다 — 유출 방지 확정 표
+        expectTypeOf(info).toEqualTypeOf<{
+          readonly orderId: OrderId;
+          readonly paymentKey: PaymentKey;
+          readonly cause: unknown;
+        }>();
+      },
+      events: forge<TossEvents>(),
+    });
+
+    // @ts-expect-error getSecret 없는 객체는 DepositSecretStore가 아니다 — 웹훅측 대조 배선 강제
+    void createConfirmFlow(client, store, { depositSecrets: { saveSecret: forge<DepositSecretStore['saveSecret']>() } });
+  });
+
+  it('resolveFailure — ConfirmResolution 3분기 판별 유니언', () => {
+    const flow = forge<ConfirmFlow<'test'>>();
+    const resolution = forge<Awaited<ReturnType<ConfirmFlow<'test'>['resolveFailure']>>>();
+    void flow.resolveFailure(forge<OrderId>(), forge<ConfirmError>());
+    if (resolution.ok) {
+      if (resolution.value.resolution === 'actually-confirmed') {
+        expectTypeOf(resolution.value.payment).toEqualTypeOf<ConfirmedPayment>();
+      }
+      if (resolution.value.resolution === 'definitively-failed') {
+        expectTypeOf(resolution.value.error).toEqualTypeOf<ConfirmError>();
+      }
+      if (resolution.value.resolution === 'retry-payment') {
+        // @ts-expect-error retry-payment variant에는 payment가 없다
+        void resolution.value.payment;
+      }
+    }
   });
 });

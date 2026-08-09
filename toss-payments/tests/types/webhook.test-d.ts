@@ -5,13 +5,18 @@ import type {
   AcceptedWebhook,
   DepositCallbackEvent,
   IncomingHeaders,
+  LookupError,
+  NoPaymentReference,
+  PaymentLookup,
   PaymentStatusChangedEvent,
   SecurityKey,
   Unverified,
+  WebhookDedupeStore,
   WebhookHandlers,
   WebhookVerdict,
   WebhookVerifier,
 } from '../../src/webhook';
+import type { Payment, Result } from '../../src/index';
 
 const forge = <T>(): T => undefined as T; // 타입 테스트 전용 헬퍼
 
@@ -85,5 +90,44 @@ describe('웹훅 오용 = 컴파일 에러 (설계 §3.4)', () => {
     expectTypeOf<PaymentStatusHandlerArg['event']>().toEqualTypeOf<PaymentStatusChangedEvent>();
     // Unverified에는 refetch가 있다 — payload 직접 신뢰 대신 재조회 유도
     expectTypeOf<PaymentStatusHandlerArg['refetch']>().toBeFunction();
+  });
+});
+
+describe('§3.5 autoRefetch — prefetched는 additive 옵셔널, trust 승격 없음', () => {
+  it('Unverified.prefetched는 옵셔널 Result — 기존 refetch() 존치', () => {
+    const w = forge<Unverified>();
+    expectTypeOf(w.prefetched).toEqualTypeOf<
+      Result<Payment, LookupError | NoPaymentReference> | undefined
+    >();
+    // 기존 수동 경로 불변
+    expectTypeOf(w.refetch).toBeFunction();
+    // trust는 리터럴 'unverified' 그대로 — 승격된 등급이 타입에 존재하지 않는다
+    expectTypeOf(w.trust).toEqualTypeOf<'unverified'>();
+  });
+
+  it('autoRefetch config — PaymentLookup 필수, eventTypes는 결제 참조 3종만', () => {
+    const dedupe = forge<WebhookDedupeStore>();
+    const lookup = forge<PaymentLookup>();
+    void createWebhookVerifier({
+      dedupe,
+      autoRefetch: { client: lookup, eventTypes: ['PAYMENT_STATUS_CHANGED'] },
+    });
+
+    void createWebhookVerifier({
+      dedupe,
+      // @ts-expect-error 결제 참조가 없는 이벤트는 eventTypes에 넣을 수 없다 — 거짓 제공 금지
+      autoRefetch: { client: lookup, eventTypes: ['BILLING_DELETED'] },
+    });
+
+    // @ts-expect-error client 없는 autoRefetch — 조회 수단 없이 켤 수 없다
+    void createWebhookVerifier({ dedupe, autoRefetch: {} });
+  });
+
+  it('SecretVerified/SignatureVerified에는 prefetched가 없다 — Unverified 전용', () => {
+    const accepted = forge<AcceptedWebhook>();
+    if (accepted.trust === 'secret') {
+      // @ts-expect-error DEPOSIT_CALLBACK은 secret 대조로 이미 검증됨 — prefetched 필드 부재
+      void accepted.prefetched;
+    }
   });
 });

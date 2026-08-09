@@ -6,6 +6,8 @@
  * - BillingKeyStore: 토스에 빌링키 조회 API가 없다 — 저장 실패 = 복구 불가.
  */
 import type { CustomerKey, OrderId } from '../core/ids';
+// 타입 전용 import — server→webhook 런타임 의존을 만들지 않는다(verbatimModuleSyntax로 완전 소거)
+import type { DepositSecretSource } from '../webhook/verifier';
 
 export interface StoredOrder {
   readonly orderId: OrderId;
@@ -21,6 +23,23 @@ export interface StoredOrder {
 export interface OrderStore {
   saveOrder(order: StoredOrder): Promise<void>;
   loadOrder(orderId: OrderId): Promise<StoredOrder | null>;
+}
+
+/**
+ * 가상계좌 secret 저장소 — 웹훅 `DepositSecretSource`(getSecret)의 상위 타입 (설계 §3.1, G1).
+ *
+ * 한 객체로 confirm측 자동 저장(`ConfirmFlowOptions.depositSecrets`) + 웹훅측 대조
+ * (`WebhookVerifierConfig.depositSecrets`) 양쪽을 1회 배선한다 — 저장(README 수동 한 줄)과
+ * 조회(웹훅 config)가 다른 파일에 흩어져 저장 누락 → DEPOSIT_CALLBACK 전부 unknown-order
+ * 거부가 되는 사고를 구조로 막는다.
+ */
+export interface DepositSecretStore extends DepositSecretSource {
+  /**
+   * upsert 시맨틱 계약 — 기존 수동 저장과 병용해도 이중 저장이 무해해야 한다.
+   * (getSecret(orderId): Promise<string | null>은 DepositSecretSource에서 상속 —
+   * 기존 WebhookVerifierConfig.depositSecrets에 그대로 전달 가능, 파괴 없음.)
+   */
+  saveSecret(orderId: OrderId, secret: string): Promise<void>;
 }
 
 /**

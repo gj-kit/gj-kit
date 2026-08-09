@@ -12,7 +12,15 @@
  */
 import type { Brand } from '../core/brand';
 import type { BillingErrorCode, TossApiFailure, TransportFailure } from '../core/errors';
-import { customerKey as parseCustomerKeyRaw, type CustomerKey, type OrderId, type OrderName } from '../core/ids';
+import { getInternalEmit } from '../core/events';
+import type { InternalTossEmit } from '../core/events';
+import {
+  customerKey as parseCustomerKeyRaw,
+  type CustomerKey,
+  type IdempotencyKey,
+  type OrderId,
+  type OrderName,
+} from '../core/ids';
 import type { Env } from '../core/keys';
 import type { Payment } from '../core/payment';
 import { err, ok, type Result } from '../core/result';
@@ -24,6 +32,8 @@ import {
   type TossServerClient,
 } from './client';
 import { toSearchParams, type CallbackQueryInput, type CallbackParseError } from './confirm';
+// 타입 전용 import — events.ts가 이 모듈을 type-only로 참조하므로 런타임 순환이 없다
+import type { TossEventMap, TossEvents } from './events';
 import type { BillingKeyRecord, BillingKeyStore } from './stores';
 
 // ─── 봉인 심볼 — 비열거·비공개. JSON.stringify/스프레드에 새지 않는다 ───────────
@@ -247,6 +257,18 @@ export type ImportBillingKeyError =
 export interface BillingCapabilities {
   /** 카드 정보 직접 전달 발급(/v1/billing/authorizations/card) — 추가 계약 필요. */
   readonly directCardIssue?: true;
+  /**
+   * §3.6 approve 멱등키 타입 필수화 — cron 중복 실행·큐 at-least-once에서 키 없는
+   * approve 2회 = 이중 과금(이 라이브러리에서 "옵션 누락 = 금전 사고"인 유일 지점).
+   * 켜면 approve의 options 파라미터 자체가 필수가 되고 idempotencyKey가 요구된다.
+   *
+   * 키 권장: 청구 주기 결정적 값 — `idempotencyKey(\`sub:${period}:${customerKey}\`)`.
+   * 재실행 시 첫 응답 재생으로 무해하다. **단 4xx 실패 후 파라미터를 고쳐 재시도할 땐
+   * 반드시 새 키**(Phase 5 실측 — 동일 키는 15일간 같은 에러를 재생한다). 일시 오류가
+   * 결정적 키에 바인딩되면 해당 주기 재청구가 15일 막히는 함정 → 재시도 시
+   * `sub:${period}:${customerKey}:retry-${attempt}`처럼 attempt suffix를 붙여라.
+   */
+  readonly requireApproveIdempotencyKey?: true;
 }
 
 export interface BillingFlowBase<E extends Env> {
@@ -293,7 +315,22 @@ export interface BillingFlowBase<E extends Env> {
   ): Promise<Result<void, RevokeBillingKeyError>>;
 }
 
-export type BillingFlow<E extends Env, C extends BillingCapabilities = {}> = BillingFlowBase<E> &
+export type BillingFlow<E extends Env, C extends BillingCapabilities = {}> =
+  // §3.6 — requireApproveIdempotencyKey 선언 시 approve의 options 자체가 필수(멱등키 요구).
+  // 미선언이면 기존 BillingFlowBase 그대로(파괴 없음). 런타임 동작은 동일 — 타입만 협착.
+  (C extends { requireApproveIdempotencyKey: true }
+    ? Omit<BillingFlowBase<E>, 'approve'> & {
+        /**
+         * capability로 멱등키가 타입 필수화된 approve — 키 없는 approve 중복 실행 =
+         * 이중 과금을 컴파일에 차단한다. 키 지침은 {@link BillingCapabilities.requireApproveIdempotencyKey}.
+         */
+        approve(
+          profile: BillingProfile,
+          order: BillingOrder,
+          options: CallOptions<E> & { readonly idempotencyKey: IdempotencyKey },
+        ): Promise<Result<BillingPayment, BillingApproveError>>;
+      }
+    : BillingFlowBase<E>) &
   (C extends { directCardIssue: true }
     ? {
         /**
@@ -418,9 +455,20 @@ function toProfile(record: BillingKeyRecord): BillingProfile {
 export function createBillingFlow<E extends Env, C extends BillingCapabilities = {}>(
   client: TossServerClient<E, 'api'>,
   store: BillingKeyStore,
-  options?: { readonly capabilities?: C },
+  options?: {
+    readonly capabilities?: C;
+    /**
+     * §3.3 이벤트 버스 — billing.issued/approved/approve-failed/revoked 발행 지점.
+     * payload에 billingKey는 원천 부재(봉인 원칙 유지). createTossEvents 산출물만 발행이 흐른다.
+     */
+    readonly events?: TossEvents;
+  },
 ): BillingFlow<E, C> {
   const http = getInternalHttp(client);
+  // 발행 계층 — createTossEvents 산출물이 아니면 null(발행 지점 no-op, 비용 0 수렴)
+  const emit: InternalTossEmit<TossEventMap> | null = getInternalEmit<TossEventMap>(
+    options?.events,
+  );
 
   const issueAndSave = async (
     path: string,
@@ -460,7 +508,73 @@ export function createBillingFlow<E extends Env, C extends BillingCapabilities =
         issuedRecord: sealIssuedRecord(record),
       });
     }
+    // Result 확정 후 발화 — payload는 customerKey만(billingKey 유출 원천 차단, §3.3)
+    emit?.emit('billing.issued', { customerKey: customerKeyValue });
     return ok(toProfile(record));
+  };
+
+  const approveImpl = async (
+    profile: BillingProfile,
+    order: BillingOrder,
+    callOptions?: CallOptions<E>,
+  ): Promise<Result<BillingPayment, BillingApproveError>> => {
+    const billingKey = readSeal(profile, billingKeySeal);
+    if (billingKey === undefined) {
+      return err({ source: 'library', kind: 'profile-detached', customerKey: profile.customerKey });
+    }
+    if (http === null) return err(missingInternalHttpFailure());
+    const body: Record<string, unknown> = {
+      // customerKey는 봉인 쌍(profile)에서만 온다 — BillingOrder에는 필드 자체가 없다
+      customerKey: profile.customerKey,
+      orderId: order.orderId,
+      orderName: order.orderName,
+      amount: order.amount,
+    };
+    if (order.customerEmail !== undefined) body['customerEmail'] = order.customerEmail;
+    if (order.customerName !== undefined) body['customerName'] = order.customerName;
+    if (order.customerIp !== undefined) body['customerIp'] = order.customerIp;
+    if (order.taxFreeAmount !== undefined) body['taxFreeAmount'] = order.taxFreeAmount;
+    if (order.taxExemptionAmount !== undefined) {
+      body['taxExemptionAmount'] = order.taxExemptionAmount;
+    }
+    const r = await http.request({
+      method: 'POST',
+      path: `/v1/billing/${encodeURIComponent(billingKey)}`,
+      bodyJson: JSON.stringify(body),
+      idempotencyKey: callOptions?.idempotencyKey,
+      testCode: callOptions?.testCode,
+      signal: callOptions?.signal,
+    });
+    if (!r.ok) return err(r.error);
+    // 2xx라도 빈 body/비객체 JSON이면 '빈 Payment' 제조 금지 — 필수 필드 가드 통과 후에만 Ok
+    const parsed = parsePaymentChecked(r.value);
+    if (!parsed.ok) return parsed;
+    // 승인 성공 응답은 type BILLING, status DONE(문서) — 응답 협착 단언
+    return ok(parsed.value as BillingPayment);
+  };
+
+  const revokeImpl = async (
+    profile: BillingProfile,
+    callOptions?: CallOptions<E>,
+  ): Promise<Result<void, RevokeBillingKeyError>> => {
+    const billingKey = readSeal(profile, billingKeySeal);
+    if (billingKey === undefined) {
+      return err({ source: 'library', kind: 'profile-detached', customerKey: profile.customerKey });
+    }
+    if (http === null) return err(missingInternalHttpFailure());
+    const r = await http.request({
+      method: 'DELETE',
+      path: `/v1/billing/${encodeURIComponent(billingKey)}`,
+      testCode: callOptions?.testCode,
+      signal: callOptions?.signal,
+    });
+    if (!r.ok) return err(r.error);
+    try {
+      await store.delete(profile.customerKey);
+    } catch (cause) {
+      return err({ source: 'library', kind: 'store-failure', operation: 'delete', cause });
+    }
+    return ok(undefined);
   };
 
   const base: BillingFlowBase<E> = {
@@ -513,60 +627,20 @@ export function createBillingFlow<E extends Env, C extends BillingCapabilities =
     },
 
     async approve(profile, order, callOptions) {
-      const billingKey = readSeal(profile, billingKeySeal);
-      if (billingKey === undefined) {
-        return err({ source: 'library', kind: 'profile-detached', customerKey: profile.customerKey });
+      const r = await approveImpl(profile, order, callOptions);
+      // Result 확정 후 발화 — 발화가 반환값을 바꾸는 경로 없음(핸들러 격리는 이미터 소유)
+      if (r.ok) {
+        emit?.emit('billing.approved', { payment: r.value, customerKey: profile.customerKey });
+      } else {
+        emit?.emit('billing.approve-failed', { customerKey: profile.customerKey, error: r.error });
       }
-      if (http === null) return err(missingInternalHttpFailure());
-      const body: Record<string, unknown> = {
-        // customerKey는 봉인 쌍(profile)에서만 온다 — BillingOrder에는 필드 자체가 없다
-        customerKey: profile.customerKey,
-        orderId: order.orderId,
-        orderName: order.orderName,
-        amount: order.amount,
-      };
-      if (order.customerEmail !== undefined) body['customerEmail'] = order.customerEmail;
-      if (order.customerName !== undefined) body['customerName'] = order.customerName;
-      if (order.customerIp !== undefined) body['customerIp'] = order.customerIp;
-      if (order.taxFreeAmount !== undefined) body['taxFreeAmount'] = order.taxFreeAmount;
-      if (order.taxExemptionAmount !== undefined) {
-        body['taxExemptionAmount'] = order.taxExemptionAmount;
-      }
-      const r = await http.request({
-        method: 'POST',
-        path: `/v1/billing/${encodeURIComponent(billingKey)}`,
-        bodyJson: JSON.stringify(body),
-        idempotencyKey: callOptions?.idempotencyKey,
-        testCode: callOptions?.testCode,
-        signal: callOptions?.signal,
-      });
-      if (!r.ok) return err(r.error);
-      // 2xx라도 빈 body/비객체 JSON이면 '빈 Payment' 제조 금지 — 필수 필드 가드 통과 후에만 Ok
-      const parsed = parsePaymentChecked(r.value);
-      if (!parsed.ok) return parsed;
-      // 승인 성공 응답은 type BILLING, status DONE(문서) — 응답 협착 단언
-      return ok(parsed.value as BillingPayment);
+      return r;
     },
 
     async revoke(profile, callOptions) {
-      const billingKey = readSeal(profile, billingKeySeal);
-      if (billingKey === undefined) {
-        return err({ source: 'library', kind: 'profile-detached', customerKey: profile.customerKey });
-      }
-      if (http === null) return err(missingInternalHttpFailure());
-      const r = await http.request({
-        method: 'DELETE',
-        path: `/v1/billing/${encodeURIComponent(billingKey)}`,
-        testCode: callOptions?.testCode,
-        signal: callOptions?.signal,
-      });
-      if (!r.ok) return err(r.error);
-      try {
-        await store.delete(profile.customerKey);
-      } catch (cause) {
-        return err({ source: 'library', kind: 'store-failure', operation: 'delete', cause });
-      }
-      return ok(undefined);
+      const r = await revokeImpl(profile, callOptions);
+      if (r.ok) emit?.emit('billing.revoked', { customerKey: profile.customerKey });
+      return r;
     },
   };
 

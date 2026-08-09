@@ -5,15 +5,28 @@
  * HMAC은 WebCrypto(globalThis.crypto.subtle)만 사용한다 — Edge 런타임 호환(node: import 금지).
  */
 import type { Brand } from '../core/brand';
+import { getInternalEmit } from '../core/events';
+import type { InternalTossEmit } from '../core/events';
 import type { KeyParseError } from '../core/keys';
+import type { Payment } from '../core/payment';
 import { err, ok } from '../core/result';
 import type { Result } from '../core/result';
+// 타입 전용 import — webhook→server 런타임 의존을 만들지 않는다(verbatimModuleSyntax로 완전 소거)
+import type { TossEvents } from '../server/events';
 import { createFetchHandler, createNodeHandler } from './adapters';
-import type { FetchHandlerOptions, NodeIncomingMessageLike, NodeServerResponseLike } from './adapters';
+import type {
+  FetchHandlerOptions,
+  NodeIncomingMessageLike,
+  NodeServerResponseLike,
+  WebhookPrefetchFn,
+} from './adapters';
 import { parseWebhookEnvelope } from './envelope';
 import { createUnverified, TOSS_WEBHOOK_SOURCE_IPS } from './events';
 import type {
   AcceptedWebhook,
+  LookupError,
+  NoPaymentReference,
+  PaymentLookup,
   WebhookHandlers,
   WebhookMeta,
   WebhookRejection,
@@ -94,6 +107,31 @@ export interface WebhookVerifierConfig {
    * 쪽도 동일 정규화). 항목은 순수 IPv4 표기 권장.
    */
   readonly allowedSourceIps?: readonly string[] | false;
+  /**
+   * §3.3 이벤트 버스 — webhook.accepted/duplicate/rejected 발행 지점(요약 필드만 —
+   * DEPOSIT_CALLBACK rawBody의 secret은 어떤 이벤트 payload에도 실리지 않는다).
+   * createTossEvents 산출물만 발행이 흐른다(구조적 모조 객체는 no-op).
+   */
+  readonly events?: TossEvents;
+  /**
+   * §3.5 — 설정 시 fetchHandler/nodeHandler의 핸들러 디스패치 직전(200 ack 이후)에
+   * 결제 참조가 있는 Unverified 이벤트를 자동 재조회해 `prefetched`로 첨부한다.
+   * dedupe 통과분에만 수행(재전송 7회가 조회 7회가 되지 않음).
+   *
+   * 수동 verify() 경로는 불변 — verify에 네트워크 호출을 심지 않는다(순수성 + 10초 규약
+   * 보존). trust 등급 승격도 없다('unverified' 불변 — 조회 성공은 발신자 진위를 증명하지
+   * 않는다, §7-2).
+   */
+  readonly autoRefetch?: {
+    /** 기존 PaymentLookup 구조적 인터페이스 재사용 — webhook→server 런타임 의존 없음. */
+    readonly client: PaymentLookup;
+    /** 생략 시 결제 참조 보유 이벤트 전부. 분당 100건 쿼터 방어용 필터. */
+    readonly eventTypes?: readonly (
+      | 'PAYMENT_STATUS_CHANGED'
+      | 'CANCEL_STATUS_CHANGED'
+      | 'ORDER_PAYMENT_STATUS_CHANGED'
+    )[];
+  };
 }
 
 export type IncomingHeaders =
@@ -223,8 +261,27 @@ function normalizeSourceIp(ip: string): string {
 
 // ── verifier 본체 ──────────────────────────────────────────────────────────
 
+/**
+ * 웹훅 자기 이벤트 3종만 담은 구조적 서브맵 — server `TossEventMap`의 해당 항목과 필드
+ * 단위 동일(§3.3). 발행은 이 서브맵으로만 흘러 webhook→server 런타임 의존이 없다.
+ */
+interface WebhookEmitMap {
+  readonly 'webhook.accepted': {
+    readonly trust: 'signature' | 'secret' | 'unverified';
+    readonly eventType: string;
+    readonly transmissionId: string;
+  };
+  readonly 'webhook.duplicate': { readonly transmissionId: string };
+  readonly 'webhook.rejected': { readonly rejection: WebhookRejection };
+}
+
 export function createWebhookVerifier(config: WebhookVerifierConfig): WebhookVerifier {
-  const verify: WebhookVerifier['verify'] = async (rawBody, headers, context) => {
+  // 발행 계층 — createTossEvents 산출물이 아니면 null(발행 지점 no-op, 비용 0 수렴)
+  const emit: InternalTossEmit<WebhookEmitMap> | null = getInternalEmit<WebhookEmitMap>(
+    config.events,
+  );
+
+  const verifyImpl: WebhookVerifier['verify'] = async (rawBody, headers, context) => {
     // (1) 헤더 추출 — 공통 헤더(문서)가 없으면 토스 발신으로 볼 수 없다
     const transmissionId = headerValue(headers, HEADER_TRANSMISSION_ID);
     const transmissionTime = headerValue(headers, HEADER_TRANSMISSION_TIME);
@@ -325,9 +382,62 @@ export function createWebhookVerifier(config: WebhookVerifierConfig): WebhookVer
     return ok({ duplicate: false, webhook });
   };
 
+  // §3.3 이벤트 래퍼 — verdict(Result) 확정 **후** fire-and-forget 발화. 수동 verify와
+  // 어댑터 경유 양쪽이 이 단일 지점을 통과한다(중복 발화 없음).
+  const verify: WebhookVerifier['verify'] = async (rawBody, headers, context) => {
+    const r = await verifyImpl(rawBody, headers, context);
+    if (emit !== null) {
+      if (!r.ok) {
+        emit.emit('webhook.rejected', { rejection: r.error });
+      } else if (r.value.duplicate) {
+        emit.emit('webhook.duplicate', { transmissionId: r.value.transmissionId });
+      } else {
+        // 요약 3필드만 — AcceptedWebhook 통짜 전달 금지(secret 제거·타입 순환 회피, §3.3)
+        emit.emit('webhook.accepted', {
+          trust: r.value.webhook.trust,
+          eventType: r.value.webhook.event.eventType,
+          transmissionId: r.value.webhook.meta.transmissionId,
+        });
+      }
+    }
+    return r;
+  };
+
+  // §3.5 prefetch — 어댑터 전용(수동 verify 경로 불변). 결제 참조 보유 이벤트에만 첨부
+  // (BILLING_DELETED 등에는 미첨부 — 거짓 제공 금지). trust 승격 없음.
+  const autoRefetch = config.autoRefetch;
+  const prefetch: WebhookPrefetchFn | undefined =
+    autoRefetch === undefined
+      ? undefined
+      : async (webhook) => {
+          if (webhook.trust !== 'unverified') return webhook;
+          const eventType = webhook.event.eventType;
+          if (
+            eventType !== 'PAYMENT_STATUS_CHANGED' &&
+            eventType !== 'CANCEL_STATUS_CHANGED' &&
+            eventType !== 'ORDER_PAYMENT_STATUS_CHANGED'
+          ) {
+            return webhook;
+          }
+          // 분당 100건 쿼터 방어 필터 — 미해당 타입은 prefetched 미첨부(undefined 유지)
+          if (autoRefetch.eventTypes !== undefined && !autoRefetch.eventTypes.includes(eventType)) {
+            return webhook;
+          }
+          let prefetched: Result<Payment, LookupError | NoPaymentReference>;
+          try {
+            prefetched = await webhook.refetch(autoRefetch.client);
+          } catch (cause) {
+            // PaymentLookup 계약은 Result 반환이지만 사용자 구조적 구현의 throw 방어 —
+            // Err로 감싸 핸들러 도달을 보장한다(이벤트를 버리지 않는다, §3.5)
+            prefetched = err({ source: 'network', code: 'NETWORK_ERROR', retryable: true, cause });
+          }
+          // 스프레드는 own enumerable만 복사 — refetch는 객체 리터럴 메서드라 보존된다
+          return { ...webhook, prefetched };
+        };
+
   return {
     verify,
-    fetchHandler: (handlers, options) => createFetchHandler(verify, handlers, options),
-    nodeHandler: (handlers) => createNodeHandler(verify, handlers),
+    fetchHandler: (handlers, options) => createFetchHandler(verify, handlers, options, prefetch),
+    nodeHandler: (handlers) => createNodeHandler(verify, handlers, prefetch),
   };
 }

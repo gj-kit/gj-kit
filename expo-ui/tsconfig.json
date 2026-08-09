@@ -1,0 +1,9 @@
+{
+  "extends": "../tsconfig.base.json",
+  // DOM lib 전역 추가 금지 — 웹(RNW) 대응은 Platform.OS 분기 + 캐스팅으로만 (설계 문서 §2).
+  // 테스트는 tsconfig.tests.json(DOM lib 포함)이 따로 검사한다 — src의 무DOM 규율을 지키기 위한 분리.
+  "compilerOptions": {
+    "jsx": "react-jsx"
+  },
+  "include": ["src"]
+}

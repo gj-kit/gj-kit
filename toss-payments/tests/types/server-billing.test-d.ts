@@ -8,8 +8,10 @@ import type {
   BillingOrder,
   BillingProfile,
   DirectCardIssueInput,
+  IdempotencyKey,
   PendingBillingAuth,
   SealedBillingKeyRecord,
+  TossEvents,
   TossServerClient,
 } from '../../src/server';
 
@@ -72,5 +74,52 @@ describe('§3.3 billing — 오용 = 컴파일 에러', () => {
 
     // @ts-expect-error 봉인 record를 store.save에 직접 넣을 수 없다 — billingKey 부재
     void forge<BillingKeyStore>().save(sealed);
+  });
+});
+
+describe('§3.6 requireApproveIdempotencyKey — 켜면 approve options 자체가 필수', () => {
+  const profile = forge<BillingProfile>();
+  const order = forge<BillingOrder>();
+  const capFlow = forge<BillingFlow<'test', { requireApproveIdempotencyKey: true }>>();
+
+  it('멱등키 없는 approve = 컴파일 에러 (키 없는 approve 중복 실행 = 이중 과금)', () => {
+    // @ts-expect-error options 파라미터 자체가 필수 — 멱등키 누락 원천 차단
+    void capFlow.approve(profile, order);
+
+    // @ts-expect-error options에 idempotencyKey가 없다 — 필수 필드
+    void capFlow.approve(profile, order, {});
+
+    // @ts-expect-error signal만으로는 불충분 — idempotencyKey 필수
+    void capFlow.approve(profile, order, { signal: forge<AbortSignal>() });
+
+    // 정상 경로 — 멱등키 부착
+    void capFlow.approve(profile, order, { idempotencyKey: forge<IdempotencyKey>() });
+  });
+
+  it('capability 미선언이면 기존 BillingFlowBase 그대로 — options 옵셔널(파괴 없음)', () => {
+    const basicFlow = forge<BillingFlow<'test'>>();
+    void basicFlow.approve(profile, order);
+    void basicFlow.approve(profile, order, { idempotencyKey: forge<IdempotencyKey>() });
+  });
+
+  it('capability 조합 — directCardIssue와 병행 선언 시 양쪽 협착이 모두 적용된다', () => {
+    const bothFlow = forge<
+      BillingFlow<'test', { directCardIssue: true; requireApproveIdempotencyKey: true }>
+    >();
+    void bothFlow.issueWithCard(forge<DirectCardIssueInput>());
+    // @ts-expect-error 병행 선언에서도 approve 멱등키는 필수
+    void bothFlow.approve(profile, order);
+    void bothFlow.approve(profile, order, { idempotencyKey: forge<IdempotencyKey>() });
+  });
+
+  it('createBillingFlow에 capability + events 옵션 동시 수용', () => {
+    const client = forge<TossServerClient<'test', 'api'>>();
+    const store = forge<BillingKeyStore>();
+    const flow = createBillingFlow(client, store, {
+      capabilities: { requireApproveIdempotencyKey: true },
+      events: forge<TossEvents>(),
+    });
+    // @ts-expect-error 생성된 플로우에도 멱등키 필수화가 각인된다
+    void flow.approve(profile, order);
   });
 });

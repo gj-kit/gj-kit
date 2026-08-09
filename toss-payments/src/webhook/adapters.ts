@@ -21,6 +21,13 @@ export type WebhookVerifyFn = (
   headers: IncomingHeaders,
 ) => Promise<Result<WebhookVerdict, WebhookRejection>>;
 
+/**
+ * §3.5 autoRefetch 첨부 훅(내부) — verifier가 조립해 어댑터에 넘긴다.
+ * 실행 시점 계약(협상 불가): 200 ack 확정 **후**·핸들러 디스패치 **직전**·dedupe 통과분만.
+ * 반환 웹훅은 prefetched만 첨부될 뿐 trust 등급·event는 불변이다.
+ */
+export type WebhookPrefetchFn = (webhook: AcceptedWebhook) => Promise<AcceptedWebhook>;
+
 export interface FetchHandlerOptions {
   /** 서버리스(Vercel/Lambda 등)의 waitUntil — 200 응답 후 핸들러 실행을 회수해 준다. */
   readonly waitUntil?: (promise: Promise<unknown>) => void;
@@ -107,6 +114,7 @@ export function createFetchHandler(
   verify: WebhookVerifyFn,
   handlers: WebhookHandlers,
   options?: FetchHandlerOptions,
+  prefetch?: WebhookPrefetchFn,
 ): (request: Request) => Promise<Response> {
   let warned = false;
   return async (request) => {
@@ -115,7 +123,13 @@ export function createFetchHandler(
     if (!result.ok) return new Response(null, { status: 400 });
     if (result.value.duplicate) return new Response(null, { status: 200 });
 
-    const job = dispatchWebhook(handlers, result.value.webhook).catch(logHandlerFailure);
+    // 200 ack은 이 시점에 이미 확정 — prefetch(§3.5)는 응답 판정에 관여하지 못하고
+    // 핸들러 디스패치 직전에만 수행된다(dedupe 통과분 한정 — duplicate는 위에서 반환).
+    const webhook = result.value.webhook;
+    const job = (async () => {
+      const prepared = prefetch === undefined ? webhook : await prefetch(webhook);
+      await dispatchWebhook(handlers, prepared);
+    })().catch(logHandlerFailure);
     if (options?.waitUntil !== undefined) {
       options.waitUntil(job);
       return new Response(null, { status: 200 });
@@ -156,6 +170,7 @@ function concatChunks(chunks: readonly Uint8Array[]): Uint8Array {
 export function createNodeHandler(
   verify: WebhookVerifyFn,
   handlers: WebhookHandlers,
+  prefetch?: WebhookPrefetchFn,
 ): (req: NodeIncomingMessageLike, res: NodeServerResponseLike) => Promise<void> {
   const encoder = new TextEncoder();
   return async (req, res) => {
@@ -197,7 +212,10 @@ export function createNodeHandler(
     res.end();
     if (result.value.duplicate) return;
     try {
-      await dispatchWebhook(handlers, result.value.webhook);
+      // §3.5 — 200 ack 이후·디스패치 직전에만 prefetch(dedupe 통과분 한정)
+      const webhook = result.value.webhook;
+      const prepared = prefetch === undefined ? webhook : await prefetch(webhook);
+      await dispatchWebhook(handlers, prepared);
     } catch (cause) {
       logHandlerFailure(cause);
     }

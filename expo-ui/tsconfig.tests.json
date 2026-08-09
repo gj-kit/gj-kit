@@ -1,0 +1,10 @@
+{
+  "extends": "../tsconfig.base.json",
+  // 테스트 전용 — @testing-library/react(jsdom)가 DOM 타입을 요구한다.
+  // src는 tsconfig.json(무DOM)이 검사하므로 라이브러리 코드의 DOM 유입은 여전히 차단된다.
+  "compilerOptions": {
+    "jsx": "react-jsx",
+    "lib": ["ES2022", "DOM"]
+  },
+  "include": ["src", "tests"]
+}

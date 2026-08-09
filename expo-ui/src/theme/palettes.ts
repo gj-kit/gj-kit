@@ -1,0 +1,127 @@
+/**
+ * 내장 팔레트 데이터 — 설계 문서 §3.6.
+ *
+ * 라이트는 전신 tokens.json 값 계승(+shadow 신설). 다크는 설계 문서 제안값.
+ * 색 이외 토큰(spacing/radius/typography/elevation/metrics/breakpoints)은
+ * 스킴 공유가 기본이다 — 전신과 동일한 모델.
+ */
+import type {
+  ThemeColors,
+  ThemeSpacing,
+  ThemeRadius,
+  ThemeTypography,
+  ThemeElevation,
+  ThemeMetrics,
+  ThemeBreakpoints,
+} from './tokens';
+
+export const lightColors: ThemeColors = {
+  background: '#FFFFFF',
+  surface: '#FFFFFF',
+  surfaceSubtle: '#F1F5F9',
+  text: '#1D2733',
+  textMuted: '#777777',
+  textSubtle: '#728094',
+  tabActive: '#2C3E50',
+  tabInactive: '#94A3B8',
+  line: '#E7E7E7',
+  primary: '#4A90E2',
+  primaryStrong: '#227AED',
+  primarySoft: '#EAF4FF',
+  onPrimary: '#FFFFFF',
+  danger: '#FF5C8A',
+  dangerStrong: '#FF4242',
+  dangerSoft: '#FFF0F3',
+  onDanger: '#FFFFFF',
+  warning: '#FFE45C',
+  warningStrong: '#D97706',
+  onWarning: '#1D2733',
+  success: '#4F96F4',
+  info: '#1D2733',
+  overlay: 'rgba(15, 23, 42, 0.40)',
+  shadow: '#0F172A',
+};
+
+export const darkColors: ThemeColors = {
+  background: '#111418',
+  surface: '#1A1F26',
+  surfaceSubtle: '#232A33',
+  text: '#E8ECF1',
+  textMuted: '#9AA4B0',
+  textSubtle: '#7C8794',
+  tabActive: '#E8ECF1',
+  tabInactive: '#5C6774',
+  line: '#2A323C',
+  primary: '#5C9EEA',
+  primaryStrong: '#3D8BF0',
+  primarySoft: '#16283D',
+  onPrimary: '#FFFFFF',
+  danger: '#FF6E96',
+  dangerStrong: '#FF5252',
+  dangerSoft: '#3A1E27',
+  onDanger: '#FFFFFF',
+  warning: '#D9B83C',
+  warningStrong: '#F59E0B',
+  onWarning: '#111418',
+  success: '#5C9EEA',
+  info: '#E8ECF1',
+  overlay: 'rgba(0, 0, 0, 0.55)',
+  shadow: '#000000',
+};
+
+/** 4px 그리드 — 전신 계승. */
+export const baseSpacing: ThemeSpacing = {
+  none: 0,
+  xs: 4,
+  sm: 8,
+  md: 12,
+  lg: 16,
+  xl: 20,
+  xxl: 24,
+  xxxl: 32,
+};
+
+export const baseRadius: ThemeRadius = {
+  none: 0,
+  sm: 8,
+  md: 10,
+  lg: 16,
+  pill: 9999,
+};
+
+/**
+ * fontSize는 전신 계승. lineHeight/weight는 전신 컴포넌트의 하드코딩 실측값을
+ * 롤로 승격한 것 — 예: buttonLabel fontWeight '700', emptyTitle lineHeight 22.
+ */
+export const baseTypography: ThemeTypography = {
+  caption: { fontSize: 12, lineHeight: 16, fontWeight: '400' },
+  label: { fontSize: 13, lineHeight: 18, fontWeight: '700' },
+  button: { fontSize: 14, lineHeight: 20, fontWeight: '700' },
+  body: { fontSize: 15, lineHeight: 22, fontWeight: '400' },
+  title: { fontSize: 18, lineHeight: 24, fontWeight: '800' },
+  heading: { fontSize: 22, lineHeight: 30, fontWeight: '800' },
+};
+
+/**
+ * Android elevation은 전신 tokens.json 계승. iOS shadow 3속성은 전신 컴포넌트의
+ * 하드코딩 실측값(Surface 0.07/8/2, StickyActionBar·Toast 0.12/16/4)을 레벨로 승격.
+ */
+export const baseElevation: ThemeElevation = {
+  none: { elevation: 0, shadowOpacity: 0, shadowRadius: 0, shadowOffsetY: 0 },
+  sm: { elevation: 1, shadowOpacity: 0.07, shadowRadius: 4, shadowOffsetY: 1 },
+  md: { elevation: 3, shadowOpacity: 0.12, shadowRadius: 16, shadowOffsetY: 4 },
+  lg: { elevation: 8, shadowOpacity: 0.16, shadowRadius: 24, shadowOffsetY: 8 },
+};
+
+/** 전신의 buttonSizes minHeight(36/44/52)·input 48·iconSize 18·폰트 캡 1.25 승격. */
+export const baseMetrics: ThemeMetrics = {
+  control: { sm: 36, md: 44, lg: 52 },
+  input: 48,
+  icon: { sm: 16, md: 18, lg: 20 },
+  maxFontScale: 1.25,
+};
+
+export const baseBreakpoints: ThemeBreakpoints = {
+  tablet: 768,
+  desktop: 900,
+};

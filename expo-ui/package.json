@@ -1,6 +1,6 @@
 {
   "name": "@gj-kit/expo-ui",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "description": "Expo/React Native UI 킷 — 토큰이 모든 스타일을 관통하는 테마 시스템(라이트/다크), strings·icons 주입, 키보드·safe-area 유틸. 잘못 쓰면 컴파일 에러가 나는 API",
   "license": "MIT",
   "type": "module",

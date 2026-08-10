@@ -1,0 +1,11 @@
+{
+  // 빌드·dts 정본. tsup이 읽는 유일한 tsconfig다 (설계 문서 §2.4).
+  "extends": "../tsconfig.base.json",
+  // DOM은 여기서만 켠다 — src/web/** 구현이 컴파일되게 하기 위해서이지,
+  // 코어가 DOM을 써도 된다는 뜻이 아니다. 코어의 무DOM 규율은 lib이 아니라
+  // tsconfig.core.json(소스 가드)과 tests/guards의 dist 가드가 강제한다.
+  "compilerOptions": {
+    "lib": ["ES2022", "DOM"]
+  },
+  "include": ["src"]
+}

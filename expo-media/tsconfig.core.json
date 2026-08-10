@@ -1,0 +1,13 @@
+{
+  // 소스 가드 (설계 문서 §2.4 무DOM 가드 1). DOM이 src/web 밖으로 새는 즉시 실패한다.
+  // 실측 근거: src/core.ts에 `document.title`이나 `Document` 파라미터를 주입하면
+  // TS2584/TS2304로 잡힌다. 같은 유출을 tsup은 전혀 잡지 못하고
+  // dist/core.d.ts에 `declare function leakSig(d: Document): number;`를 그대로 방출한다.
+  "extends": "../tsconfig.base.json",
+  "compilerOptions": {
+    "lib": ["ES2022"],
+    "noEmit": true
+  },
+  "include": ["src"],
+  "exclude": ["src/web", "src/web.ts", "src/save/web.ts", "src/save.web.ts"]
+}

@@ -1,0 +1,183 @@
+{
+  "name": "@gj-kit/expo-media",
+  "version": "0.1.0",
+  "description": "Expo/React Native 사진·동영상 파이프라인 — 프리사인 업로드, EXIF, 기기 라이브러리(iCloud·PhotoKit 하드닝), 스트리밍 SHA-256, 동영상 포스터, 기기 저장. 어댑터 seam으로 expo 없이도 동작하며 런타임 의존성 0",
+  "license": "MIT",
+  "type": "module",
+  "sideEffects": false,
+  "engines": {
+    "node": ">=20"
+  },
+  "files": [
+    "dist"
+  ],
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      },
+      "require": {
+        "types": "./dist/index.d.cts",
+        "default": "./dist/index.cjs"
+      }
+    },
+    "./core": {
+      "import": {
+        "types": "./dist/core.d.ts",
+        "default": "./dist/core.js"
+      },
+      "require": {
+        "types": "./dist/core.d.cts",
+        "default": "./dist/core.cjs"
+      }
+    },
+    "./picker": {
+      "import": {
+        "types": "./dist/picker.d.ts",
+        "default": "./dist/picker.js"
+      },
+      "require": {
+        "types": "./dist/picker.d.cts",
+        "default": "./dist/picker.cjs"
+      }
+    },
+    "./device": {
+      "node": {
+        "import": {
+          "types": "./dist/device.d.ts",
+          "default": "./dist/device.web.js"
+        },
+        "require": {
+          "types": "./dist/device.d.cts",
+          "default": "./dist/device.web.cjs"
+        }
+      },
+      "browser": {
+        "import": {
+          "types": "./dist/device.d.ts",
+          "default": "./dist/device.web.js"
+        },
+        "require": {
+          "types": "./dist/device.d.cts",
+          "default": "./dist/device.web.cjs"
+        }
+      },
+      "import": {
+        "types": "./dist/device.d.ts",
+        "default": "./dist/device.js"
+      },
+      "require": {
+        "types": "./dist/device.d.cts",
+        "default": "./dist/device.cjs"
+      }
+    },
+    "./save": {
+      "node": {
+        "import": {
+          "types": "./dist/save.d.ts",
+          "default": "./dist/save.web.js"
+        },
+        "require": {
+          "types": "./dist/save.d.cts",
+          "default": "./dist/save.web.cjs"
+        }
+      },
+      "browser": {
+        "import": {
+          "types": "./dist/save.d.ts",
+          "default": "./dist/save.web.js"
+        },
+        "require": {
+          "types": "./dist/save.d.cts",
+          "default": "./dist/save.web.cjs"
+        }
+      },
+      "import": {
+        "types": "./dist/save.d.ts",
+        "default": "./dist/save.js"
+      },
+      "require": {
+        "types": "./dist/save.d.cts",
+        "default": "./dist/save.cjs"
+      }
+    },
+    "./video": {
+      "import": {
+        "types": "./dist/video.d.ts",
+        "default": "./dist/video.js"
+      },
+      "require": {
+        "types": "./dist/video.d.cts",
+        "default": "./dist/video.cjs"
+      }
+    },
+    "./web": {
+      "import": {
+        "types": "./dist/web.d.ts",
+        "default": "./dist/web.js"
+      },
+      "require": {
+        "types": "./dist/web.d.cts",
+        "default": "./dist/web.cjs"
+      }
+    },
+    "./testing": {
+      "import": {
+        "types": "./dist/testing.d.ts",
+        "default": "./dist/testing.js"
+      },
+      "require": {
+        "types": "./dist/testing.d.cts",
+        "default": "./dist/testing.cjs"
+      }
+    },
+    "./package.json": "./package.json"
+  },
+  "scripts": {
+    "build": "tsup && node scripts/stamp-dom-reference.mjs",
+    "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.core.json && tsc --noEmit -p tsconfig.tests.json",
+    "test": "vitest run --project unit --project web",
+    "test:types": "vitest run --project types",
+    "check:readme": "pnpm run build && node scripts/check-readme.mjs",
+    "test:all": "pnpm run test && pnpm run test:types"
+  },
+  "peerDependencies": {
+    "expo-file-system": ">=56.0.0",
+    "expo-image-picker": ">=16.0.0",
+    "expo-media-library": ">=56.0.5",
+    "expo-video-thumbnails": ">=8.0.0",
+    "react-native": ">=0.71.0"
+  },
+  "peerDependenciesMeta": {
+    "expo-file-system": {
+      "optional": true
+    },
+    "expo-image-picker": {
+      "optional": true
+    },
+    "expo-media-library": {
+      "optional": true
+    },
+    "expo-video-thumbnails": {
+      "optional": true
+    },
+    "react-native": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "expo-file-system": "~56.0.8",
+    "expo-image-picker": "~56.0.21",
+    "expo-media-library": "~56.0.9",
+    "expo-video-thumbnails": "~56.0.3",
+    "jsdom": "^25.0.1",
+    "react-native": "^0.81.0",
+    "tsup": "^8",
+    "typescript": "^5",
+    "vitest": "^3"
+  }
+}

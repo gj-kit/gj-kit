@@ -1,0 +1,24 @@
+{
+  // 무DOM **dist** 가드 픽스처 (설계 문서 §2.4 · §10.3 전문 그대로).
+  //
+  // ⚠ `skipLibCheck: false`가 이 파일의 존재 이유다. gj-kit·memorylog2 양쪽의 기본값인
+  //   `true`에서는 `.d.ts` 내부의 TS2304(`Cannot find name 'Document'`)가 **억제되고
+  //   파라미터가 any로 붕괴**해, `createBrowserSaveTarget({ document: 'nope' })`가 조용히
+  //   통과한다(§2.4 실측 표). 그 상태에서는 가드가 통과하면서 아무것도 지키지 않는다.
+  //
+  // ⚠ `../../tsconfig.base.json`을 extends하지 않는다 — 이 픽스처는 **소비자 tsconfig의 재현**이지
+  //   우리 빌드 설정의 파생이 아니다. 우리 설정이 바뀌어도 소비자 조건은 그대로여야 한다.
+  "compilerOptions": {
+    "strict": true,
+    "noEmit": true,
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "lib": ["ES2022"],
+    "types": [],
+    "skipLibCheck": false,
+    "baseUrl": ".",
+    "paths": { "@gj-kit/expo-media/*": ["../../dist/*"] }
+  },
+  "include": ["nodom-entries.ts"]
+}

@@ -1,16 +1,14 @@
 import { useState } from 'react';
 import type { ReactElement, ReactNode } from 'react';
-import { useRouter } from 'expo-router';
-import Head from 'expo-router/head';
+import { Link } from 'expo-router';
+import type { Href } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import {
-  Linking,
   Platform,
   Pressable,
   ScrollView,
   StyleSheet,
   Text as RNText,
-  useWindowDimensions,
   View,
 } from 'react-native';
 import type { ColorScheme, IconRenderProps, Theme } from '@gj-kit/expo-ui';
@@ -59,6 +57,14 @@ import {
   siteIcons,
   siteThemes,
 } from '../src/site-theme';
+import { publishedPackageVersion } from '../src/seo-content';
+import { useHydratedWindowWidth } from '../src/responsive';
+import {
+  SeoHead,
+  softwareSourceCodeSchema,
+  webPageSchema,
+  websiteSchema,
+} from '../src/seo';
 
 type DemoCategory =
   | 'actions'
@@ -116,14 +122,20 @@ export default function Home(): ReactElement {
 
   return (
     <>
-      <Head>
-        <title>@gj-kit/expo-ui — 타입으로 지키는 Expo UI Kit</title>
-        <meta
-          name="description"
-          content="타입 안전한 API, 토큰 기반 라이트·다크 테마, 31개의 Expo·React Native 컴포넌트를 만나보세요."
-        />
-        <link rel="canonical" href="https://gj-kit-expo-ui.expo.app/" />
-      </Head>
+      <SeoHead
+        title="Expo·React Native UI 라이브러리 | @gj-kit/expo-ui"
+        description="TypeScript로 잘못된 UI 상태를 줄이는 Expo·React Native 컴포넌트 라이브러리입니다. 토큰 기반 light·dark 테마, 접근성 계약, React Native Web과 safe-area·키보드 유틸을 제공합니다."
+        path="/"
+        schemas={[
+          websiteSchema(),
+          softwareSourceCodeSchema(publishedPackageVersion),
+          webPageSchema({
+            path: '/',
+            title: 'Expo·React Native UI 라이브러리 | @gj-kit/expo-ui',
+            description: 'Expo와 React Native를 위한 타입 안전 UI 컴포넌트 라이브러리',
+          }),
+        ]}
+      />
       <UiProvider
         theme={siteThemes}
         colorScheme={colorScheme}
@@ -148,8 +160,7 @@ function Landing({
   onColorSchemeChange: (scheme: ColorScheme) => void;
 }): ReactElement {
   const theme = useTheme();
-  const router = useRouter();
-  const { width } = useWindowDimensions();
+  const width = useHydratedWindowWidth();
   const desktop = width >= 960;
   const compact = width < 680;
   const [heroTab, setHeroTab] = useState<'today' | 'week'>('today');
@@ -180,7 +191,6 @@ function Landing({
         compact={compact}
         colorScheme={colorScheme}
         onToggleTheme={toggleTheme}
-        onOpenDocs={() => router.push('/docs')}
       />
 
       <ScrollView
@@ -198,7 +208,6 @@ function Landing({
             onCopyInstall={() => copy(INSTALL_COMMAND, 'install')}
             onHeroSelectedChange={setHeroSelected}
             onHeroTabChange={setHeroTab}
-            onOpenDocs={() => router.push('/docs')}
           />
         </View>
 
@@ -245,7 +254,6 @@ function Landing({
           compact={compact}
           copied={copied === 'install-bottom'}
           onCopy={() => copy(INSTALL_COMMAND, 'install-bottom')}
-          onOpenDocs={() => router.push('/docs')}
         />
 
         <SiteFooter />
@@ -267,12 +275,10 @@ function SiteHeader({
   compact,
   colorScheme,
   onToggleTheme,
-  onOpenDocs,
 }: {
   compact: boolean;
   colorScheme: ColorScheme;
   onToggleTheme: () => void;
-  onOpenDocs: () => void;
 }): ReactElement {
   const theme = useTheme();
   return (
@@ -287,21 +293,22 @@ function SiteHeader({
     >
       <ContentFrame maxWidth={1180} center padding={compact ? 16 : 20} style={styles.headerFrame}>
         <View style={styles.headerRow}>
-          <Pressable
-            accessibilityRole="link"
-            accessibilityLabel="@gj-kit/expo-ui 홈"
-            onPress={() => scrollToSection('top')}
-            style={({ pressed }) => [styles.brand, pressed ? styles.pressed : null]}
-          >
-            <BrandMark size={34} />
-            <RNText style={[styles.brandName, { color: theme.colors.text }]}>@gj-kit/expo-ui</RNText>
-          </Pressable>
+          <Link href="/" asChild>
+            <Pressable
+              accessibilityRole="link"
+              accessibilityLabel="@gj-kit/expo-ui 홈"
+              style={({ pressed }) => [styles.brand, pressed ? styles.pressed : null]}
+            >
+              <BrandMark size={34} />
+              <RNText style={[styles.brandName, { color: theme.colors.text }]}>@gj-kit/expo-ui</RNText>
+            </Pressable>
+          </Link>
 
           {!compact ? (
             <View style={styles.navLinks}>
-              <NavLink label="Why gj-kit" onPress={() => scrollToSection('why')} />
-              <NavLink label="Components" onPress={() => scrollToSection('components')} />
-              <NavLink label="Theme" onPress={() => scrollToSection('theme')} />
+              <NavLink label="Why gj-kit" href="#why" />
+              <NavLink label="Components" href="#components" />
+              <NavLink label="Theme" href="#theme" />
             </View>
           ) : null}
 
@@ -320,7 +327,7 @@ function SiteHeader({
                 {colorScheme === 'light' ? '☾' : '☀'}
               </RNText>
             </Pressable>
-            <SiteButton compact={compact} label="Docs" onPress={onOpenDocs} />
+            <SiteButton compact={compact} label="Docs" href="/docs" />
           </View>
         </View>
       </ContentFrame>
@@ -328,16 +335,17 @@ function SiteHeader({
   );
 }
 
-function NavLink({ label, onPress }: { label: string; onPress: () => void }): ReactElement {
+function NavLink({ label, href }: { label: string; href: Href }): ReactElement {
   const theme = useTheme();
   return (
-    <Pressable
-      accessibilityRole="link"
-      onPress={onPress}
-      style={({ pressed }) => [styles.navLink, pressed ? styles.pressed : null]}
-    >
-      <RNText style={[styles.navLabel, { color: theme.colors.textMuted }]}>{label}</RNText>
-    </Pressable>
+    <Link href={href} asChild>
+      <Pressable
+        accessibilityRole="link"
+        style={({ pressed }) => [styles.navLink, pressed ? styles.pressed : null]}
+      >
+        <RNText style={[styles.navLabel, { color: theme.colors.textMuted }]}>{label}</RNText>
+      </Pressable>
+    </Link>
   );
 }
 
@@ -351,7 +359,6 @@ function Hero({
   onCopyInstall,
   onHeroSelectedChange,
   onHeroTabChange,
-  onOpenDocs,
 }: {
   compact: boolean;
   desktop: boolean;
@@ -362,7 +369,6 @@ function Hero({
   onCopyInstall: () => void;
   onHeroSelectedChange: (value: boolean) => void;
   onHeroTabChange: (value: 'today' | 'week') => void;
-  onOpenDocs: () => void;
 }): ReactElement {
   const theme = useTheme();
   return (
@@ -381,7 +387,7 @@ function Hero({
               ]}
             >
               <View style={[styles.releaseDot, { backgroundColor: '#9FF5D1' }]} />
-              <RNText style={[styles.releaseText, { color: theme.colors.textMuted }]}>v0.1.0 · MIT · npm 공개</RNText>
+              <RNText style={[styles.releaseText, { color: theme.colors.textMuted }]}>npm v{publishedPackageVersion} · v0.2 source preview</RNText>
               <RNText style={[styles.releaseArrow, { color: theme.colors.primary }]}>↗</RNText>
             </View>
 
@@ -394,7 +400,7 @@ function Hero({
                 { color: theme.colors.text },
               ]}
             >
-              앱 UI,{compact ? '\n' : ' '}<RNText style={{ color: theme.colors.primary }}>실수할 수 없게.</RNText>
+              Expo·React Native UI,{compact ? '\n' : ' '}<RNText style={{ color: theme.colors.primary }}>실수할 수 없게.</RNText>
             </RNText>
             <RNText style={[styles.heroDescription, { color: theme.colors.textMuted }]}> 
               토큰 기반 테마와 접근성 계약을 TypeScript API에 담았습니다. Expo, bare React Native,
@@ -404,11 +410,11 @@ function Hero({
             <InstallBar copied={copied} onCopy={onCopyInstall} />
 
             <View style={styles.heroActions}>
-              <SiteButton label="빠르게 시작하기" onPress={onOpenDocs} showArrow />
+              <SiteButton label="빠르게 시작하기" href="/docs/getting-started" showArrow />
               <SiteButton
                 label="컴포넌트 보기"
                 variant="secondary"
-                onPress={() => scrollToSection('components')}
+                href="/docs/components"
               />
             </View>
 
@@ -542,7 +548,7 @@ function HeroPreview({
 function ProofStrip(): ReactElement {
   const theme = useTheme();
   const proofs = [
-    { value: '31', label: 'Components' },
+    { value: '31', label: 'Source components' },
     { value: '31', label: 'Color roles' },
     { value: '0', label: 'Direct runtime deps' },
     { value: '209', label: 'Tests passing' },
@@ -699,7 +705,7 @@ function ComponentsSection({
             <SiteButton
               label="npm에서 보기"
               variant="secondary"
-              onPress={() => void Linking.openURL(NPM_URL)}
+              href={NPM_URL}
               showArrow
             />
           }
@@ -1268,12 +1274,10 @@ function FinalCta({
   compact,
   copied,
   onCopy,
-  onOpenDocs,
 }: {
   compact: boolean;
   copied: boolean;
   onCopy: () => void;
-  onOpenDocs: () => void;
 }): ReactElement {
   return (
     <ContentFrame maxWidth={1180} center padding={compact ? 20 : 28} style={styles.finalFrame}>
@@ -1290,10 +1294,12 @@ function FinalCta({
             <RNText selectable style={styles.finalInstallText}>{INSTALL_COMMAND}</RNText>
             <RNText style={styles.finalCopyLabel}>{copied ? 'COPIED' : 'COPY'}</RNText>
           </Pressable>
-          <Pressable onPress={onOpenDocs} style={({ pressed }) => [styles.finalDocs, pressed ? styles.pressed : null]}>
-            <RNText style={styles.finalDocsText}>문서에서 시작하기</RNText>
-            <RNText style={styles.finalDocsArrow}>→</RNText>
-          </Pressable>
+          <Link href="/docs/getting-started" asChild>
+            <Pressable accessibilityRole="link" style={({ pressed }) => [styles.finalDocs, pressed ? styles.pressed : null]}>
+              <RNText style={styles.finalDocsText}>문서에서 시작하기</RNText>
+              <RNText style={styles.finalDocsArrow}>→</RNText>
+            </Pressable>
+          </Link>
         </View>
       </View>
     </ContentFrame>
@@ -1313,11 +1319,23 @@ function SiteFooter(): ReactElement {
           </View>
         </View>
         <View style={styles.footerLinks}>
-          <Pressable onPress={() => scrollToSection('top')}><RNText style={[styles.footerLink, { color: theme.colors.textMuted }]}>Top</RNText></Pressable>
-          <Pressable onPress={() => scrollToSection('components')}><RNText style={[styles.footerLink, { color: theme.colors.textMuted }]}>Components</RNText></Pressable>
-          <Pressable onPress={() => void Linking.openURL(NPM_URL)}><RNText style={[styles.footerLink, { color: theme.colors.textMuted }]}>npm ↗</RNText></Pressable>
+          <Link href="/" asChild>
+            <Pressable accessibilityRole="link"><RNText style={[styles.footerLink, { color: theme.colors.textMuted }]}>Home</RNText></Pressable>
+          </Link>
+          <Link href="/docs" asChild>
+            <Pressable accessibilityRole="link"><RNText style={[styles.footerLink, { color: theme.colors.textMuted }]}>Docs</RNText></Pressable>
+          </Link>
+          <Link href="/docs/components" asChild>
+            <Pressable accessibilityRole="link"><RNText style={[styles.footerLink, { color: theme.colors.textMuted }]}>Components</RNText></Pressable>
+          </Link>
+          <Link href="/docs/getting-started" asChild>
+            <Pressable accessibilityRole="link"><RNText style={[styles.footerLink, { color: theme.colors.textMuted }]}>Getting started</RNText></Pressable>
+          </Link>
+          <Link href={NPM_URL} target="_blank" asChild>
+            <Pressable accessibilityRole="link"><RNText style={[styles.footerLink, { color: theme.colors.textMuted }]}>npm ↗</RNText></Pressable>
+          </Link>
         </View>
-        <RNText style={[styles.footerLicense, { color: theme.colors.textSubtle }]}>MIT · v0.1.0</RNText>
+        <RNText style={[styles.footerLicense, { color: theme.colors.textSubtle }]}>MIT · npm v{publishedPackageVersion}</RNText>
       </View>
     </ContentFrame>
   );
@@ -1347,22 +1365,24 @@ function InstallBar({ copied, onCopy }: { copied: boolean; onCopy: () => void })
 
 function SiteButton({
   compact = false,
+  href,
   label,
   onPress,
   showArrow = false,
   variant = 'primary',
 }: {
   compact?: boolean;
+  href?: Href;
   label: string;
-  onPress: () => void;
+  onPress?: () => void;
   showArrow?: boolean;
   variant?: 'primary' | 'secondary';
 }): ReactElement {
   const theme = useTheme();
   const primary = variant === 'primary';
-  return (
+  const button = (
     <Pressable
-      accessibilityRole="button"
+      accessibilityRole={href ? 'link' : 'button'}
       onPress={onPress}
       style={({ pressed }) => [
         styles.siteButton,
@@ -1388,10 +1408,19 @@ function SiteButton({
       ) : null}
     </Pressable>
   );
+  return href ? (
+    <Link
+      href={href}
+      target={typeof href === 'string' && href.startsWith('http') ? '_blank' : undefined}
+      asChild
+    >
+      {button}
+    </Link>
+  ) : button;
 }
 
 function SectionShell({ children }: { children: ReactNode }): ReactElement {
-  const { width } = useWindowDimensions();
+  const width = useHydratedWindowWidth();
   return (
     <ContentFrame
       maxWidth={1180}
@@ -1518,11 +1547,6 @@ function CopyButton({
       </RNText>
     </Pressable>
   );
-}
-
-function scrollToSection(id: string): void {
-  if (Platform.OS !== 'web' || typeof document === 'undefined') return;
-  document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
 const styles = StyleSheet.create({

@@ -6,7 +6,9 @@
   "scripts": {
     "dev": "expo start",
     "web": "expo start --web",
-    "export:web": "expo export --platform web",
+    "generate:seo": "node scripts/generate-seo.mjs",
+    "export:web": "pnpm run generate:seo && expo export --platform web",
+    "check:seo": "node scripts/check-seo.mjs",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

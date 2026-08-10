@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url><loc>https://gj-kit-expo-ui.expo.app/</loc></url>
+  <url><loc>https://gj-kit-expo-ui.expo.app/docs</loc></url>
+  <url><loc>https://gj-kit-expo-ui.expo.app/docs/components</loc></url>
+  <url><loc>https://gj-kit-expo-ui.expo.app/docs/getting-started</loc></url>
+  <url><loc>https://gj-kit-expo-ui.expo.app/docs/theming</loc></url>
+  <url><loc>https://gj-kit-expo-ui.expo.app/docs/accessibility</loc></url>
+  <url><loc>https://gj-kit-expo-ui.expo.app/docs/tailwind</loc></url>
+  <url><loc>https://gj-kit-expo-ui.expo.app/docs/insets-keyboard</loc></url>
+  <url><loc>https://gj-kit-expo-ui.expo.app/docs/type-safety</loc></url>
+  <url><loc>https://gj-kit-expo-ui.expo.app/docs/components/text</loc></url>
+  <url><loc>https://gj-kit-expo-ui.expo.app/docs/components/button</loc></url>
+  <url><loc>https://gj-kit-expo-ui.expo.app/docs/components/icon-button</loc></url>
+  <url><loc>https://gj-kit-expo-ui.expo.app/docs/components/text-field</loc></url>
+  <url><loc>https://gj-kit-expo-ui.expo.app/docs/components/search-field</loc></url>
+  <url><loc>https://gj-kit-expo-ui.expo.app/docs/components/tabs</loc></url>
+  <url><loc>https://gj-kit-expo-ui.expo.app/docs/components/selection-indicator</loc></url>
+  <url><loc>https://gj-kit-expo-ui.expo.app/docs/components/selectable-row</loc></url>
+  <url><loc>https://gj-kit-expo-ui.expo.app/docs/components/select-all-row</loc></url>
+  <url><loc>https://gj-kit-expo-ui.expo.app/docs/components/surface</loc></url>
+  <url><loc>https://gj-kit-expo-ui.expo.app/docs/components/content-frame</loc></url>
+  <url><loc>https://gj-kit-expo-ui.expo.app/docs/components/section</loc></url>
+  <url><loc>https://gj-kit-expo-ui.expo.app/docs/components/sticky-action-bar</loc></url>
+  <url><loc>https://gj-kit-expo-ui.expo.app/docs/components/skeleton</loc></url>
+  <url><loc>https://gj-kit-expo-ui.expo.app/docs/components/empty-state</loc></url>
+  <url><loc>https://gj-kit-expo-ui.expo.app/docs/components/error-state</loc></url>
+  <url><loc>https://gj-kit-expo-ui.expo.app/docs/components/toast</loc></url>
+  <url><loc>https://gj-kit-expo-ui.expo.app/docs/components/dialog</loc></url>
+  <url><loc>https://gj-kit-expo-ui.expo.app/docs/components/dialog-panel</loc></url>
+  <url><loc>https://gj-kit-expo-ui.expo.app/docs/components/confirm-action-row</loc></url>
+</urlset>

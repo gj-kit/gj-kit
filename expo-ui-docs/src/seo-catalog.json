@@ -1,0 +1,703 @@
+{
+  "publishedVersion": "0.1.0",
+  "components": [
+    {
+      "slug": "text",
+      "name": "Text",
+      "since": "0.1.0",
+      "category": "기초",
+      "headline": "테마의 타이포그래피 역할을 사용하는 Text",
+      "description": "Expo와 React Native 화면의 글꼴 크기, 행간, 굵기와 색상을 GJ Kit 테마 역할로 일관되게 표현하는 Text 컴포넌트입니다.",
+      "summary": "Text는 React Native Text를 감싸면서 body, caption, label, button, title, heading, tab 역할을 테마와 연결합니다. 색상도 닫힌 color role에서 선택하므로 브랜드 테마를 바꾸면 본문과 제목이 함께 갱신됩니다.",
+      "features": [
+        "role 하나로 fontSize, lineHeight, fontWeight, fontFamily를 함께 적용",
+        "color prop에 ThemeColors 키만 허용해 토큰 오타를 타입 검사에서 차단",
+        "style과 className을 마지막에 병합해 필요한 화면별 조정 지원"
+      ],
+      "accessibility": "React Native Text의 접근성 prop을 그대로 전달합니다. 컴포넌트 전용 role은 시각적 타이포그래피 역할이므로 의미론이 필요할 때 accessibilityRole을 별도로 지정할 수 있습니다.",
+      "snippet": "<Text role=\"title\" color=\"text\">오늘의 기록</Text>",
+      "related": ["Section", "Button", "EmptyState"]
+    },
+    {
+      "slug": "button",
+      "name": "Button",
+      "since": "0.1.0",
+      "category": "액션",
+      "headline": "로딩과 위험 작업까지 표현하는 타입 안전 Button",
+      "description": "primary, outline, destructive, inverse 변형과 세 가지 크기, 로딩 상태를 제공하는 Expo·React Native 버튼입니다.",
+      "summary": "Button은 label 또는 비어 있지 않은 children을 반드시 요구해 내용 없는 버튼을 타입 단계에서 막습니다. variant, size, icon 렌더 함수와 loading을 조합하면서 색상과 치수는 활성 테마에서 해석합니다.",
+      "features": [
+        "primary, primary-outline, secondary, destructive, destructive-outline, inverse 변형",
+        "sm, md, lg 크기와 테마 기반 아이콘 크기·최대 글꼴 배율",
+        "loading 중 ActivityIndicator를 표시하고 중복 입력을 차단"
+      ],
+      "accessibility": "button 역할과 disabled·busy 상태를 네이티브 접근성 API와 웹 ARIA에 함께 전달합니다. 문자열 label은 기본 접근성 이름으로 사용되며 loading 중에는 버튼이 비활성화됩니다.",
+      "snippet": "<Button label=\"저장\" loading={saving} onPress={save} />",
+      "related": ["IconButton", "ConfirmActionRow", "StickyActionBar"]
+    },
+    {
+      "slug": "icon-button",
+      "name": "IconButton",
+      "since": "0.1.0",
+      "category": "액션",
+      "headline": "접근성 이름이 필수인 원형 IconButton",
+      "description": "아이콘만 보이는 액션에 필수 접근성 라벨, 버튼 변형, 로딩과 비활성 상태를 제공하는 React Native IconButton입니다.",
+      "summary": "IconButton은 정적 노드나 color와 size를 받는 렌더 함수를 아이콘으로 사용합니다. 지름을 바꾸면 아이콘 마크가 비율에 맞춰 계산되며, accessibilityLabel을 생략한 코드는 컴파일되지 않습니다.",
+      "features": [
+        "accessibilityLabel을 필수 prop으로 강제",
+        "Button과 같은 여섯 가지 색상 변형 및 loading 상태 공유",
+        "사용자 지정 지름에 맞춰 아이콘 크기를 자동 계산"
+      ],
+      "accessibility": "아이콘 자체가 텍스트를 제공하지 않아도 필수 accessibilityLabel로 동작을 설명합니다. button 역할, disabled와 busy 상태가 플랫폼별 접근성 속성으로 노출됩니다.",
+      "snippet": "<IconButton accessibilityLabel=\"설정 열기\" icon={SettingsIcon} onPress={openSettings} />",
+      "related": ["Button", "Alert", "Dialog"]
+    },
+    {
+      "slug": "text-field",
+      "name": "TextField",
+      "since": "0.1.0",
+      "category": "입력",
+      "headline": "라벨·도움말·오류를 한 구조로 묶는 TextField",
+      "description": "라벨, 글자 수, 보조 액션, 도움말과 오류 상태를 지원하는 테마 기반 Expo·React Native 텍스트 입력 컴포넌트입니다.",
+      "summary": "TextField는 일반 입력과 multiline 입력을 같은 토큰 규칙으로 렌더링합니다. error가 있으면 테두리와 안내 문구를 danger 역할로 바꾸고 helperText보다 우선하며, 컨테이너와 실제 입력 스타일을 분리합니다.",
+      "features": [
+        "label, counter, labelAccessory를 조합하는 상단 정보 행",
+        "error 우선순위와 helperText를 포함한 입력 피드백",
+        "containerStyle과 inputStyle을 분리해 스타일 대상의 의미를 명확화"
+      ],
+      "accessibility": "React Native TextInput prop을 대부분 그대로 받을 수 있어 accessibilityLabel, accessibilityHint와 입력 특성을 화면 맥락에 맞게 지정할 수 있습니다. 보이는 라벨과 오류 문구도 함께 제공할 수 있습니다.",
+      "snippet": "<TextField label=\"제목\" value={title} onChangeText={setTitle} error={error} />",
+      "related": ["SearchField", "Text", "ErrorState"]
+    },
+    {
+      "slug": "search-field",
+      "name": "SearchField",
+      "since": "0.1.0",
+      "category": "입력",
+      "headline": "검색 흐름에 맞춘 pill 형태 SearchField",
+      "description": "검색 placeholder와 아이콘을 UiProvider에서 받아 앱 전반의 검색 입력을 간결하게 통일하는 Expo SearchField입니다.",
+      "summary": "SearchField는 검색 제출 키, 자동 포커스, controlled value를 지원하는 좁은 목적의 입력입니다. leading을 전달하지 않으면 Provider의 검색 아이콘을 사용하고 placeholder도 현재 언어 문자열에서 가져옵니다.",
+      "features": [
+        "value와 onChangeText로 상태를 앱이 소유하는 controlled 입력",
+        "기본 search return key와 onSubmitEditing 지원",
+        "Provider의 strings.searchPlaceholder와 icons.search를 기본값으로 사용"
+      ],
+      "accessibility": "플랫폼 TextInput의 기본 입력 의미론과 포커스 동작을 유지합니다. 검색 영역의 화면 제목이나 인접 라벨로 입력 목적이 분명해지도록 구성하는 것이 좋습니다.",
+      "snippet": "<SearchField value={query} onChangeText={setQuery} onSubmitEditing={search} />",
+      "related": ["TextField", "EmptyState", "ListItem"]
+    },
+    {
+      "slug": "tabs",
+      "name": "Tabs",
+      "since": "0.1.0",
+      "category": "탐색",
+      "headline": "segmented와 underline을 지원하는 controlled Tabs",
+      "description": "리터럴 value 타입을 보존하며 segmented·underline 두 표현을 제공하는 Expo와 React Native용 탭 컴포넌트입니다.",
+      "summary": "Tabs는 items에서 추론한 문자열 유니언으로 현재 value와 onChange를 연결합니다. 잘못된 탭 값은 NoInfer 계약으로 타입 검사에서 드러나며, 항목별 disabled 상태도 지원합니다.",
+      "features": [
+        "카드형 segmented와 하단선형 underline 변형",
+        "items에서 추론한 value 유니언으로 오타 차단",
+        "활성·비활성·disabled 색상과 elevation을 테마에서 해석"
+      ],
+      "accessibility": "각 항목은 tab 역할과 selected 상태를 노출하고 disabled 항목은 입력에서 제외됩니다. 탭이 전환하는 패널의 구조와 포커스 정책은 화면에서 함께 설계해야 합니다.",
+      "snippet": "<Tabs items={tabs} value={activeTab} onChange={setActiveTab} variant=\"underline\" />",
+      "related": ["Section", "ContentFrame", "Accordion"]
+    },
+    {
+      "slug": "selection-indicator",
+      "name": "SelectionIndicator",
+      "since": "0.1.0",
+      "category": "선택",
+      "headline": "선택 여부를 토큰 색상으로 보여주는 SelectionIndicator",
+      "description": "16·18·20·24 크기와 사용자 지정 체크 마크를 지원하는 원형 선택 표시 컴포넌트입니다.",
+      "summary": "SelectionIndicator는 선택된 상태의 채운 원과 선택되지 않은 테두리 원을 렌더링합니다. Provider 체크 아이콘이 없으면 텍스트 글리프로 폴백하고, showUncheckedMark로 미선택 마크도 표시할 수 있습니다.",
+      "features": [
+        "16, 18, 20, 24로 제한된 예측 가능한 크기 계약",
+        "Provider icons.check 또는 renderMark 사용자 지정 슬롯",
+        "selected와 showUncheckedMark를 분리한 시각 상태"
+      ],
+      "accessibility": "이 컴포넌트는 시각적 표시 조각입니다. 실제 선택 역할과 selected 상태는 SelectableRow 같은 상호작용 컨테이너에서 제공해야 합니다.",
+      "snippet": "<SelectionIndicator selected={selected} size={24} />",
+      "related": ["SelectableRow", "SelectAllRow", "Checkbox"]
+    },
+    {
+      "slug": "selectable-row",
+      "name": "SelectableRow",
+      "since": "0.1.0",
+      "category": "선택",
+      "headline": "행 전체를 선택 대상으로 만드는 SelectableRow",
+      "description": "선택 표시와 임의의 행 콘텐츠를 결합하고 selected·disabled 상태를 노출하는 React Native 선택 행입니다.",
+      "summary": "SelectableRow는 SelectionIndicator와 children을 하나의 Pressable 행으로 묶습니다. 선택 상태는 외부에서 제어하며 indicator 크기나 마크 렌더러를 바꿔 목록·갤러리 선택 패턴에 맞출 수 있습니다.",
+      "features": [
+        "행 전체 클릭 영역과 SelectionIndicator를 기본 조합",
+        "selected 상태를 앱에서 관리하는 controlled 계약",
+        "indicatorSize와 renderMark로 선택 마크를 교체"
+      ],
+      "accessibility": "button 역할과 selected·disabled 상태를 함께 노출합니다. children만으로 동작 목적이 명확하지 않을 때 accessibilityLabel을 지정할 수 있습니다.",
+      "snippet": "<SelectableRow selected={selected} onPress={toggle}>앨범 선택</SelectableRow>",
+      "related": ["SelectionIndicator", "SelectAllRow", "ListItem"]
+    },
+    {
+      "slug": "select-all-row",
+      "name": "SelectAllRow",
+      "since": "0.1.0",
+      "category": "선택",
+      "headline": "전체 선택과 해제를 한 행으로 제공하는 SelectAllRow",
+      "description": "현재 상태에 따라 전체 선택·전체 해제 라벨을 자동 전환하는 Expo·React Native 선택 제어 행입니다.",
+      "summary": "SelectAllRow는 selected 값에 맞춰 Provider의 selectAll 또는 deselectAll 문자열을 선택합니다. 체크 크기, 미선택 마크, 사용자 지정 아이콘과 문구를 지원해 다중 선택 목록의 상단 제어로 사용할 수 있습니다.",
+      "features": [
+        "선택 상태에 따라 전체 선택과 전체 해제 라벨 자동 전환",
+        "Provider 다국어 문자열을 기본값으로 사용",
+        "showUncheckedMark, checkSize, renderMark 사용자 지정"
+      ],
+      "accessibility": "현재 동작을 설명하는 라벨을 accessibilityLabel로 사용하고 button 역할과 selected·disabled 상태를 노출합니다.",
+      "snippet": "<SelectAllRow selected={allSelected} onPress={toggleAll} />",
+      "related": ["SelectableRow", "SelectionIndicator", "Checkbox"]
+    },
+    {
+      "slug": "checkbox",
+      "name": "Checkbox",
+      "since": "0.2.0",
+      "category": "입력",
+      "headline": "boolean과 mixed 상태를 지원하는 controlled Checkbox",
+      "description": "보이는 라벨 또는 접근성 라벨을 필수로 요구하고 mixed 상태와 웹 Space 입력을 지원하는 크로스플랫폼 Checkbox입니다.",
+      "summary": "Checkbox는 checked 값을 앱이 소유하며 boolean뿐 아니라 전체 선택용 mixed 상태도 표현합니다. 사용자가 누른 결과는 항상 boolean으로 반환되고, check·minus 아이콘은 Provider나 renderMark에서 공급할 수 있습니다.",
+      "features": [
+        "true, false, mixed 세 가지 표시 상태",
+        "보이는 label 또는 accessibilityLabel 중 하나를 타입으로 강제",
+        "sm·md 크기, 설명 문구, disabled와 사용자 지정 마크 지원"
+      ],
+      "accessibility": "checkbox 역할과 checked·mixed·disabled 상태를 네이티브 API와 웹 ARIA에 제공합니다. 웹에서는 Space로 토글하며 description을 aria-describedby로 연결합니다.",
+      "snippet": "<Checkbox checked={agreed} label=\"약관에 동의합니다\" onCheckedChange={setAgreed} />",
+      "related": ["Switch", "RadioGroup", "SelectAllRow"]
+    },
+    {
+      "slug": "switch",
+      "name": "Switch",
+      "since": "0.2.0",
+      "category": "입력",
+      "headline": "플랫폼 네이티브 동작을 유지하는 controlled Switch",
+      "description": "React Native 기본 Switch를 토큰 테마와 필수 라벨 계약으로 감싼 iOS·Android·Web 설정 토글입니다.",
+      "summary": "Switch는 value와 onValueChange만으로 상태의 정본을 앱에 둡니다. sm·md 크기와 설명, disabled를 지원하며 플랫폼 기본 입력을 유지해 운영체제별 토글 동작을 따릅니다.",
+      "features": [
+        "React Native 네이티브 Switch를 그대로 사용",
+        "label 또는 accessibilityLabel을 필수로 요구",
+        "테마의 primary, surface, textSubtle로 track과 thumb 구성"
+      ],
+      "accessibility": "네이티브에서는 switch 역할과 checked·disabled 상태를 제공하고 웹에서는 실제 input과 label을 연결합니다. 설명이 있으면 웹 input의 aria-describedby에 연결됩니다.",
+      "snippet": "<Switch value={enabled} label=\"알림 받기\" onValueChange={setEnabled} />",
+      "related": ["Checkbox", "RadioGroup", "ListItem"]
+    },
+    {
+      "slug": "radio-group",
+      "name": "RadioGroup",
+      "since": "0.2.0",
+      "category": "입력",
+      "headline": "문자열 리터럴 값을 보존하는 accessible RadioGroup",
+      "description": "단일 선택 값을 타입으로 제한하고 방향키·Home·End 키보드 탐색을 제공하는 Expo·React Native RadioGroup입니다.",
+      "summary": "RadioGroup은 items의 value에서 문자열 유니언을 추론해 잘못된 현재 값을 막습니다. 세로·가로 배치, 항목 설명과 disabled를 지원하며 선택된 항목이 없으면 첫 활성 항목을 웹 탭 순서에 둡니다.",
+      "features": [
+        "items에서 추론한 제네릭 value와 controlled onValueChange",
+        "vertical·horizontal 배치와 항목별 description·disabled",
+        "웹 roving tabindex, 순환 방향키, Home·End 이동"
+      ],
+      "accessibility": "필수 그룹 accessibilityLabel과 radiogroup 역할을 제공합니다. 각 항목은 radio 역할과 checked·disabled 상태를 가지며 설명은 aria-describedby로 연결됩니다.",
+      "snippet": "<RadioGroup accessibilityLabel=\"목록 밀도\" items={densityItems} value={density} onValueChange={setDensity} />",
+      "related": ["Checkbox", "Switch", "Tabs"]
+    },
+    {
+      "slug": "surface",
+      "name": "Surface",
+      "since": "0.1.0",
+      "category": "레이아웃",
+      "headline": "패딩·라운드·그림자를 토큰으로 조합하는 Surface",
+      "description": "카드와 패널의 배경, 테두리, 여백, 라운드와 elevation을 테마 토큰으로 구성하는 React Native Surface입니다.",
+      "summary": "Surface는 앱의 콘텐츠를 일관된 표면으로 묶는 레이아웃 프리미티브입니다. padding은 토큰 키 또는 실측 숫자를 받고 radius와 elevation은 닫힌 테마 키로 제한됩니다.",
+      "features": [
+        "spacing 기반 padding과 radius 토큰 선택",
+        "none·sm·md·lg elevation을 Android와 iOS 그림자로 해석",
+        "bordered로 기본 테두리를 켜거나 제거"
+      ],
+      "accessibility": "Surface 자체는 의미 없는 View로 렌더링해 불필요한 접근성 노드를 만들지 않습니다. 제목, 버튼, 목록 등 실제 의미는 children 컴포넌트가 담당합니다.",
+      "snippet": "<Surface padding=\"xl\" radius=\"md\" elevation=\"sm\">{children}</Surface>",
+      "related": ["Section", "ContentFrame", "DialogPanel"]
+    },
+    {
+      "slug": "content-frame",
+      "name": "ContentFrame",
+      "since": "0.1.0",
+      "category": "레이아웃",
+      "headline": "문서와 앱 화면의 읽기 폭을 제한하는 ContentFrame",
+      "description": "최대 콘텐츠 폭과 반응형 여백을 한곳에서 관리하는 Expo·React Native 레이아웃 프레임입니다.",
+      "summary": "ContentFrame은 기본 최대 폭 1040 안에서 가로 여백과 위·아래 여백을 제어합니다. 내비게이션이나 safe area를 소유하지 않아 앱 셸 안에서 재사용하기 쉽습니다.",
+      "features": [
+        "기본 1040의 maxWidth와 전체 너비 프레임",
+        "공통 padding 또는 개별 topPadding·bottomPadding",
+        "center 옵션으로 넓은 화면에서 프레임 중앙 정렬"
+      ],
+      "accessibility": "레이아웃 전용 View이며 문서 구조를 임의로 추가하지 않습니다. 내부 heading과 landmark는 화면의 콘텐츠 구조에 맞춰 별도로 제공합니다.",
+      "snippet": "<ContentFrame maxWidth={1040} padding=\"xl\" center>{children}</ContentFrame>",
+      "related": ["Surface", "Section", "StickyActionBar"]
+    },
+    {
+      "slug": "section",
+      "name": "Section",
+      "since": "0.1.0",
+      "category": "레이아웃",
+      "headline": "제목·부제·액션을 정렬하는 Section",
+      "description": "콘텐츠 구역의 title, subtitle, actions와 본문 간격을 테마 규칙으로 정리하는 React Native Section 컴포넌트입니다.",
+      "summary": "Section은 제목과 보조 설명을 왼쪽에, 관련 액션을 오른쪽에 배치하고 좁은 폭에서는 자연스럽게 줄바꿈합니다. gap은 spacing 토큰이나 실측 숫자로 조절할 수 있습니다.",
+      "features": [
+        "title, subtitle, actions를 선택적으로 조합",
+        "액션이 있는 반응형 헤더 행",
+        "spacing 토큰 기반의 본문 gap"
+      ],
+      "accessibility": "Section은 시각적 구역을 제공하지만 landmark나 heading 역할을 강제하지 않습니다. 문서 계층이 필요하면 제목 콘텐츠에 적절한 접근성 역할을 함께 설계합니다.",
+      "snippet": "<Section title=\"최근 기록\" subtitle=\"오늘 업데이트\" actions={<Button label=\"추가\" />}>{content}</Section>",
+      "related": ["Text", "ContentFrame", "Surface"]
+    },
+    {
+      "slug": "sticky-action-bar",
+      "name": "StickyActionBar",
+      "since": "0.1.0",
+      "category": "레이아웃",
+      "headline": "하단 inset을 반영하는 StickyActionBar",
+      "description": "웹에서는 sticky 하단 바, 네이티브에서는 safe-area 패딩을 합성할 수 있는 화면 액션 컨테이너입니다.",
+      "summary": "StickyActionBar는 주요 저장·완료 버튼을 화면 아래에 배치하고 bottomInset을 기본 패딩에 더합니다. 웹 sticky와 elevation은 제공하지만 키보드 회피와 실제 inset 측정은 앱이 소유합니다.",
+      "features": [
+        "웹 position sticky와 bottom 0 동작",
+        "bottomInset을 테마 하단 패딩에 합성",
+        "표면 색상, 상단 구분선과 elevation을 테마에서 적용"
+      ],
+      "accessibility": "컨테이너는 별도 의미를 만들지 않으며 내부 Button 등의 의미론을 유지합니다. 키보드가 포커스된 입력이나 액션을 가리지 않도록 앱 레이아웃에서 함께 조정해야 합니다.",
+      "snippet": "<StickyActionBar bottomInset={useBottomInset()}><Button label=\"완료\" onPress={submit} /></StickyActionBar>",
+      "related": ["Button", "ContentFrame", "ConfirmActionRow"]
+    },
+    {
+      "slug": "skeleton",
+      "name": "Skeleton",
+      "since": "0.1.0",
+      "category": "피드백",
+      "headline": "콘텐츠 모양에 맞춰 확장하는 Skeleton",
+      "description": "화면별 width, height, aspectRatio를 style로 조합하고 테마 라운드와 로딩 문구를 사용하는 React Native Skeleton입니다.",
+      "summary": "Skeleton은 특정 도메인 비율을 강제하지 않는 범용 로딩 자리표시자입니다. 700ms 펄스 애니메이션과 surfaceSubtle 색상을 사용하며 radius는 테마 키로 선택합니다.",
+      "features": [
+        "style로 임의의 크기와 비율을 구성",
+        "none·sm·md·lg·pill radius 토큰",
+        "테마 surfaceSubtle 기반의 반복 opacity 애니메이션"
+      ],
+      "accessibility": "accessibilityLabel을 생략하면 Provider의 loading 문자열을 사용합니다. 실제 로딩 영역의 상태와 완료 전환은 화면 컨테이너에서 함께 알려주는 것이 좋습니다.",
+      "snippet": "<Skeleton accessibilityLabel=\"프로필을 불러오는 중\" style={{ width: 120, height: 20 }} />",
+      "related": ["Spinner", "EmptyState", "Surface"]
+    },
+    {
+      "slug": "empty-state",
+      "name": "EmptyState",
+      "since": "0.1.0",
+      "category": "피드백",
+      "headline": "빈 화면의 설명과 다음 행동을 안내하는 EmptyState",
+      "description": "빈 목록과 첫 사용 화면에 제목, 설명, 아이콘과 유효한 액션을 제공하는 Expo·React Native 상태 컴포넌트입니다.",
+      "summary": "EmptyState는 Provider의 기본 제목과 empty 아이콘을 사용하며 화면에 맞는 body와 leading으로 교체할 수 있습니다. action은 label과 onPress를 한 객체로 요구해 눌러도 동작하지 않는 버튼을 만들 수 없습니다.",
+      "features": [
+        "Provider 기본 emptyTitle과 empty 아이콘",
+        "중앙 정렬된 제목·본문과 사용자 지정 leading",
+        "label과 onPress가 함께 필요한 action 계약"
+      ],
+      "accessibility": "제목과 설명은 실제 텍스트로 노출되고 action은 표준 Button 의미론을 사용합니다. 장식 아이콘을 교체할 때 불필요한 접근성 이름을 추가하지 않도록 구성합니다.",
+      "snippet": "<EmptyState body=\"첫 기록을 남겨보세요\" action={{ label: '기록 만들기', onPress: create }} />",
+      "related": ["ErrorState", "Button", "Skeleton"]
+    },
+    {
+      "slug": "error-state",
+      "name": "ErrorState",
+      "since": "0.1.0",
+      "category": "피드백",
+      "headline": "실패 이유와 재시도를 명확히 보여주는 ErrorState",
+      "description": "오류 제목, 안내 문구, 아이콘과 선택적 재시도 버튼을 일관되게 제공하는 React Native 오류 상태 컴포넌트입니다.",
+      "summary": "ErrorState는 Provider의 errorTitle, errorBody, retry 문자열과 오류 아이콘을 기본으로 사용합니다. onRetry가 있을 때만 버튼을 렌더링하므로 동작 없는 재시도 UI가 생기지 않습니다.",
+      "features": [
+        "Provider 기반 기본 오류 문구와 아이콘",
+        "title, message, leading, retryLabel 사용자 지정",
+        "onRetry가 있을 때만 secondary 재시도 버튼 렌더"
+      ],
+      "accessibility": "오류 내용은 실제 텍스트로 읽히고 재시도는 표준 Button으로 동작합니다. 비동기로 새 오류가 나타났음을 즉시 알릴 필요가 있다면 화면에서 Alert의 live 정책과 조합할 수 있습니다.",
+      "snippet": "<ErrorState message=\"네트워크 연결을 확인하세요\" onRetry={refetch} />",
+      "related": ["EmptyState", "Alert", "Button"]
+    },
+    {
+      "slug": "toast",
+      "name": "Toast",
+      "since": "0.1.0",
+      "category": "피드백",
+      "headline": "짧은 작업 결과를 알리는 Toast",
+      "description": "success, error, info, warning 결과를 테마 색상과 Provider 아이콘으로 알리는 Expo·React Native Toast입니다.",
+      "summary": "Toast는 화면 하단에 fixed 또는 absolute로 배치되며 bottomOffset으로 safe area와 다른 하단 UI를 피할 수 있습니다. useToastController는 기본 2800ms 후 메시지를 지우고 durationMs로 시간을 조절합니다.",
+      "features": [
+        "error, success, info, warning 네 가지 결과 상태",
+        "Provider toast 아이콘과 상태별 strong/on-color 토큰",
+        "useToastController의 showToast, clearToast, durationMs"
+      ],
+      "accessibility": "polite live region으로 메시지를 읽어 현재 포커스를 갑자기 이동시키지 않습니다. Toast 컨테이너는 pointerEvents가 없어 뒤의 화면 조작을 가로막지 않습니다.",
+      "snippet": "{toast ? <Toast message={toast.message} variant={toast.variant} bottomOffset={96 + bottomInset} /> : null}",
+      "related": ["Alert", "Badge", "ErrorState"]
+    },
+    {
+      "slug": "badge",
+      "name": "Badge",
+      "since": "0.2.0",
+      "category": "상태",
+      "headline": "짧은 상태를 텍스트와 색으로 구분하는 Badge",
+      "description": "neutral, info, success, warning, error 상태와 sm·md 크기를 제공하는 Expo·React Native Badge 컴포넌트입니다.",
+      "summary": "Badge는 짧은 분류나 상태를 pill 배경, 명확한 label과 선택적 leading 아이콘으로 표현합니다. 각 상태는 soft 배경과 대비되는 전경 토큰 쌍을 사용해 라이트·다크 테마에서 같은 의미를 유지합니다.",
+      "features": [
+        "neutral, info, success, warning, error 상태 변형",
+        "caption 기반 sm과 label 기반 md 크기",
+        "정적 아이콘 또는 color·size 렌더 함수 지원"
+      ],
+      "accessibility": "상태를 색만으로 전달하지 않고 필수 label 텍스트를 항상 렌더링합니다. 동적으로 바뀐 결과를 즉시 공지해야 할 때는 Badge 자체보다 Alert나 Toast의 live region을 사용합니다.",
+      "snippet": "<Badge label=\"동기화 완료\" variant=\"success\" size=\"sm\" />",
+      "related": ["Alert", "Toast", "ListItem"]
+    },
+    {
+      "slug": "alert",
+      "name": "Alert",
+      "since": "0.2.0",
+      "category": "상태",
+      "headline": "액션과 live 정책을 선택하는 인라인 Alert",
+      "description": "info, success, warning, error 안내에 제목·본문·액션·닫기를 조합하고 live region을 명시적으로 제어하는 Alert입니다.",
+      "summary": "Alert는 title 또는 비어 있지 않은 children을 반드시 요구합니다. action은 label과 onPress를 함께 받고 onDismiss가 있을 때만 닫기 IconButton을 렌더링하며, 정적 안내의 기본 live 값은 off입니다.",
+      "features": [
+        "info, success, warning, error의 의미별 soft 배경과 전경",
+        "선택적 action 객체와 dismiss 버튼",
+        "off, polite, assertive live region 정책"
+      ],
+      "accessibility": "정적 Alert는 기본적으로 live region을 만들지 않습니다. 비동기 결과에는 polite를, 즉시 주의가 필요한 오류에는 assertive를 선택할 수 있고 닫기 버튼은 Provider의 close 라벨을 사용합니다.",
+      "snippet": "<Alert title=\"오프라인 상태\" variant=\"warning\" live=\"polite\">연결되면 자동으로 동기화합니다.</Alert>",
+      "related": ["Badge", "Toast", "ErrorState"]
+    },
+    {
+      "slug": "spinner",
+      "name": "Spinner",
+      "since": "0.2.0",
+      "category": "진행",
+      "headline": "대기 중임을 의미론까지 전달하는 Spinner",
+      "description": "테마 아이콘 크기와 color role을 사용하고 기본 로딩 접근성 라벨을 제공하는 Expo·React Native Spinner입니다.",
+      "summary": "Spinner는 현재 완료량을 알 수 없는 짧은 작업에 사용하는 ActivityIndicator 래퍼입니다. sm·md·lg 크기와 ThemeColors 키를 받으며 별도 라벨이 없으면 Provider의 loading 문자열을 사용합니다.",
+      "features": [
+        "sm, md, lg 테마 아이콘 크기",
+        "ThemeColors의 닫힌 color key 지원",
+        "Provider 기본 loading 문자열"
+      ],
+      "accessibility": "progressbar 역할, busy 상태와 읽을 수 있는 accessibilityLabel을 함께 제공합니다. 진행 수치를 알 수 있는 작업에는 ProgressBar의 determinate 모드가 더 적합합니다.",
+      "snippet": "<Spinner accessibilityLabel=\"파일 목록을 불러오는 중\" size=\"md\" />",
+      "related": ["ProgressBar", "Skeleton", "Button"]
+    },
+    {
+      "slug": "progress-bar",
+      "name": "ProgressBar",
+      "since": "0.2.0",
+      "category": "진행",
+      "headline": "수치형과 indeterminate 작업을 모두 표현하는 ProgressBar",
+      "description": "value와 max 기반 진행률, 알 수 없는 진행 상태, 모션 감소와 접근성 값을 지원하는 React Native ProgressBar입니다.",
+      "summary": "ProgressBar는 숫자 value를 0에서 max 사이로 정규화하고 value null이면 이동 세그먼트를 표시합니다. primary, info, success, warning, error 상태와 세 가지 높이를 제공하며 indeterminate 모드에서는 max를 받을 수 없습니다.",
+      "features": [
+        "determinate 숫자 값과 indeterminate null 모드를 타입으로 분리",
+        "primary, info, success, warning, error 트랙·인디케이터",
+        "운영체제 모션 감소 설정에서 이동 애니메이션 중단"
+      ],
+      "accessibility": "필수 accessibilityLabel과 progressbar 역할을 제공합니다. 수치형은 min·max·now를, indeterminate는 busy 상태를 노출하며 accessibilityValueText로 '10장 중 7장' 같은 맥락을 전달할 수 있습니다.",
+      "snippet": "<ProgressBar accessibilityLabel=\"사진 업로드\" accessibilityValueText=\"10장 중 7장\" value={7} max={10} />",
+      "related": ["Spinner", "Toast", "Alert"]
+    },
+    {
+      "slug": "avatar",
+      "name": "Avatar",
+      "since": "0.2.0",
+      "category": "표시",
+      "headline": "이미지 실패에도 초성으로 폴백하는 Avatar",
+      "description": "프로필 이미지, 유니코드 초성 폴백, sm·md·lg 크기와 명시적 장식 여부를 제공하는 Expo·React Native Avatar입니다.",
+      "summary": "Avatar는 source가 없거나 로드에 실패하면 name에서 한글과 유니코드를 안전하게 처리한 초성을 만듭니다. 의미 있는 이미지는 alt를, 인접 이름과 중복되는 이미지는 decorative를 타입으로 반드시 선택해야 합니다.",
+      "features": [
+        "sm, md, lg 테마 control 크기",
+        "이미지 미지정·로드 실패 시 name 기반 초성 폴백",
+        "fallback 노드와 안전하게 제한된 imageProps 지원"
+      ],
+      "accessibility": "정보성 Avatar는 image 역할과 필수 alt를 제공하고 내부 Image는 중복 노출하지 않습니다. decorative가 true이면 전체 Avatar를 접근성 트리에서 숨깁니다.",
+      "snippet": "<Avatar name=\"김가람\" source={{ uri: profileUrl }} alt=\"김가람 프로필 사진\" />",
+      "related": ["ListItem", "Badge", "Surface"]
+    },
+    {
+      "slug": "divider",
+      "name": "Divider",
+      "since": "0.2.0",
+      "category": "레이아웃",
+      "headline": "방향과 의미를 선택할 수 있는 Divider",
+      "description": "가로·세로 선, 테마 색상, 두께, inset과 spacing을 제공하고 separator 의미를 선택적으로 노출하는 Divider입니다.",
+      "summary": "Divider는 기본적으로 장식용 hairline 구분선이며 horizontal과 vertical 방향을 지원합니다. color는 테마 역할, inset과 spacing은 spacing 키 또는 실측 숫자로 설정할 수 있습니다.",
+      "features": [
+        "horizontal·vertical 방향과 사용자 지정 thickness",
+        "ThemeColors 키로 선택하는 선 색상",
+        "inset과 인접 spacing을 독립적으로 설정"
+      ],
+      "accessibility": "기본 decorative true에서는 접근성 트리에서 숨깁니다. 실제 콘텐츠 구역의 경계를 전달해야 할 때 decorative false로 separator 역할과 웹 aria-orientation을 노출합니다.",
+      "snippet": "<Divider orientation=\"horizontal\" inset=\"md\" spacing=\"sm\" decorative={false} />",
+      "related": ["ListItem", "Section", "Surface"]
+    },
+    {
+      "slug": "list-item",
+      "name": "ListItem",
+      "since": "0.2.0",
+      "category": "표시",
+      "headline": "정적 정보와 클릭 가능한 행을 구분하는 ListItem",
+      "description": "title, description, leading, trailing과 세 가지 크기를 조합하고 정적·인터랙티브 계약을 타입으로 나누는 ListItem입니다.",
+      "summary": "ListItem은 계정, 설정, 검색 결과 같은 반복 행의 정렬과 타이포그래피를 통일합니다. onPress가 있을 때만 버튼 행이 되며 정적 행에는 disabled나 접근성 힌트를 잘못 전달할 수 없습니다.",
+      "features": [
+        "title·description과 leading·trailing 슬롯",
+        "sm, md, lg 크기별 최소 높이와 텍스트 역할",
+        "onPress 유무로 정적 행과 버튼 행을 구분하는 타입 유니언"
+      ],
+      "accessibility": "인터랙티브 행은 button 역할과 disabled 상태를 노출하고 title을 기본 이름으로 사용합니다. description은 네이티브 hint와 웹 aria-describedby에 연결됩니다.",
+      "snippet": "<ListItem title=\"김가람\" description=\"garam@example.com\" leading={<Avatar name=\"김가람\" decorative />} onPress={openAccount} />",
+      "related": ["Avatar", "Badge", "Divider"]
+    },
+    {
+      "slug": "accordion",
+      "name": "Accordion",
+      "since": "0.2.0",
+      "category": "탐색",
+      "headline": "단일·복수 펼침을 타입으로 분리한 Accordion",
+      "description": "controlled single·multiple 모드와 헤더·패널 ARIA 관계, 키보드 상호작용을 제공하는 Expo·React Native Accordion입니다.",
+      "summary": "Accordion은 각 항목의 title, description, content, leading, disabled를 받아 disclosure 목록을 만듭니다. single은 T 또는 null, multiple은 readonly T 배열을 사용하며 collapsible은 single 모드에서만 허용합니다.",
+      "features": [
+        "single과 multiple 상태 계약을 구분하는 제네릭 타입",
+        "Provider chevron, 텍스트 폴백 또는 renderIndicator 슬롯",
+        "headingLevel과 항목·헤더·콘텐츠 스타일 사용자 지정"
+      ],
+      "accessibility": "웹에서 heading, button, aria-expanded, aria-controls와 패널 관계를 제공하고 Enter·Space로 동작합니다. 네이티브는 expanded·disabled 상태와 설명 hint를 접근성 API로 전달합니다.",
+      "snippet": "<Accordion items={items} value={openItem} onValueChange={setOpenItem} headingLevel={2} />",
+      "related": ["Tabs", "Section", "Divider"]
+    },
+    {
+      "slug": "dialog",
+      "name": "Dialog",
+      "since": "0.1.0",
+      "category": "오버레이",
+      "headline": "앱 조합을 존중하는 최소 Dialog",
+      "description": "React Native Modal과 dismiss 가능한 백드롭을 제공하면서 패널·액션·키보드 정책을 앱에 맡기는 최소 Dialog 컴포넌트입니다.",
+      "summary": "Dialog는 visible과 onDismiss로 제어되는 투명 fade Modal입니다. 기본적으로 백드롭을 누르면 닫히며 dismissOnBackdrop을 false로 바꿀 수 있고, 내부 Pressable은 탭 이벤트가 백드롭으로 전파되지 않게 합니다.",
+      "features": [
+        "visible과 onDismiss를 사용하는 controlled Modal",
+        "선택 가능한 백드롭 dismiss와 fade 애니메이션",
+        "DialogPanel, ConfirmActionRow 등 원하는 children 조합"
+      ],
+      "accessibility": "백드롭은 Provider의 close 문자열을 접근성 이름으로 사용하고 Android 뒤로 가기는 onRequestClose로 연결됩니다. 포커스 트랩, 포털, safe area와 고급 키보드 회피는 앱이 책임집니다.",
+      "snippet": "<Dialog visible={visible} onDismiss={close}><DialogPanel title=\"설정\">{content}</DialogPanel></Dialog>",
+      "related": ["DialogPanel", "ConfirmActionRow", "Alert"]
+    },
+    {
+      "slug": "dialog-panel",
+      "name": "DialogPanel",
+      "since": "0.1.0",
+      "category": "오버레이",
+      "headline": "제목과 본문, footer를 담는 DialogPanel",
+      "description": "최대 폭 550의 표면 안에 title, description, leading, children과 footer를 정렬하는 React Native 다이얼로그 패널입니다.",
+      "summary": "DialogPanel은 Modal을 직접 소유하지 않는 시각적 패널 조각입니다. 필수 title과 선택적 description, leading, footer를 제공해 확인 창부터 복합 폼까지 앱의 Dialog 안에서 조합할 수 있습니다.",
+      "features": [
+        "필수 title과 선택적 description·leading·footer",
+        "모바일과 데스크톱에 공통으로 쓰는 최대 폭 550",
+        "테마 surface, line, radius, spacing 기반 패널"
+      ],
+      "accessibility": "제목과 설명은 실제 텍스트로 렌더링되지만 DialogPanel 자체가 modal 역할이나 포커스 관리를 가장하지 않습니다. 해당 정책은 Dialog와 앱의 오버레이 구조에서 제공합니다.",
+      "snippet": "<DialogPanel title=\"기록을 삭제할까요?\" description=\"삭제한 기록은 복구할 수 없습니다.\" footer={<ConfirmActionRow {...actions} />} />",
+      "related": ["Dialog", "ConfirmActionRow", "Surface"]
+    },
+    {
+      "slug": "confirm-action-row",
+      "name": "ConfirmActionRow",
+      "since": "0.1.0",
+      "category": "액션",
+      "headline": "취소와 확인의 로딩 충돌을 막는 ConfirmActionRow",
+      "description": "취소·확인 버튼, destructive 변형과 양쪽 로딩 상호 배제를 제공하는 Expo·React Native 확인 액션 행입니다.",
+      "summary": "ConfirmActionRow는 Provider의 cancel과 confirm 문자열을 기본 라벨로 사용하고 두 Button을 같은 너비로 배치합니다. 확인이 로딩 중이면 취소를, 취소가 로딩 중이면 확인을 비활성화해 중복 작업을 막습니다.",
+      "features": [
+        "onCancel과 onConfirm이 필수인 두 버튼 구조",
+        "destructive 슈가와 개별 cancelVariant·confirmVariant",
+        "loading과 cancelLoading 사이의 교차 비활성화"
+      ],
+      "accessibility": "각 액션은 Button의 button 역할, busy·disabled 상태와 Provider 라벨을 그대로 사용합니다. destructive는 색상만이 아니라 확인 문구와 Dialog 설명으로 결과를 함께 알려야 합니다.",
+      "snippet": "<ConfirmActionRow destructive loading={deleting} onCancel={close} onConfirm={remove} />",
+      "related": ["Dialog", "DialogPanel", "Button"]
+    }
+  ],
+  "guides": [
+    {
+      "slug": "getting-started",
+      "title": "Expo·React Native UI 시작하기",
+      "headline": "Expo와 React Native 프로젝트에 첫 화면 구성하기",
+      "description": "@gj-kit/expo-ui 설치부터 테마 생성, UiProvider 연결, 첫 Button 렌더링까지 필요한 최소 설정을 안내합니다.",
+      "summary": "GJ Kit Expo UI의 필수 런타임 peer는 React와 React Native뿐입니다. 테마는 createTheme 또는 createThemes로 만들고 루트 UiProvider에 전달한 뒤, 필요한 컴포넌트를 패키지 루트에서 가져옵니다.",
+      "sections": [
+        {
+          "title": "패키지 설치",
+          "body": "사용 중인 패키지 매니저로 UI 패키지를 추가합니다. insets 서브패스를 쓰지 않는다면 safe-area 패키지는 필수가 아닙니다.",
+          "code": "pnpm add @gj-kit/expo-ui"
+        },
+        {
+          "title": "완전한 테마 만들기",
+          "body": "Node에서도 안전한 theme 엔트리에서 createThemes를 호출합니다. shared 오버라이드 뒤에 light와 dark 오버라이드가 적용됩니다.",
+          "code": "import { createThemes } from '@gj-kit/expo-ui/theme';\n\nexport const themes = createThemes({\n  shared: { colors: { primary: '#4A90E2' } },\n});"
+        },
+        {
+          "title": "Provider와 첫 컴포넌트",
+          "body": "앱 루트에 UiProvider를 두면 컴포넌트가 현재 색상 스킴, 문자열과 아이콘을 같은 컨텍스트에서 읽습니다.",
+          "bullets": [
+            "ThemePair를 전달하면 시스템 라이트·다크 설정을 추종",
+            "koStrings 또는 enStrings로 기본 문구 선택",
+            "앱에서 이미 쓰는 아이콘 라이브러리를 slots로 주입"
+          ],
+          "code": "<UiProvider theme={themes} strings={koStrings}>\n  <Button label=\"시작하기\" onPress={start} />\n</UiProvider>"
+        }
+      ],
+      "relatedComponents": ["Button", "Text", "Surface"]
+    },
+    {
+      "slug": "theming",
+      "title": "Expo·React Native 테마와 디자인 토큰",
+      "headline": "라이트·다크를 함께 완성하는 토큰 시스템",
+      "description": "31개 color role과 spacing, radius, typography, elevation, metrics, breakpoints를 createThemes로 안전하게 확장하는 방법입니다.",
+      "summary": "GJ Kit의 컴포넌트 스타일은 활성 Theme에서 해석됩니다. Theme와 ThemePair는 생성기를 거친 브랜드 타입이므로 일부 키가 빠진 손조립 객체가 Provider로 들어오는 상황을 막습니다.",
+      "sections": [
+        {
+          "title": "토큰 그룹과 역할",
+          "body": "색 이름보다 용도를 나타내는 role을 사용합니다. 상태 색은 전경, strong 배경, soft 배경, on-color를 분리해 라이트·다크 대비를 유지합니다.",
+          "bullets": [
+            "colors 31개 역할",
+            "spacing, radius, typography, elevation",
+            "control·input·icon 치수와 tablet·desktop breakpoint"
+          ]
+        },
+        {
+          "title": "라이트·다크 쌍 생성",
+          "body": "공통 브랜드 값은 shared에, 스킴별 차이만 light와 dark에 둡니다. 결과는 두 스킴이 모두 완성된 ThemePair입니다.",
+          "code": "const themes = createThemes({\n  shared: { radius: { sm: 10 } },\n  dark: { colors: { primary: '#5C9EEA' } },\n});"
+        },
+        {
+          "title": "스킴 소유와 비 React 소비",
+          "body": "UiProvider의 colorScheme은 light, dark, system을 받고 컴포넌트는 useTheme으로 해석된 단일 테마만 읽습니다. 내비게이션처럼 React 트리 밖에서는 getActiveTheme과 subscribeActiveTheme을 사용할 수 있습니다."
+        }
+      ],
+      "relatedComponents": ["Text", "Button", "Surface"]
+    },
+    {
+      "slug": "accessibility",
+      "title": "React Native 접근성 컴포넌트",
+      "headline": "타입, 네이티브 API와 ARIA를 함께 설계하기",
+      "description": "아이콘 버튼 라벨, form control 상태, live region, 키보드 조작과 모션 감소를 GJ Kit 컴포넌트에서 적용하는 방법입니다.",
+      "summary": "접근성 이름이나 상태가 누락되면 조용히 깨지는 컴포넌트는 타입 유니언으로 잘못된 조합을 제한합니다. 네이티브에서는 React Native 접근성 API를, 웹에서는 대응 ARIA와 필요한 키보드 상호작용을 제공합니다.",
+      "sections": [
+        {
+          "title": "이름과 의미를 타입으로 요구",
+          "body": "IconButton은 accessibilityLabel이 필수이고 Avatar는 alt와 decorative 중 하나를 선택합니다. Checkbox와 Switch도 보이는 label 또는 접근성 라벨이 있어야 합니다.",
+          "bullets": [
+            "ProgressBar와 RadioGroup의 대상 라벨은 필수",
+            "ListItem은 정적 행과 버튼 행을 타입으로 구분",
+            "액션 객체는 label과 handler를 함께 요구"
+          ]
+        },
+        {
+          "title": "웹 키보드와 상태",
+          "body": "Checkbox는 Space, RadioGroup은 Space·방향키·Home·End를 지원합니다. Accordion은 헤더와 패널을 aria-controls와 aria-expanded로 연결합니다."
+        },
+        {
+          "title": "변화를 알리는 강도",
+          "body": "정적인 Alert는 live off가 기본입니다. 새로 삽입된 비동기 결과에만 polite 또는 assertive를 선택하고, ProgressBar는 운영체제 모션 감소 설정에서 이동 애니메이션을 멈춥니다."
+        }
+      ],
+      "relatedComponents": ["Checkbox", "RadioGroup", "Alert", "ProgressBar"]
+    },
+    {
+      "slug": "tailwind",
+      "title": "React Native Tailwind·NativeWind 연동",
+      "headline": "런타임 테마에서 유틸리티 preset 파생하기",
+      "description": "react-native를 불러오지 않는 tailwind 서브패스와 createTailwindPreset으로 토큰 기반 유틸리티를 만드는 방법입니다.",
+      "summary": "GJ Kit는 NativeWind를 런타임 의존성으로 요구하지 않지만 className을 호환 컴포넌트에 전달합니다. preset은 실제 Theme에서 색상, 간격, 라운드, 타이포그래피, 그림자와 breakpoint를 파생해 두 개의 디자인 진실이 생기지 않게 합니다.",
+      "sections": [
+        {
+          "title": "Node 안전 엔트리 사용",
+          "body": "tailwind.config가 읽는 앱 테마 모듈은 패키지 루트가 아니라 @gj-kit/expo-ui/theme에서 생성기를 가져와야 합니다.",
+          "code": "import { createTailwindPreset } from '@gj-kit/expo-ui/tailwind';\nimport { themes } from './src/theme';\n\nexport const preset = createTailwindPreset(themes.light);"
+        },
+        {
+          "title": "생성되는 유틸리티",
+          "body": "기본 ui 접두사로 의미 있는 토큰 이름을 노출합니다. prefix 옵션을 바꾸면 프로젝트 네이밍 규칙에 맞출 수 있습니다.",
+          "bullets": [
+            "bg-ui-primary와 text-ui-title",
+            "p-ui-lg와 rounded-ui-pill",
+            "shadow-ui-sm, tablet과 desktop 화면"
+          ]
+        },
+        {
+          "title": "className과 style의 역할",
+          "body": "className은 NativeWind가 설치된 소비 앱에서 해석되고 GJ Kit는 이를 패스스루합니다. 컴포넌트 토큰 스타일 뒤에 className 브리지와 style을 적용하므로 화면별 조정이 가능합니다."
+        }
+      ],
+      "relatedComponents": ["Text", "Surface", "ContentFrame"]
+    },
+    {
+      "slug": "insets-keyboard",
+      "title": "Expo Safe Area와 키보드 Insets",
+      "headline": "하단 액션과 Modal 입력을 가리지 않는 레이아웃",
+      "description": "useBottomInset, useBottomSheetPadding, useModalKeyboardOverlap과 순수 계산 함수로 Expo 화면의 하단 여백을 합성하는 방법입니다.",
+      "summary": "insets 기능은 별도 @gj-kit/expo-ui/insets 서브패스에 있어 사용하지 않는 앱의 기본 번들에 safe-area peer를 끌어들이지 않습니다. 훅은 react-native-safe-area-context가 필요하고 순수 함수는 peer 없이 테스트할 수 있습니다.",
+      "sections": [
+        {
+          "title": "Safe area를 디자인 여백에 더하기",
+          "body": "useBottomInset은 웹에서 0을, 네이티브에서 실측 하단 inset을 반환합니다. StickyActionBar의 bottomInset 또는 useBottomSheetPadding에 연결합니다.",
+          "code": "const bottomInset = useBottomInset();\n\n<StickyActionBar bottomInset={bottomInset}>\n  <Button label=\"완료\" onPress={submit} />\n</StickyActionBar>"
+        },
+        {
+          "title": "Modal 키보드 겹침 대응",
+          "body": "useModalKeyboardOverlap은 Android 엣지투엣지 Modal에서 하단 시트가 키보드에 가려지는 높이를 계산합니다. 반환값이 있으면 safe-area 패딩보다 우선해 적용합니다."
+        },
+        {
+          "title": "포커스 입력을 드러내는 순수 계산",
+          "body": "computeKeyboardRevealOffset은 입력 위치, 현재 스크롤, 뷰포트와 키보드 높이로 목표 오프셋을 계산합니다.",
+          "bullets": [
+            "nativeBottomInset과 nativeBottomPadding은 플랫폼별 순수 함수",
+            "키보드 회피 애니메이션과 ScrollView 제어는 앱이 소유",
+            "insets 서브패스를 쓸 때만 optional peer 설치"
+          ]
+        }
+      ],
+      "relatedComponents": ["StickyActionBar", "Dialog", "TextField"]
+    },
+    {
+      "slug": "type-safety",
+      "title": "타입 안전 React Native 컴포넌트 API",
+      "headline": "잘못된 UI 상태를 렌더 전에 차단하기",
+      "description": "브랜드 테마, 판별 유니언, NoInfer와 never prop으로 GJ Kit가 UI 오용을 컴파일 오류로 바꾸는 원칙을 설명합니다.",
+      "summary": "GJ Kit는 런타임 경고보다 올바른 값만 표현할 수 있는 API를 우선합니다. 접근성 이름 누락, 동작 없는 액션, 잘못된 리터럴 값과 서로 양립할 수 없는 모드를 타입 검사에서 발견합니다.",
+      "sections": [
+        {
+          "title": "생성기를 거친 브랜드 테마",
+          "body": "Theme과 ThemePair는 createTheme과 createThemes의 반환값만 Provider와 Tailwind preset에 전달할 수 있습니다. 누락된 토큰을 가진 손조립 객체는 거부됩니다."
+        },
+        {
+          "title": "판별 유니언으로 모드 분리",
+          "body": "ProgressBar의 determinate와 indeterminate, Accordion의 single과 multiple, ListItem의 정적 행과 버튼 행처럼 가능한 prop 조합을 별도 타입으로 표현합니다.",
+          "code": "<ProgressBar accessibilityLabel=\"동기화\" value={null} />\n// value={null}과 max의 동시 지정은 타입 오류"
+        },
+        {
+          "title": "오타와 레거시 의미 차단",
+          "body": "Tabs와 RadioGroup은 NoInfer로 items 밖의 value를 막고 Text의 color는 닫힌 토큰 키만 받습니다. 제거된 unstyled와 의미가 달라진 TextField style은 never로 선언해 스프레드 이관 오류도 드러냅니다.",
+          "bullets": [
+            "IconButton 접근성 이름 누락 차단",
+            "EmptyState action handler 누락 차단",
+            "Button label과 children 동시 부재 차단"
+          ]
+        }
+      ],
+      "relatedComponents": ["Button", "ProgressBar", "Accordion", "RadioGroup"]
+    }
+  ]
+}

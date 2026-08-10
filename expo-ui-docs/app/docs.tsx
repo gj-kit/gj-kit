@@ -7,11 +7,10 @@ import {
   StyleSheet,
   Text as RNText,
   View,
-  useWindowDimensions,
 } from 'react-native';
 import type { LayoutChangeEvent, ViewStyle } from 'react-native';
 import { Link } from 'expo-router';
-import Head from 'expo-router/head';
+import type { Href } from 'expo-router';
 import {
   Button,
   ContentFrame,
@@ -25,6 +24,13 @@ import {
   useToastController,
 } from '@gj-kit/expo-ui';
 import type { ColorScheme, IconRenderProps, UiIcons } from '@gj-kit/expo-ui';
+import {
+  componentDocsPath,
+  getComponentSeoEntryByReference,
+  publishedPackageVersion,
+} from '../src/seo-content';
+import { SeoHead, breadcrumbSchema, webPageSchema } from '../src/seo';
+import { useHydratedWindowWidth } from '../src/responsive';
 
 const docsThemes = createThemes({
   shared: {
@@ -296,14 +302,23 @@ export default function DocsPage() {
 
   return (
     <>
-      <Head>
-        <title>Docs — @gj-kit/expo-ui</title>
-        <meta
-          name="description"
-          content="@gj-kit/expo-ui 설치, 테마, 31개 컴포넌트, safe-area·키보드 유틸과 타입 계약을 확인하세요."
-        />
-        <link rel="canonical" href="https://gj-kit-expo-ui.expo.app/docs" />
-      </Head>
+      <SeoHead
+        title="@gj-kit/expo-ui 문서 | 설치, 테마, 컴포넌트 API"
+        description="설치부터 createThemes, UiProvider, Expo·React Native 컴포넌트, safe-area·키보드와 Tailwind preset까지 실제 TypeScript 예제로 확인하세요."
+        path="/docs"
+        schemas={[
+          webPageSchema({
+            path: '/docs',
+            title: '@gj-kit/expo-ui 문서',
+            description: '설치, 테마, 컴포넌트 API와 플랫폼 유틸 문서',
+            type: 'CollectionPage',
+          }),
+          breadcrumbSchema([
+            { name: '홈', path: '/' },
+            { name: '문서', path: '/docs' },
+          ]),
+        ]}
+      />
       <UiProvider
         theme={docsThemes}
         colorScheme={colorScheme}
@@ -324,7 +339,7 @@ function DocsLayout({
   onColorSchemeChange: (scheme: ColorScheme) => void;
 }) {
   const theme = useTheme();
-  const { width } = useWindowDimensions();
+  const width = useHydratedWindowWidth();
   const desktop = width >= 980;
   const wide = width >= 720;
   const compact = width < 560;
@@ -400,7 +415,7 @@ function DocsLayout({
             ) : null}
 
             <View style={styles.mainColumn}>
-              <View onLayout={(event) => rememberSection('start', event)}>
+              <View nativeID="start" onLayout={(event) => rememberSection('start', event)}>
                 <Hero wide={wide} onCopy={() => copyCode('pnpm add @gj-kit/expo-ui')} />
 
                 <DocSection
@@ -425,7 +440,7 @@ function DocsLayout({
                 </DocSection>
               </View>
 
-              <View onLayout={(event) => rememberSection('theme', event)}>
+              <View nativeID="theme" onLayout={(event) => rememberSection('theme', event)}>
                 <DocSection
                   eyebrow="02 · FOUNDATION"
                   title="Theme과 Provider가 하나의 설계 언어를 만듭니다."
@@ -449,7 +464,7 @@ function DocsLayout({
                 </DocSection>
               </View>
 
-              <View onLayout={(event) => rememberSection('components', event)}>
+              <View nativeID="components" onLayout={(event) => rememberSection('components', event)}>
                 <DocSection
                   eyebrow="03 · COMPONENTS"
                   title="31개의 작은 조각, 일관된 하나의 시스템."
@@ -458,7 +473,7 @@ function DocsLayout({
                   <View style={styles.componentCountRow}>
                     <View style={[styles.countPill, { backgroundColor: theme.colors.primarySoft }]}>
                       <RNText style={[styles.countPillNumber, { color: theme.colors.primary }]}>31</RNText>
-                      <RNText style={[styles.countPillLabel, { color: theme.colors.textMuted }]}>public components</RNText>
+                      <RNText style={[styles.countPillLabel, { color: theme.colors.textMuted }]}>source components</RNText>
                     </View>
                     <Text role="caption" color="textMuted" style={styles.componentCountCopy}>
                       아래 목록은 현재 루트 엔트리에서 실제 export되는 시각 컴포넌트 전체입니다.
@@ -485,7 +500,7 @@ function DocsLayout({
                 </DocSection>
               </View>
 
-              <View onLayout={(event) => rememberSection('insets', event)}>
+              <View nativeID="insets" onLayout={(event) => rememberSection('insets', event)}>
                 <DocSection
                   eyebrow="04 · DEVICE EDGES"
                   title="Safe area와 키보드도 조합 가능한 유틸로."
@@ -510,7 +525,7 @@ function DocsLayout({
                 </DocSection>
               </View>
 
-              <View onLayout={(event) => rememberSection('tailwind', event)}>
+              <View nativeID="tailwind" onLayout={(event) => rememberSection('tailwind', event)}>
                 <DocSection
                   eyebrow="05 · NATIVEWIND"
                   title="Tailwind는 선택하고, 토큰은 공유하세요."
@@ -536,7 +551,7 @@ function DocsLayout({
                 </DocSection>
               </View>
 
-              <View onLayout={(event) => rememberSection('contracts', event)}>
+              <View nativeID="contracts" onLayout={(event) => rememberSection('contracts', event)}>
                 <DocSection
                   eyebrow="06 · TYPE-SAFE BY DESIGN"
                   title="동작하지 않는 UI를 만들기 어렵게."
@@ -671,23 +686,26 @@ function MobileNav({
         {NAV_ITEMS.map((item) => {
           const active = item.id === activeSection;
           return (
-            <Pressable
-              key={item.id}
-              onPress={() => onSelect(item.id)}
-              style={[
-                styles.mobileNavItem,
-                active ? { backgroundColor: theme.colors.primarySoft } : null,
-              ]}
-            >
-              <RNText
-                style={[
-                  styles.mobileNavLabel,
-                  { color: active ? theme.colors.primary : theme.colors.textMuted },
+            <Link key={item.id} href={`/docs#${item.id}` as Href} asChild>
+              <Pressable
+                accessibilityRole="link"
+                onPress={() => onSelect(item.id)}
+                style={({ pressed }) => [
+                  styles.mobileNavItem,
+                  active ? { backgroundColor: theme.colors.primarySoft } : null,
+                  pressed ? styles.pressed : null,
                 ]}
               >
-                {item.label}{item.meta ? ` ${item.meta}` : ''}
-              </RNText>
-            </Pressable>
+                <RNText
+                  style={[
+                    styles.mobileNavLabel,
+                    { color: active ? theme.colors.primary : theme.colors.textMuted },
+                  ]}
+                >
+                  {item.label}{item.meta ? ` ${item.meta}` : ''}
+                </RNText>
+              </Pressable>
+            </Link>
           );
         })}
       </ScrollView>
@@ -711,44 +729,47 @@ function Sidebar({
           {NAV_ITEMS.map((item, index) => {
             const active = item.id === activeSection;
             return (
-              <Pressable
-                key={item.id}
-                onPress={() => onSelect(item.id)}
-                style={[
-                  styles.sidebarItem,
-                  active ? { backgroundColor: theme.colors.primarySoft } : null,
-                ]}
-              >
-                <RNText
-                  style={[
-                    styles.sidebarIndex,
-                    { color: active ? theme.colors.primary : theme.colors.textSubtle },
+              <Link key={item.id} href={`/docs#${item.id}` as Href} asChild>
+                <Pressable
+                  accessibilityRole="link"
+                  onPress={() => onSelect(item.id)}
+                  style={({ pressed }) => [
+                    styles.sidebarItem,
+                    active ? { backgroundColor: theme.colors.primarySoft } : null,
+                    pressed ? styles.pressed : null,
                   ]}
                 >
-                  {String(index + 1).padStart(2, '0')}
-                </RNText>
-                <RNText
-                  style={[
-                    styles.sidebarLabel,
-                    { color: active ? theme.colors.primary : theme.colors.textMuted },
-                  ]}
-                >
-                  {item.label}
-                </RNText>
-                {item.meta ? (
-                  <View style={[styles.sidebarBadge, { backgroundColor: theme.colors.surfaceSubtle }]}>
-                    <RNText style={[styles.sidebarBadgeText, { color: theme.colors.textMuted }]}>{item.meta}</RNText>
-                  </View>
-                ) : null}
-              </Pressable>
+                  <RNText
+                    style={[
+                      styles.sidebarIndex,
+                      { color: active ? theme.colors.primary : theme.colors.textSubtle },
+                    ]}
+                  >
+                    {String(index + 1).padStart(2, '0')}
+                  </RNText>
+                  <RNText
+                    style={[
+                      styles.sidebarLabel,
+                      { color: active ? theme.colors.primary : theme.colors.textMuted },
+                    ]}
+                  >
+                    {item.label}
+                  </RNText>
+                  {item.meta ? (
+                    <View style={[styles.sidebarBadge, { backgroundColor: theme.colors.surfaceSubtle }]}>
+                      <RNText style={[styles.sidebarBadgeText, { color: theme.colors.textMuted }]}>{item.meta}</RNText>
+                    </View>
+                  ) : null}
+                </Pressable>
+              </Link>
             );
           })}
         </View>
 
         <Surface padding="lg" style={styles.sidebarCard}>
-          <Text role="label">v0.1.0</Text>
+          <Text role="label">npm v{publishedPackageVersion}</Text>
           <Text role="caption" color="textMuted" style={styles.sidebarCardCopy}>
-            ESM + CJS · TypeScript{`\n`}MIT License
+            v0.2 source preview{`\n`}ESM + CJS · MIT
           </Text>
           <Link href="https://www.npmjs.com/package/@gj-kit/expo-ui" target="_blank" asChild>
             <Pressable style={({ pressed }) => [styles.sidebarNpmLink, pressed ? styles.pressed : null]}>
@@ -780,7 +801,7 @@ function Hero({ wide, onCopy }: { wide: boolean; onCopy: () => void }) {
       <View style={styles.heroContent}>
         <View style={styles.heroBadgeRow}>
           <View style={[styles.heroBadge, { backgroundColor: theme.colors.primarySoft }]}>
-            <RNText style={[styles.heroBadgeText, { color: theme.colors.primary }]}>DOCS · v0.1.0</RNText>
+            <RNText style={[styles.heroBadgeText, { color: theme.colors.primary }]}>DOCS · npm v{publishedPackageVersion} · v0.2 preview</RNText>
           </View>
           <RNText style={[styles.heroLicense, { color: theme.colors.textMuted }]}>MIT · React Native</RNText>
         </View>
@@ -790,14 +811,38 @@ function Hero({ wide, onCopy }: { wide: boolean; onCopy: () => void }) {
           aria-level={1}
           style={[styles.heroTitle, !wide ? styles.heroTitleMobile : null]}
         >
-          빠르게 시작하고,{`\n`}안전하게 확장하세요.
+          Expo UI 컴포넌트,{`\n`}빠르게 시작하고 안전하게 확장하세요.
         </Text>
         <Text role="body" color="textMuted" style={styles.heroCopy}>
-          토큰 기반 light·dark 테마, 31개 컴포넌트, 문구·아이콘 주입과 device edge
-          유틸을 하나의 타입 안전한 API로 제공합니다.
+          npm v{publishedPackageVersion}의 안정 API와 v0.2 소스 미리보기를 함께 문서화합니다.
+          토큰 기반 light·dark 테마, 문구·아이콘 주입과 device edge 유틸을 하나의 타입 안전한 API로 제공합니다.
         </Text>
         <View style={styles.heroActions}>
           <Button label="설치 명령 복사" size="lg" onPress={onCopy} />
+          <Link href="/docs/components" asChild>
+            <Pressable
+              accessibilityRole="link"
+              style={({ pressed }) => [
+                styles.heroLinkButton,
+                { borderColor: theme.colors.line },
+                pressed ? styles.pressed : null,
+              ]}
+            >
+              <RNText style={[styles.heroLinkText, { color: theme.colors.text }]}>컴포넌트 31종</RNText>
+            </Pressable>
+          </Link>
+          <Link href="/docs/getting-started" asChild>
+            <Pressable
+              accessibilityRole="link"
+              style={({ pressed }) => [
+                styles.heroLinkButton,
+                { borderColor: theme.colors.line },
+                pressed ? styles.pressed : null,
+              ]}
+            >
+              <RNText style={[styles.heroLinkText, { color: theme.colors.text }]}>시작 가이드</RNText>
+            </Pressable>
+          </Link>
           <Link href="https://www.npmjs.com/package/@gj-kit/expo-ui" target="_blank" asChild>
             <Pressable
               style={({ pressed }) => [
@@ -927,17 +972,29 @@ function ComponentGroupCard({
         {group.description}
       </Text>
       <View style={styles.componentItems}>
-        {group.items.map((item) => (
-          <View
-            key={item.name}
-            style={[styles.componentItem, { borderTopColor: theme.colors.line }]}
-          >
-            <Text role="label">{item.name}</Text>
-            <Text role="caption" color="textSubtle" style={styles.componentDetail}>
-              {item.detail}
-            </Text>
-          </View>
-        ))}
+        {group.items.map((item) => {
+          const entry = getComponentSeoEntryByReference(item.name);
+          const content = (
+            <View style={[styles.componentItem, { borderTopColor: theme.colors.line }]}>
+              <Text role="label">{item.name}</Text>
+              <Text role="caption" color="textSubtle" style={styles.componentDetail}>
+                {item.detail}
+              </Text>
+            </View>
+          );
+          return entry ? (
+            <Link key={item.name} href={componentDocsPath(entry.slug)} asChild>
+              <Pressable
+                accessibilityRole="link"
+                style={({ pressed }) => [pressed ? styles.pressed : null]}
+              >
+                {content}
+              </Pressable>
+            </Link>
+          ) : (
+            <View key={item.name}>{content}</View>
+          );
+        })}
       </View>
     </Surface>
   );

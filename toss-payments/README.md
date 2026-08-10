@@ -9,6 +9,7 @@
 - 모든 공개 작업은 `Result<T, E>`를 반환합니다 — throw 없음 (유일한 예외: 부팅 전용 `orThrow`).
 - 런타임 의존성 0, Node ≥ 20, Edge 런타임 호환(WebCrypto·fetch만 사용).
 - 브라우저 엔트리는 `@tosspayments/tosspayments-sdk` v2를 optional peer로 사용합니다.
+- 환불 정책(전체·시간 구간 비율·잔여 일수/회차·custom)과 민감정보 없는 결제 상태 스냅샷을 제공합니다(§4.2).
 - 모든 부가 옵션은 **기본 꺼짐**이고, 옵션 내부의 실패가 결제 `Result`를 바꾸는 경로는 존재하지 않습니다(§3).
 
 ---
@@ -460,21 +461,23 @@ app.post('/admin/refunds', async (req, res) => {
 
   const reason = orThrow(cancelReason('고객 요청 환불'));
   const order = await db.orders.byPaymentKey(pk.value);             // 기대 금액은 우리 장부에서!
+  const expectedBalanceAmount =
+    order.paidAmount - order.providerCompletedRefundAmount;         // 현재 장부상 환불 가능 잔액
 
   const c = checked.value;
   let result;
   if (c.kind === 'deposited-virtual-account') {                     // [3] 실행 — kind 내로잉이 컴파일 강제
     result = await client.cancels.cancelFully(c, {
-      reason, expectedAmount: order.paidAmount,
+      reason, expectedAmount: expectedBalanceAmount,
       refundAccount: orThrow(refundAccount({ bank: '88', accountNumber: req.body.account, holderName: req.body.holder })),
     });
   } else if (c.kind === 'awaiting-deposit') {                       // 입금 전 — 전액취소만 가능
-    result = await client.cancels.cancelFully(c, { reason, expectedAmount: order.paidAmount });
+    result = await client.cancels.cancelFully(c, { reason, expectedAmount: expectedBalanceAmount });
   } else if (req.body.amount != null) {
     if (!c.partialAllowed) return res.status(422).json({ error: 'partial cancel not allowed' });
     result = await client.cancels.cancelPartially(c, { reason, amount: req.body.amount });
   } else {
-    result = await client.cancels.cancelFully(c, { reason, expectedAmount: order.paidAmount });
+    result = await client.cancels.cancelFully(c, { reason, expectedAmount: expectedBalanceAmount });
   }
 
   if (isErr(result)) {
@@ -489,15 +492,222 @@ app.post('/admin/refunds', async (req, res) => {
 });
 ```
 
-`expectedAmount`에 서버가 알려준 `balanceAmount`를 되돌려 넣지 마세요 — 검증이 항진식이 됩니다. 반드시 **자체 DB의 기대 금액**을 넣으세요.
+`expectedAmount`에 서버가 알려준 `balanceAmount`를 되돌려 넣지 마세요 — 검증이 항진식이 됩니다. 반드시 **자체 DB의 현재 환불 가능 잔액**(예: 결제액 - provider 완료로 확정한 누적 환불액)을 넣으세요. 최초 결제액을 그대로 넣으면 부분환불 뒤의 전액환불이 항상 mismatch로 막힙니다.
 
 > **왜 이 단계를 건너뛸 수 없는가**
 >
-> - **전액 취소 후에도 status는 `CANCELED`가 아닐 수 있다(실측)** — 부분취소 이력이 있는 결제를 잔액 전액 취소하면 status가 `PARTIAL_CANCELED`로 남습니다. 완전 취소 판정의 유일한 기준은 `balanceAmount === 0`이고, 라이브러리는 이를 `CancelOutcome.fullyCanceled`로 제공합니다. `asCancelable`도 잔액 0이면 status와 무관하게 `already-fully-canceled`를 반환합니다.
+> - **전액 취소 후에도 status는 `CANCELED`가 아닐 수 있다(실측)** — 부분취소 이력이 있는 결제를 잔액 전액 취소하면 status가 `PARTIAL_CANCELED`로 남습니다. 정상 취소 응답의 완전 취소 금액 기준은 `balanceAmount === 0`이고, 라이브러리는 이를 `CancelOutcome.fullyCanceled`로 제공합니다. 일반 `Payment`에서는 잔액 0에 취소 status/이력 신호가 함께 있어야 `isFullyCanceled`이며, status·잔액이 모순이면 `asCancelable`이 `inconsistent-payment-state`로 실행을 막습니다.
 > - **재취소 에러는 두 얼굴(실측)** — 단일 전액취소 후 재취소는 400 `ALREADY_CANCELED_PAYMENT`, 부분취소 이력 후 재취소는 403 `NOT_CANCELABLE_AMOUNT`. `isAlreadyFullyCanceledError`가 양쪽을 수용합니다.
 > - **가상계좌 분기는 오버로드로 강제** — 입금 완료 가상계좌는 `refundAccount` 필수, 일반 결제는 `?: never`로 금지, 입금 전(`WAITING_FOR_DEPOSIT`)은 전액취소만 가능(부분취소 오버로드 자체가 없음).
 > - **부분취소 가능 여부도 강제** — 조회 응답의 `isPartialCancelable`이 `true`인 결제만 `cancelPartially`에 전달할 수 있고, 강제 캐스팅 우회도 런타임에서 거부됩니다.
+> - **진행 중 취소에는 새 capability를 발급하지 않음** — 취소 이력에 `IN_PROGRESS`가 하나라도 있으면 `asCancelable`이 `pending-cancellation`을 반환합니다. provider가 `ABORTED`로 최종 거부한 취소 응답도 성공 `CancelOutcome`이 아니라 `cancel-aborted` 오류입니다.
 > - **잔액 초과 취소는 API 호출 전에 차단** — 우회해서 보내면 서버가 403 `NOT_CANCELABLE_AMOUNT`를 반환합니다(실측). 동시 취소 경합은 서버 낙관적 잠금(`NOT_MATCHES_REFUNDABLE_AMOUNT`)이 잡아내며, 라이브러리는 조회 시점 잔액을 항상 `refundableAmount`로 전송합니다.
+
+#### 4.2.1 환불 정책: 계산 → quote 저장/복원 → 준비 → 실행
+
+Toss API의 용어는 `cancel`이고, “24시간 이내 100%, 7일 이내 80%, 이후 환불 없음” 같은 규칙은 서비스의 `refund policy`입니다. 두 계층을 섞지 않습니다. 정책은 환경 중립인 루트 엔트리에서 실행 가능한 `RefundQuote`를 만들고, 서버 엔트리의 `prepareRefund`가 quote를 방금 조회한 `CancelablePayment`에 결속합니다. 이어 `prepareRefundExecution`이 요청과 멱등키를 봉인하고, `executeRefund`가 Payment를 재조회한 뒤 기존 `cancelFully`/`cancelPartially`에 위임합니다.
+
+```ts
+import {
+  REFUND_TIME,
+  createRefundPolicy,
+  orThrow,
+  type Payment,
+} from '@gj-kit/toss-payments';
+
+const subscriptionRefundPolicy = orThrow(createRefundPolicy({
+  id: 'subscription-cancellation',
+  version: '2026-08-01',
+  kind: 'elapsed-time-rate',
+  rounding: 'floor',                  // 금액 반올림은 정책에서 반드시 명시
+  brackets: [                         // [이전 경계, untilMs) 반열린 구간
+    { untilMs: 24 * REFUND_TIME.hour, rateBps: 10_000, reason: '24시간 이내' },
+    { untilMs: 7 * REFUND_TIME.day, rateBps: 8_000, reason: '7일 이내' },
+  ],
+  fallbackRateBps: 0,
+  fallbackReason: '환불 가능 기간 종료',
+  quoteTtlMs: 5 * REFUND_TIME.minute, // 정책 경계와 이 TTL 중 더 이른 시각에 만료
+}));
+
+export function quoteSubscriptionRefund(input: {
+  payment: Payment;                   // getPayment로 방금 조회한 값
+  paidAmount: number;                 // 프로젝트 장부의 정책 기준 금액
+  providerCompletedRefundAmount: number;
+  expectedBalanceAmount: number;      // 프로젝트 장부의 현재 Toss 환불 가능 잔액
+  evaluatedAt: Date;
+}) {
+  if (input.payment.approvedAt === null) return null;
+  return subscriptionRefundPolicy.quote({
+    payment: input.payment,
+    basisAmount: input.paidAmount,
+    alreadyRefundedAmount: input.providerCompletedRefundAmount,
+    expectedBalanceAmount: input.expectedBalanceAmount,
+    evaluatedAt: input.evaluatedAt,
+    anchorAt: new Date(input.payment.approvedAt),
+  });
+}
+```
+
+`rateBps`는 100%를 `10_000`, 80%를 `8_000`으로 표현합니다. 내부 계산은 `BigInt` 곱셈 뒤 `floor | ceil | half-up`으로 정수화합니다. 정책상 누적 entitlement에서 이미 완료된 환불을 빼서 **이번 실행액**을 만들며, 계산액이 최신 잔액을 넘는 경우 조용히 잔액으로 줄이지 않고 오류를 반환합니다.
+
+남은 일자 비율은 달력 경계와 요청 당일 포함 여부를 명시합니다. 기간은 `[startsOn, endsOnExclusive)`입니다.
+
+```ts
+import {
+  createRefundPolicy,
+  isErr,
+  orThrow,
+  remainingCalendarDays,
+  type Payment,
+} from '@gj-kit/toss-payments';
+
+const remainingDaysPolicy = orThrow(createRefundPolicy({
+  id: 'subscription-remaining-days',
+  version: '2026-08-01',
+  kind: 'remaining-units',
+  rounding: 'floor',
+}));
+
+export function quoteRemainingDays(input: {
+  payment: Payment;
+  paidAmount: number;
+  providerCompletedRefundAmount: number;
+  expectedBalanceAmount: number;
+  startsOn: string;
+  endsOnExclusive: string;
+  evaluatedAt: Date;
+}) {
+  const days = remainingCalendarDays({
+    startsOn: input.startsOn,
+    endsOnExclusive: input.endsOnExclusive,
+    evaluatedAt: input.evaluatedAt,
+    timeZone: 'Asia/Seoul',
+    requestDay: 'consumed',            // 요청 당일은 이미 사용한 날로 계산
+  });
+  if (isErr(days)) return days;
+
+  return remainingDaysPolicy.quote({
+    payment: input.payment,
+    basisAmount: input.paidAmount,
+    alreadyRefundedAmount: input.providerCompletedRefundAmount,
+    expectedBalanceAmount: input.expectedBalanceAmount,
+    evaluatedAt: input.evaluatedAt,
+    validUntil: new Date(days.value.validUntil), // 다음 Asia/Seoul 자정
+    totalUnits: days.value.totalUnits,
+    remainingUnits: days.value.remainingUnits,
+  });
+}
+```
+
+일수 외에도 회차·사용량·정확한 밀리초를 `totalUnits`/`remainingUnits`로 넘길 수 있습니다. 프로젝트 고유 규칙은 `createCustomRefundPolicy<Context>({ calculate })`로 연결하며, callback도 `Result<RefundEntitlement, E>`를 반환합니다. 공통 장부 검증·반올림·quote 형식은 그대로 유지됩니다. 모든 quote에는 exclusive `validUntil`이 있으며 기본 TTL은 5분입니다. 경과시간 정책은 다음 구간 경계, 달력 정책은 `remainingCalendarDays().validUntil`을 함께 적용해 더 이른 시각에 자동 만료됩니다.
+
+`RefundQuote`는 JSON으로 감사·저장할 수 있지만, 직렬화하면 비열거 실행 seal은 의도적으로 사라집니다. `parseRefundQuote(unknown)`은 구조와 공통 산술만 검증한 **비실행** `ParsedRefundQuote`를 반환합니다. 저장값을 다시 실행하려면 저장 당시와 같은 `policy.id`/`version` 설정과 quote 입력으로 `policy.restoreQuote`를 호출해야 합니다. `restoreQuote`가 내부에서 parse까지 수행하므로 별도 `parseRefundQuote` 호출은 감사 화면·진단에 구조만 먼저 읽고 싶을 때 선택적으로 사용합니다.
+
+```ts
+import {
+  createRefundPolicy,
+  isErr,
+  orThrow,
+  parseRefundQuote,
+  type ParsedRefundQuote,
+  type Payment,
+} from '@gj-kit/toss-payments';
+
+const persistedPercentagePolicy = orThrow(createRefundPolicy({
+  id: 'subscription-percentage',
+  version: '2026-08-01',
+  kind: 'percentage',
+  rateBps: 8_000,
+  rounding: 'floor',
+}));
+
+export function restoreStoredPercentageQuote(input: {
+  stored: unknown;
+  payment: Payment;                    // fresh GET 결과가 저장 시 fingerprint/잔액과 같아야 함
+  basisAmount: number;
+  alreadyRefundedAmount: number;
+  expectedBalanceAmount: number;
+  evaluatedAt: string;                 // 저장 당시 quote 입력 시각
+}) {
+  const inspected = parseRefundQuote(input.stored);
+  if (isErr(inspected)) return inspected;
+  const parsed: ParsedRefundQuote = inspected.value; // 감사/표시 가능, 실행은 불가
+
+  return persistedPercentagePolicy.restoreQuote(parsed, {
+    payment: input.payment,
+    basisAmount: input.basisAmount,
+    alreadyRefundedAmount: input.alreadyRefundedAmount,
+    expectedBalanceAmount: input.expectedBalanceAmount,
+    evaluatedAt: new Date(input.evaluatedAt),
+  }); // exact 재계산이 일치해야 runtime-sealed RefundQuote 반환
+}
+```
+
+정책 저장소는 quote의 `policy.id`/`version`으로 **그 견적을 만든 정확한 정책 설정**을 선택해야 합니다. `evaluatedAt`뿐 아니라 경과시간 정책의 `anchorAt`, 달력 정책의 `validUntil`·단위, custom 정책의 context처럼 재계산에 필요한 원본 사실도 프로젝트 DB에서 복원할 수 있어야 합니다. custom calculator는 같은 context에 결정적인 결과를 내야 하며 외부 요금표·사용량을 읽는다면 그 스냅샷 버전도 context에 포함하세요. 최신 정책이나 최신 시각으로 `restoreQuote`하지 마세요. 정책을 새로 평가하려는 경우에는 새 quote와 새 환불 요청·멱등키를 만드세요. `parseRefundQuote`는 서명 검증기가 아니므로 저장 quote와 재계산 입력/context의 무결성·CAS는 여전히 프로젝트 DB가 소유합니다.
+
+실행 계획에는 현재 결제 스냅샷이 비열거 심볼로 봉인됩니다. 정책 실행 API에서는 프로젝트 요청 ID에 대응하는 안정적인 멱등키가 필수입니다.
+
+```ts
+import { idempotencyKey, isErr, type RefundQuote } from '@gj-kit/toss-payments';
+import {
+  executeRefund,
+  prepareRefund,
+  prepareRefundExecution,
+  type CancelReason,
+  type SettledCancelable,
+} from '@gj-kit/toss-payments/server';
+
+export async function executeSettledRefund(input: {
+  target: SettledCancelable;
+  quote: RefundQuote;                  // policy.quote 또는 policy.restoreQuote 결과만 허용
+  reason: CancelReason;
+  refundRequestId: string;             // DB의 프로젝트 환불 요청 ID
+}) {
+  const prepared = prepareRefund(input.target, input.quote);       // quote → 현재 상태 plan
+  if (isErr(prepared) || prepared.value.kind === 'no-refund') return prepared;
+  const key = idempotencyKey(input.refundRequestId);
+  if (isErr(key)) return key;
+
+  const attempt = prepareRefundExecution(                       // request + key 불변 봉인
+    prepared.value,
+    { reason: input.reason },
+    { idempotencyKey: key.value },
+  );
+  if (isErr(attempt)) return attempt;
+
+  return executeRefund(client, attempt.value);                  // fresh GET 뒤 Toss cancel
+}
+```
+
+`prepareRefund`는 `policy.quote` 또는 `policy.restoreQuote`가 발급한 runtime-sealed quote만 받습니다. JSON parse 결과, object spread, 강제 캐스팅에는 seal이 없어 런타임에서도 `invalid-quote`로 거부됩니다. 그다음 paymentKey/orderId/currency·잔액뿐 아니라 status, method, lastTransactionKey, 부분취소 가능 여부와 민감정보 없는 취소 이력 지문을 대조합니다. canonical quote가 `full`이면 전액, `partial`이면 부분취소 가능 여부를 다시 확인합니다. `prepareRefundExecution`은 취소 사유·세금·환불계좌·cancelRequestId와 멱등키를 한 attempt에 봉인하므로 같은 attempt를 다른 본문으로 재사용할 수 없습니다. `executeRefund`는 Toss에서 Payment를 다시 조회한 뒤 상태 지문과 `validUntil`을 재검증하고 기존 cancel primitive에 위임합니다.
+
+기존 취소가 `IN_PROGRESS`면 저수준 `asCancelable`부터 추가 요청을 막고, 입금 완료 가상계좌는 기존과 동일하게 `refundAccount`가 필수입니다. 견적이나 정책 경계가 바뀌면 재조회 → 재견적 → 새 프로젝트 환불 요청 ID/멱등키로 시작하세요. 비열거 봉인이 붙은 plan/attempt는 영속화 대상이 아닙니다.
+
+#### 4.2.2 결제·환불 상태 스냅샷
+
+`PaymentStatus`는 단방향 상태 머신이 아닙니다. 가상계좌 입금 오류에는 `DONE → WAITING_FOR_DEPOSIT` 역전이가 있고, 해외 간편결제 취소는 금액상 잔액이 줄었어도 `cancelStatus: 'IN_PROGRESS'`일 수 있습니다. 그래서 라이브러리는 전이를 임의로 거부하지 않고, 민감 필드를 제거한 스냅샷과 두 스냅샷의 diff를 제공합니다.
+
+```ts
+import {
+  diffPaymentState,
+  summarizePaymentState,
+  type Payment,
+  type PaymentStateSnapshot,
+} from '@gj-kit/toss-payments';
+
+export function inspectPaymentUpdate(previous: PaymentStateSnapshot, fresh: Payment) {
+  const next = summarizePaymentState(fresh);     // secret/raw/카드·계좌/취소 사유 제외
+  const compared = diffPaymentState(previous, next);
+  if (!compared.ok) return compared;             // 다른 paymentKey/orderId만 Err
+
+  if (next.hasPendingCancellation) {
+    // provider 완료로 장부 환불액을 올리지 않는다. 재조회로 DONE을 확인해야 한다.
+  }
+  return compared;                               // 잔액 증가·취소 이력 제거는 warning
+}
+```
+
+`amountState: 'none' | 'partial' | 'full'`과 `hasPendingCancellation`은 독립 축입니다. 금액상 `full`이어도 provider 확정 전이면 lifecycle은 성공 상태가 아니라 `cancellation-pending`입니다. 따라서 `CancelOutcome.pending === true`인 응답을 곧바로 `REFUND_SUCCEEDED`로 원장에 기록하지 마세요. `CANCEL_STATUS_CHANGED` 웹훅도 `unverified` 등급이므로 payload만 믿지 말고 기존 `prefetched`/`refetch()` 경로로 최신 `Payment`를 조회한 뒤 `summarizePaymentState`를 다시 만드세요. 스냅샷에는 `schemaVersion: 1`이 있고 직렬화 가능하지만, 저장 순서·CAS·원장은 프로젝트 DB가 소유합니다. in-process 이벤트 버스를 원장으로 쓰면 안 됩니다.
 
 ### 4.3 자동결제(빌링): 인증 → 발급 → 승인
 

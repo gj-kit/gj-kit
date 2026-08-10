@@ -182,9 +182,15 @@ export function isDone(p: Payment): p is Payment & { status: 'DONE'; approvedAt:
  * 완전 취소 판정 — ⚠ `status === 'CANCELED'` 검사가 아니다.
  *
  * Phase 0 실측(2026-08-09): 부분취소 이력이 있으면 잔액 전액 취소 후에도
- * status가 `PARTIAL_CANCELED`로 남는다(balanceAmount 0). 따라서 판정은
- * `balanceAmount === 0 && cancels 존재`가 유일하게 올바르다.
+ * status가 `PARTIAL_CANCELED`로 남는다(balanceAmount 0). 따라서 CANCELED 문자열만
+ * 검사하지 않고, `balanceAmount === 0`과 취소 상태/이력 신호를 함께 본다. 취소 신호가
+ * 없는 READY의 잔액 0은 완전 취소가 아니다.
  */
 export function isFullyCanceled(p: Payment): boolean {
-  return p.balanceAmount === 0 && (p.cancels?.length ?? 0) > 0;
+  return (
+    p.balanceAmount === 0 &&
+    (p.status === 'CANCELED' ||
+      p.status === 'PARTIAL_CANCELED' ||
+      (p.cancels?.length ?? 0) > 0)
+  );
 }

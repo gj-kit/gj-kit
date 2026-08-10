@@ -4,6 +4,8 @@ export * from './result';
 export * from './keys';
 export * from './ids';
 export * from './payment';
+export * from './payment-state';
+export * from './refund';
 export * from './errors';
 // §3.2 audit — 타입 + 감사 가능한 denylist 상수만 공개 (redaction 순회기는 내부 구현).
 // events.ts는 재export 금지 — 제네릭 이미터 런타임은 내부 모듈, 공개 별칭은 "./server"에서.

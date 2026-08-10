@@ -93,7 +93,13 @@ describe('asCancelable — 3-변형 판별 + 잔액 기준 완전 취소 판정'
     }
     // 부분취소 이력 + 잔액 있음 → 여전히 취소 가능
     const partial = asCancelable(
-      asPaymentFixture(rawPayment({ status: 'PARTIAL_CANCELED', balanceAmount: 700 })),
+      asPaymentFixture(
+        rawPayment({
+          status: 'PARTIAL_CANCELED',
+          balanceAmount: 700,
+          cancels: [rawCancelTransaction({ cancelAmount: 300, refundableAmount: 700 })],
+        }),
+      ),
     );
     expect(isOk(partial)).toBe(true);
     // 단일 전액 취소 후 CANCELED → already-fully-canceled
@@ -101,6 +107,143 @@ describe('asCancelable — 3-변형 판별 + 잔액 기준 완전 취소 판정'
       asPaymentFixture(rawPayment({ status: 'CANCELED', balanceAmount: 0 })),
     );
     expect(isErr(canceled)).toBe(true);
+  });
+
+  it('status·잔액·취소 이력이 모순이면 cancelable을 만들지 않는다', () => {
+    const canceledWithBalance = asCancelable(
+      asPaymentFixture(rawPayment({ status: 'CANCELED', balanceAmount: 100 })),
+    );
+    expect(
+      !canceledWithBalance.ok && canceledWithBalance.error.kind === 'inconsistent-payment-state'
+        ? canceledWithBalance.error.reason
+        : null,
+    ).toBe('canceled-status-with-balance');
+
+    for (const cancels of [null, [rawCancelTransaction()]] as const) {
+      const zeroDone = asCancelable(
+        asPaymentFixture(rawPayment({ status: 'DONE', balanceAmount: 0, cancels })),
+      );
+      expect(
+        !zeroDone.ok && zeroDone.error.kind === 'inconsistent-payment-state'
+          ? zeroDone.error.reason
+          : null,
+      ).toBe('zero-balance-with-non-canceled-status');
+    }
+
+    const partialWithoutHistory = asCancelable(
+      asPaymentFixture(
+        rawPayment({ status: 'PARTIAL_CANCELED', balanceAmount: 700, cancels: null }),
+      ),
+    );
+    expect(
+      !partialWithoutHistory.ok && partialWithoutHistory.error.kind === 'inconsistent-payment-state'
+        ? partialWithoutHistory.error.reason
+        : null,
+    ).toBe('cancellation-status-without-history');
+
+    const completedWithDoneStatus = asCancelable(
+      asPaymentFixture(
+        rawPayment({
+          status: 'DONE',
+          balanceAmount: 700,
+          cancels: [rawCancelTransaction({ cancelAmount: 300, refundableAmount: 700 })],
+        }),
+      ),
+    );
+    expect(
+      !completedWithDoneStatus.ok &&
+        completedWithDoneStatus.error.kind === 'inconsistent-payment-state'
+        ? completedWithDoneStatus.error.reason
+        : null,
+    ).toBe('completed-cancel-status-mismatch');
+
+    const excessiveBalance = asCancelable(
+      asPaymentFixture(rawPayment({ status: 'DONE', totalAmount: 1000, balanceAmount: 1200 })),
+    );
+    expect(
+      !excessiveBalance.ok && excessiveBalance.error.kind === 'inconsistent-payment-state'
+        ? excessiveBalance.error.reason
+        : null,
+    ).toBe('balance-exceeds-total');
+
+    const partialWithoutReducedBalance = asCancelable(
+      asPaymentFixture(
+        rawPayment({
+          status: 'PARTIAL_CANCELED',
+          totalAmount: 1000,
+          balanceAmount: 1000,
+          cancels: [rawCancelTransaction({ cancelAmount: 100, refundableAmount: 1000 })],
+        }),
+      ),
+    );
+    expect(
+      !partialWithoutReducedBalance.ok &&
+        partialWithoutReducedBalance.error.kind === 'inconsistent-payment-state'
+        ? partialWithoutReducedBalance.error.reason
+        : null,
+    ).toBe('partial-status-without-canceled-amount');
+
+    const abortedOnly = asCancelable(
+      asPaymentFixture(
+        rawPayment({
+          status: 'PARTIAL_CANCELED',
+          balanceAmount: 700,
+          cancels: [
+            rawCancelTransaction({
+              cancelAmount: 300,
+              refundableAmount: 700,
+              cancelStatus: 'ABORTED',
+            }),
+          ],
+        }),
+      ),
+    );
+    expect(
+      !abortedOnly.ok && abortedOnly.error.kind === 'inconsistent-payment-state'
+        ? abortedOnly.error.reason
+        : null,
+    ).toBe('partial-status-without-effective-cancellation');
+  });
+
+  it('진행 중인 provider 취소가 있으면 status와 무관하게 추가 취소를 차단한다', () => {
+    const result = asCancelable(
+      asPaymentFixture(
+        rawPayment({
+          status: 'PARTIAL_CANCELED',
+          balanceAmount: 700,
+          cancels: [
+            rawCancelTransaction({
+              transactionKey: 'pending-cancel-1',
+              cancelAmount: 300,
+              refundableAmount: 700,
+              cancelStatus: 'IN_PROGRESS',
+            }),
+          ],
+        }),
+      ),
+    );
+
+    expect(result).toEqual({
+      ok: false,
+      error: {
+        source: 'library',
+        kind: 'pending-cancellation',
+        paymentKey: 'tviva20260809abcdef',
+        status: 'PARTIAL_CANCELED',
+        transactionKeys: ['pending-cancel-1'],
+      },
+    });
+
+    const zeroDonePending = asCancelable(
+      asPaymentFixture(
+        rawPayment({
+          status: 'DONE',
+          balanceAmount: 0,
+          cancels: [rawCancelTransaction({ cancelStatus: 'IN_PROGRESS' })],
+        }),
+      ),
+    );
+    expect(!zeroDonePending.ok && zeroDonePending.error.kind).toBe('pending-cancellation');
   });
 });
 
@@ -293,10 +436,17 @@ describe('cancels — 결과 해석', () => {
       }),
     }));
     const client = testClient(pair.fetch);
-    const r = await client.cancels.cancelFully(settledTarget({ status: 'PARTIAL_CANCELED', balanceAmount: 700 }), {
-      reason: reason(),
-      expectedAmount: 700,
-    });
+    const r = await client.cancels.cancelFully(
+      settledTarget({
+        status: 'PARTIAL_CANCELED',
+        balanceAmount: 700,
+        cancels: [rawCancelTransaction({ cancelAmount: 300, refundableAmount: 700 })],
+      }),
+      {
+        reason: reason(),
+        expectedAmount: 700,
+      },
+    );
     if (!r.ok) return expect.unreachable('성공해야 한다');
     expect(r.value.fullyCanceled).toBe(true);
     expect(r.value.payment.status).toBe('PARTIAL_CANCELED');
@@ -320,6 +470,41 @@ describe('cancels — 결과 해석', () => {
     });
     if (!r.ok) return expect.unreachable('성공해야 한다');
     expect(r.value.pending).toBe(true);
+  });
+
+  it('cancelStatus ABORTED는 성공 outcome이 아니라 명시적 library 실패다', async () => {
+    const pair = mockFetch(() => ({
+      status: 200,
+      body: rawPayment({
+        // 비동기 취소가 거부되면 결제 status/잔액은 원래 상태로 복구될 수 있다.
+        status: 'DONE',
+        balanceAmount: 1000,
+        lastTransactionKey: 'txn-cancel-aborted',
+        cancels: [
+          rawCancelTransaction({
+            transactionKey: 'txn-cancel-aborted',
+            cancelStatus: 'ABORTED',
+            cancelRequestId: 'cr-aborted-1',
+          }),
+        ],
+      }),
+    }));
+
+    const result = await testClient(pair.fetch).cancels.cancelFully(settledTarget(), {
+      reason: reason(),
+      expectedAmount: 1000,
+    });
+
+    expect(result).toEqual({
+      ok: false,
+      error: {
+        source: 'library',
+        kind: 'cancel-aborted',
+        paymentKey: 'tviva20260809abcdef',
+        transactionKey: 'txn-cancel-aborted',
+        cancelRequestId: 'cr-aborted-1',
+      },
+    });
   });
 
   it('toss 에러는 retry 티켓 없이 코드 테이블 매핑 (403 NOT_CANCELABLE_AMOUNT → AMOUNT)', async () => {

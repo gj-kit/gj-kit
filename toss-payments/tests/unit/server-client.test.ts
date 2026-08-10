@@ -165,6 +165,39 @@ describe('createTossClient — 에러 매핑 (코드 테이블 판정, HTTP stat
     if (isErr(r)) expect(r.error.source).toBe('network');
   });
 
+  it.each([
+    ['null 원소', [null]],
+    ['필수 필드 누락 원소', [{ transactionKey: 'cancel-incomplete' }]],
+  ])('2xx의 cancels %s도 Payment로 통과시키지 않는다', async (_, cancels) => {
+    const { fetch } = mockFetch(() => ({
+      status: 200,
+      body: rawPayment({ cancels: cancels as never }),
+    }));
+    const result = await createTossClient(secretKey(), { fetch }).getPayment(
+      orThrow(paymentKey('pk-x')),
+    );
+
+    expect(result).toMatchObject({
+      ok: false,
+      error: { source: 'network', code: 'NETWORK_ERROR', retryable: true },
+    });
+  });
+
+  it.each([
+    ['currency', { currency: 'EUR' }],
+    ['lastTransactionKey', { lastTransactionKey: 123 }],
+  ])('환불 실행 지문에 쓰는 %s가 잘못된 2xx도 차단한다', async (_, overrides) => {
+    const { fetch } = mockFetch(() => ({ status: 200, body: rawPayment(overrides) }));
+    const result = await createTossClient(secretKey(), { fetch }).getPayment(
+      orThrow(paymentKey('pk-x')),
+    );
+
+    expect(result).toMatchObject({
+      ok: false,
+      error: { source: 'network', code: 'NETWORK_ERROR', retryable: true },
+    });
+  });
+
   it('비-2xx + 비토스 형식(HTML 에러 페이지) → source network(재시도 가능) — toss UNKNOWN_ERROR 오분류 금지', async () => {
     const htmlFetch = (async () =>
       new Response('<html><body>502 Bad Gateway</body></html>', { status: 502 })) as typeof fetch;

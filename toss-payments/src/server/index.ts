@@ -76,6 +76,25 @@ export type {
   TossCancels,
 } from './cancel';
 
+// 비즈니스 환불 정책 quote → 현재 Payment 스냅샷 결속 → 기존 cancel primitive 실행
+export { executeRefund, prepareRefund, prepareRefundExecution } from './refund';
+export type {
+  AwaitingDepositRefundRequest,
+  DepositedVirtualAccountRefundRequest,
+  NoRefundPreparation,
+  RefundExecutionAttempt,
+  RefundExecutionAttemptOptions,
+  RefundExecutionError,
+  RefundExecutionPlan,
+  RefundExecutionRequest,
+  RefundPlanError,
+  RefundPlanErrorReason,
+  RefundPreparation,
+  RefundRuntimeOptions,
+  RefundTargetKind,
+  SettledRefundRequest,
+} from './refund';
+
 // §2 파사드 — 배선을 누락할 수 없는 조립층 (기존 팩토리 4종에 전량 위임)
 export { createTossPayments, defineTossPaymentsConfig } from './facade';
 export type {

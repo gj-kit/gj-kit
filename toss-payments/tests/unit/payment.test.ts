@@ -70,7 +70,7 @@ function payment(overrides: Partial<CardPayment>): Payment {
   return { ...basePayment, ...overrides } as Payment;
 }
 
-describe('isFullyCanceled — balanceAmount === 0 && cancels 존재 (Phase 0 실측)', () => {
+describe('isFullyCanceled — balanceAmount === 0 + 취소 상태/이력 신호 (Phase 0 실측)', () => {
   it('부분취소 이력 후 잔액 0: status PARTIAL_CANCELED여도 완전 취소다 (실측 케이스)', () => {
     const p = payment({ status: 'PARTIAL_CANCELED', balanceAmount: 0, cancels: [cancelTx, cancelTx] });
     expect(isFullyCanceled(p)).toBe(true);
@@ -79,6 +79,15 @@ describe('isFullyCanceled — balanceAmount === 0 && cancels 존재 (Phase 0 실
   it('단일 전액 취소: status CANCELED + 잔액 0', () => {
     const p = payment({ status: 'CANCELED', balanceAmount: 0, cancels: [cancelTx] });
     expect(isFullyCanceled(p)).toBe(true);
+  });
+
+  it('취소 상태와 잔액 0이면 응답 이력이 누락돼도 완전 취소로 보수 판정한다', () => {
+    expect(isFullyCanceled(payment({ status: 'CANCELED', balanceAmount: 0, cancels: null }))).toBe(
+      true,
+    );
+    expect(
+      isFullyCanceled(payment({ status: 'PARTIAL_CANCELED', balanceAmount: 0, cancels: null })),
+    ).toBe(true);
   });
 
   it('잔액이 남아 있으면 status와 무관하게 false', () => {

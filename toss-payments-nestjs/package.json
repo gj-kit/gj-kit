@@ -25,7 +25,7 @@
     "test:types": "vitest run --project types"
   },
   "peerDependencies": {
-    "@gj-kit/toss-payments": "workspace:^0.2.0",
+    "@gj-kit/toss-payments": "^0.2.0 || ^0.3.0",
     "@nestjs/common": "^10 || ^11",
     "reflect-metadata": "^0.1.13 || ^0.2",
     "rxjs": "^7"

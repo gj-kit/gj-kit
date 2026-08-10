@@ -17,7 +17,7 @@ import {
   type PaymentKey,
 } from '../core/ids';
 import type { ApiSecretKey, Env, WidgetSecretKey } from '../core/keys';
-import type { Payment } from '../core/payment';
+import type { CancelTransaction, Payment } from '../core/payment';
 import { err, ok, type Result } from '../core/result';
 import { createCancels, type CancelRetryStore, type TossCancels } from './cancel';
 import type { TossEventMap, TossEvents } from './events';
@@ -234,8 +234,42 @@ export function parsePaymentChecked(data: unknown): Result<Payment, TransportFai
         '도서문화상품권',
         '게임문화상품권',
       ].includes(record['method']));
+  const validCurrency =
+    record?.['currency'] === 'KRW' ||
+    record?.['currency'] === 'USD' ||
+    record?.['currency'] === 'JPY';
+  const validLastTransactionKey =
+    record?.['lastTransactionKey'] === null ||
+    typeof record?.['lastTransactionKey'] === 'string';
   const validAmount = (value: unknown): boolean =>
     typeof value === 'number' && Number.isSafeInteger(value) && value >= 0;
+  const validCancelTransaction = (value: unknown): value is CancelTransaction => {
+    if (typeof value !== 'object' || value === null || Array.isArray(value)) return false;
+    const cancel = value as Record<string, unknown>;
+    return (
+      typeof cancel['transactionKey'] === 'string' &&
+      cancel['transactionKey'].length > 0 &&
+      typeof cancel['cancelAmount'] === 'number' &&
+      Number.isSafeInteger(cancel['cancelAmount']) &&
+      cancel['cancelAmount'] > 0 &&
+      typeof cancel['cancelReason'] === 'string' &&
+      validAmount(cancel['taxFreeAmount']) &&
+      validAmount(cancel['taxExemptionAmount']) &&
+      validAmount(cancel['refundableAmount']) &&
+      validAmount(cancel['transferDiscountAmount']) &&
+      validAmount(cancel['easyPayDiscountAmount']) &&
+      typeof cancel['canceledAt'] === 'string' &&
+      Number.isFinite(Date.parse(cancel['canceledAt'])) &&
+      (cancel['receiptKey'] === null || typeof cancel['receiptKey'] === 'string') &&
+      (cancel['cancelStatus'] === 'DONE' ||
+        cancel['cancelStatus'] === 'IN_PROGRESS' ||
+        cancel['cancelStatus'] === 'ABORTED') &&
+      (cancel['cancelRequestId'] === null || typeof cancel['cancelRequestId'] === 'string')
+    );
+  };
+  const validCancels =
+    record?.['cancels'] === null ||
+    (Array.isArray(record?.['cancels']) && record['cancels'].every(validCancelTransaction));
   if (
     record === null ||
     paymentKeyValue === null ||
@@ -245,10 +279,12 @@ export function parsePaymentChecked(data: unknown): Result<Payment, TransportFai
     !validStatus ||
     !validType ||
     !validMethod ||
+    !validCurrency ||
+    !validLastTransactionKey ||
     !validAmount(record['totalAmount']) ||
     !validAmount(record['balanceAmount']) ||
     typeof record['isPartialCancelable'] !== 'boolean' ||
-    (record['cancels'] !== null && !Array.isArray(record['cancels'])) ||
+    !validCancels ||
     (record['status'] === 'DONE' && typeof record['approvedAt'] !== 'string')
   ) {
     return err({

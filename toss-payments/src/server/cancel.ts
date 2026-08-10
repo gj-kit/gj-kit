@@ -24,6 +24,10 @@ import type {
   PaymentStatus,
   VirtualAccountPayment,
 } from '../core/payment';
+import {
+  summarizePaymentState,
+  type PaymentStateConsistencyIssue,
+} from '../core/payment-state';
 import { err, ok, type Result } from '../core/result';
 // parsePayment는 값 import — client.ts와의 순환은 함수 선언만 서로 참조하므로 안전하다
 // (ESM 라이브 바인딩 + tsup 번들 시 단일 청크).
@@ -104,18 +108,56 @@ export type NotCancelableError =
     }
   /**
    * balanceAmount === 0 — Phase 0 실측(2026-08-09): 부분취소 이력이 있으면 잔액 전액
-   * 취소 후에도 status가 PARTIAL_CANCELED로 남는다. status 무관하게 잔액이 판정 기준.
+   * 취소 후에도 status가 PARTIAL_CANCELED로 남는다. 취소 status의 잔액 0만 완료로 보고,
+   * 비취소 status의 잔액 0은 상태 불일치로 차단한다.
    */
   | {
       readonly source: 'library';
       readonly kind: 'already-fully-canceled';
       readonly paymentKey: PaymentKey;
       readonly status: 'CANCELED' | 'PARTIAL_CANCELED';
+    }
+  | {
+      /** 타입상 Payment여도 status·balance·취소 이력이 서로 모순이면 실행하지 않는다. */
+      readonly source: 'library';
+      readonly kind: 'inconsistent-payment-state';
+      readonly paymentKey: PaymentKey;
+      readonly status: PaymentStatus;
+      readonly balanceAmount: number;
+      /** summarizePaymentState와 동일한 단일 불변식 판정 결과. */
+      readonly reason: PaymentStateConsistencyIssue['kind'];
+      readonly issue: PaymentStateConsistencyIssue;
+    }
+  | {
+      /** 해외 결제 등 provider 취소가 확정되기 전에는 추가 취소를 시작하지 않는다. */
+      readonly source: 'library';
+      readonly kind: 'pending-cancellation';
+      readonly paymentKey: PaymentKey;
+      readonly status: PaymentStatus;
+      readonly transactionKeys: readonly string[];
     };
 
 export function asCancelable(payment: Payment): Result<CancelablePayment, NotCancelableError> {
   const status = payment.status;
-  if (status === 'CANCELED' || (status === 'PARTIAL_CANCELED' && payment.balanceAmount === 0)) {
+  const cancels = payment.cancels ?? [];
+
+  const pendingTransactionKeys = cancels
+    .filter((cancel) => cancel.cancelStatus === 'IN_PROGRESS')
+    .map((cancel) => cancel.transactionKey);
+  if (pendingTransactionKeys.length > 0) {
+    return err({
+      source: 'library',
+      kind: 'pending-cancellation',
+      paymentKey: payment.paymentKey,
+      status,
+      transactionKeys: pendingTransactionKeys,
+    });
+  }
+
+  if (
+    payment.balanceAmount === 0 &&
+    (status === 'CANCELED' || status === 'PARTIAL_CANCELED')
+  ) {
     return err({
       source: 'library',
       kind: 'already-fully-canceled',
@@ -123,6 +165,21 @@ export function asCancelable(payment: Payment): Result<CancelablePayment, NotCan
       status,
     });
   }
+
+  const state = summarizePaymentState(payment);
+  const issue = state.consistencyIssues[0];
+  if (issue !== undefined) {
+    return err({
+      source: 'library',
+      kind: 'inconsistent-payment-state',
+      paymentKey: payment.paymentKey,
+      status,
+      balanceAmount: payment.balanceAmount,
+      reason: issue.kind,
+      issue,
+    });
+  }
+
   if (status === 'WAITING_FOR_DEPOSIT') {
     // 검증 통과가 브랜드 부여의 유일한 경로 — status 협착은 위 분기로 런타임 확인 완료
     return ok({
@@ -187,8 +244,8 @@ export function refundAccount(input: {
 export interface CancelOutcome {
   /** 전액 취소여도 status 'CANCELED' 단정 금지 — 부분취소 이력이 있으면 PARTIAL_CANCELED 유지(실측). */
   readonly payment: Payment & { readonly status: 'CANCELED' | 'PARTIAL_CANCELED' };
-  /** 이번 취소 건. */
-  readonly cancel: CancelTransaction;
+  /** 이번 취소 건. ABORTED는 CancelError로 분리되므로 성공 outcome에는 들어오지 않는다. */
+  readonly cancel: CancelTransaction & { readonly cancelStatus: 'DONE' | 'IN_PROGRESS' };
   /** 완전 취소 판정의 유일한 기준: balanceAmount === 0. status로 판정하지 않는다. */
   readonly fullyCanceled: boolean;
   /** cancelStatus === 'IN_PROGRESS' (PayPal 등 해외 비동기) → CANCEL_STATUS_CHANGED 웹훅 대기. */
@@ -271,7 +328,15 @@ export type CancelError =
   | TossApiFailure<CancelErrorCode>
   /** 응답 유실 — retry(ticket)로 동일 멱등키+동일 body 재실행. */
   | (TransportFailure & { readonly retry: CancelRetryTicket })
-  | CancelPreflightError;
+  | CancelPreflightError
+  | {
+      /** provider가 취소 트랜잭션을 최종 거부했다. 같은 멱등키 재시도로 성공시킬 수 없다. */
+      readonly source: 'library';
+      readonly kind: 'cancel-aborted';
+      readonly paymentKey: PaymentKey;
+      readonly transactionKey: string;
+      readonly cancelRequestId: string | null;
+    };
 
 /** 취소 실행 네임스페이스 — TossServerClient.cancels 의 타입. */
 export interface TossCancels<E extends Env> {
@@ -518,16 +583,9 @@ async function executeCancel(
     return err(invalidResponse(String(parsed.error.cause), makeTicket()));
   }
   const payment = parsed.value;
-  if (
-    (payment.status !== 'CANCELED' && payment.status !== 'PARTIAL_CANCELED') ||
-    payment.paymentKey !== paymentKey ||
-    payment.balanceAmount !== sealed.previousBalanceAmount - sealed.expectedCancelAmount
-  ) {
+  if (payment.paymentKey !== paymentKey) {
     return err(
-      invalidResponse(
-        '취소 2xx 응답이 요청(paymentKey/status/balanceAmount)과 일치하지 않습니다.',
-        makeTicket(),
-      ),
+      invalidResponse('취소 2xx 응답의 paymentKey가 요청과 일치하지 않습니다.', makeTicket()),
     );
   }
   const cancels = payment.cancels ?? [];
@@ -544,11 +602,35 @@ async function executeCancel(
     });
   }
 
+  if (cancel.cancelStatus === 'ABORTED') {
+    await deleteDurableRecord();
+    return err({
+      source: 'library',
+      kind: 'cancel-aborted',
+      paymentKey,
+      transactionKey: cancel.transactionKey,
+      cancelRequestId: cancel.cancelRequestId,
+    });
+  }
+
+  if (
+    (payment.status !== 'CANCELED' && payment.status !== 'PARTIAL_CANCELED') ||
+    payment.balanceAmount !== sealed.previousBalanceAmount - sealed.expectedCancelAmount
+  ) {
+    return err(
+      invalidResponse(
+        '취소 2xx 응답이 요청(status/balanceAmount)과 일치하지 않습니다.',
+        makeTicket(),
+      ),
+    );
+  }
+
   await deleteDurableRecord();
   return ok({
     // 취소 성공 응답의 status는 CANCELED|PARTIAL_CANCELED (문서/실측) — 응답 협착 단언
     payment: payment as CancelOutcome['payment'],
-    cancel,
+    // ABORTED는 위 분기에서 Err로 반환했으므로 성공 outcome은 두 상태로 협착된다.
+    cancel: cancel as CancelOutcome['cancel'],
     fullyCanceled: payment.balanceAmount === 0,
     pending: cancel.cancelStatus === 'IN_PROGRESS',
     idempotencyKey,

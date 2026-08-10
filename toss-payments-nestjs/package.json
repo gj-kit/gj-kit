@@ -1,6 +1,6 @@
 {
   "name": "@gj-kit/toss-payments-nestjs",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "description": "@gj-kit/toss-payments의 NestJS 통합 — DI 토큰·DynamicModule·rawBody 웹훅 헬퍼 (설계 §4)",
   "license": "MIT",
   "type": "module",
@@ -25,7 +25,7 @@
     "test:types": "vitest run --project types"
   },
   "peerDependencies": {
-    "@gj-kit/toss-payments": "workspace:^",
+    "@gj-kit/toss-payments": "workspace:^0.1.0",
     "@nestjs/common": "^10 || ^11",
     "reflect-metadata": "^0.1.13 || ^0.2",
     "rxjs": "^7"

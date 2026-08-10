@@ -1,6 +1,6 @@
-import { createElement } from 'react';
+import { createElement, useEffect, useId } from 'react';
 import type { ReactElement, ReactNode } from 'react';
-import { Link } from 'expo-router';
+import { Link, usePathname } from 'expo-router';
 import type { Href } from 'expo-router';
 import {
   Platform,
@@ -11,7 +11,8 @@ import {
   View,
 } from 'react-native';
 import { ContentFrame, Surface, Text, UiProvider, koStrings, useTheme } from '@gj-kit/expo-ui';
-import { siteThemes } from './site-theme';
+import { BrandMark, siteIcons, siteThemes } from './site-theme';
+import { useHydratedWindowWidth } from './responsive';
 
 type BreadcrumbItem = {
   readonly label: string;
@@ -21,21 +22,20 @@ type BreadcrumbItem = {
 function Semantic({
   as,
   children,
+  className,
+  id,
+  label,
 }: {
   readonly as: 'article' | 'footer' | 'header' | 'main' | 'nav' | 'section';
   readonly children: ReactNode;
+  readonly className?: string | undefined;
+  readonly id?: string | undefined;
+  readonly label?: string | undefined;
 }): ReactElement {
-  if (Platform.OS === 'web') return createElement(as, null, children);
-  return <View>{children}</View>;
-}
-
-function BrandMark(): ReactElement {
-  const theme = useTheme();
-  return (
-    <View style={[styles.brandMark, { backgroundColor: theme.colors.primary }]}>
-      <RNText style={[styles.brandGlyph, { color: theme.colors.onPrimary }]}>g</RNText>
-    </View>
-  );
+  if (Platform.OS === 'web') {
+    return createElement(as, { className, id, ...(label ? { 'aria-label': label } : {}) }, children);
+  }
+  return <View nativeID={id} accessibilityLabel={label}>{children}</View>;
 }
 
 function TextLink({
@@ -50,15 +50,20 @@ function TextLink({
   const theme = useTheme();
   const external = href.startsWith('http');
   return (
-    <Link href={href as Href} target={external ? '_blank' : undefined} asChild>
+    <Link
+      href={href as Href}
+      target={external ? '_blank' : undefined}
+      rel={external ? 'noopener noreferrer' : undefined}
+      asChild
+    >
       <Pressable
         accessibilityRole="link"
-        style={({ pressed }) => [styles.textLink, pressed ? styles.pressed : null]}
+        style={styles.textLink}
       >
         <RNText
           style={[
             styles.textLinkLabel,
-            { color: subtle ? theme.colors.textMuted : theme.colors.primary },
+            { color: subtle ? theme.colors.textMuted : theme.colors.primaryStrong },
           ]}
         >
           {children}
@@ -71,13 +76,15 @@ function TextLink({
 export function SeoPageShell({
   breadcrumbs,
   children,
+  wide = false,
 }: {
   readonly breadcrumbs: readonly BreadcrumbItem[];
   readonly children: ReactNode;
+  readonly wide?: boolean | undefined;
 }): ReactElement {
   return (
-    <UiProvider theme={siteThemes} colorScheme="light" strings={koStrings}>
-      <SeoPageFrame breadcrumbs={breadcrumbs}>{children}</SeoPageFrame>
+    <UiProvider theme={siteThemes} colorScheme="light" strings={koStrings} icons={siteIcons}>
+      <SeoPageFrame breadcrumbs={breadcrumbs} wide={wide}>{children}</SeoPageFrame>
     </UiProvider>
   );
 }
@@ -85,63 +92,42 @@ export function SeoPageShell({
 function SeoPageFrame({
   breadcrumbs,
   children,
+  wide,
 }: {
   readonly breadcrumbs: readonly BreadcrumbItem[];
   readonly children: ReactNode;
+  readonly wide: boolean;
 }): ReactElement {
   const theme = useTheme();
-  return (
-    <View style={[styles.page, { backgroundColor: theme.colors.background }]}>
-      <Semantic as="header">
-        <View
-          style={[
-            styles.header,
-            { backgroundColor: theme.colors.surface, borderBottomColor: theme.colors.line },
-          ]}
-        >
-          <ContentFrame maxWidth={1100} center padding={20} style={styles.headerInner}>
-            <Link href="/" asChild>
-              <Pressable
-                accessibilityRole="link"
-                accessibilityLabel="GJ Kit Expo UI 홈"
-                style={({ pressed }) => [styles.brand, pressed ? styles.pressed : null]}
-              >
-                <BrandMark />
-                <View>
-                  <RNText style={[styles.brandName, { color: theme.colors.text }]}>@gj-kit/expo-ui</RNText>
-                  <RNText style={[styles.brandMeta, { color: theme.colors.textMuted }]}>Expo & React Native UI</RNText>
-                </View>
-              </Pressable>
-            </Link>
+  const width = useHydratedWindowWidth();
+  const compactHeader = width < 760;
+  const pathname = usePathname();
+  const mainContentId = `main-content-${useId().replace(/[^a-zA-Z0-9_-]/g, '')}`;
+  const componentPath = breadcrumbs.some(
+    (item) => item.href === '/docs/components' || item.label.startsWith('컴포넌트'),
+  );
 
-            <Semantic as="nav">
-              <View style={styles.headerNav}>
-                <TextLink href="/docs" subtle>Docs</TextLink>
-                <TextLink href="/docs/components" subtle>Components</TextLink>
-                <TextLink href="/docs/getting-started" subtle>Getting started</TextLink>
-                <TextLink href="https://www.npmjs.com/package/@gj-kit/expo-ui">npm ↗</TextLink>
-              </View>
-            </Semantic>
+  useEffect(() => {
+    if (Platform.OS !== 'web') return;
+    window.scrollTo({ left: 0, top: 0, behavior: 'instant' as ScrollBehavior });
+  }, [pathname]);
+
+  const documentContent = (
+    <View style={styles.documentContent}>
+      <Semantic as="main" id={mainContentId}>
+        <View style={styles.landmarkHost}>
+          <ContentFrame maxWidth={wide ? 1320 : 1040} center padding={wide ? 32 : 28}>
+            <Breadcrumbs items={breadcrumbs} />
+            <Semantic as="article">{children}</Semantic>
           </ContentFrame>
         </View>
       </Semantic>
 
-      <ScrollView
-        style={styles.scroll}
-        contentContainerStyle={styles.scrollContent}
-        showsVerticalScrollIndicator={false}
-      >
-        <Semantic as="main">
-          <ContentFrame maxWidth={920} center padding={24}>
-            <Breadcrumbs items={breadcrumbs} />
-            <Semantic as="article">{children}</Semantic>
-          </ContentFrame>
-        </Semantic>
-
-        <Semantic as="footer">
-          <ContentFrame maxWidth={920} center padding={24}>
+      <Semantic as="footer">
+        <View style={styles.landmarkHost}>
+          <ContentFrame maxWidth={1320} center padding={32}>
             <View style={[styles.footer, { borderTopColor: theme.colors.line }]}>
-              <View>
+              <View style={styles.footerIdentity}>
                 <RNText style={[styles.footerBrand, { color: theme.colors.text }]}>@gj-kit/expo-ui</RNText>
                 <RNText style={[styles.footerCopy, { color: theme.colors.textMuted }]}>MIT · Type-safe primitives for Expo and React Native.</RNText>
               </View>
@@ -152,17 +138,135 @@ function SeoPageFrame({
               </View>
             </View>
           </ContentFrame>
-        </Semantic>
-      </ScrollView>
+        </View>
+      </Semantic>
     </View>
+  );
+
+  return (
+    <View
+      style={[
+        styles.page,
+        Platform.OS === 'web' ? styles.pageWeb : styles.pageNative,
+        { backgroundColor: theme.colors.background },
+      ]}
+    >
+      {Platform.OS === 'web'
+        ? createElement('a', { className: 'seo-skip-link', href: `#${mainContentId}` }, '본문으로 건너뛰기')
+        : null}
+      <Semantic as="header" className="seo-sticky-header">
+        <View
+          style={[
+            styles.header,
+            { backgroundColor: theme.colors.surface, borderBottomColor: theme.colors.line },
+          ]}
+        >
+          <ContentFrame maxWidth={1320} center padding={compactHeader ? 14 : 18} style={styles.headerInner}>
+            <Link href="/" asChild>
+              <Pressable
+                accessibilityRole="link"
+                accessibilityLabel="GJ Kit Expo UI 홈"
+                style={styles.brand}
+              >
+                <BrandMark size={38} />
+                {!compactHeader ? (
+                  <View>
+                    <RNText style={[styles.brandName, { color: theme.colors.text }]}>@gj-kit/expo-ui</RNText>
+                    <RNText style={[styles.brandMeta, { color: theme.colors.textMuted }]}>Expo & React Native UI</RNText>
+                  </View>
+                ) : null}
+              </Pressable>
+            </Link>
+
+            <Semantic as="nav" label="주요 문서">
+              <View style={styles.headerNav}>
+                <HeaderNavLink href="/docs" label="Docs" active={!componentPath} compact={compactHeader} />
+                <HeaderNavLink href="/docs/components" label="Components" active={componentPath} compact={compactHeader} />
+                {!compactHeader ? (
+                  <HeaderNavLink href="/docs/getting-started" label="Getting started" />
+                ) : null}
+                <HeaderNavLink
+                  href="https://www.npmjs.com/package/@gj-kit/expo-ui"
+                  label="npm ↗"
+                  compact={compactHeader}
+                  emphasis
+                />
+              </View>
+            </Semantic>
+          </ContentFrame>
+        </View>
+      </Semantic>
+      {Platform.OS === 'web' ? documentContent : (
+        <ScrollView
+          style={styles.scroll}
+          contentContainerStyle={styles.scrollContent}
+          showsVerticalScrollIndicator={false}
+        >
+          {documentContent}
+        </ScrollView>
+      )}
+    </View>
+  );
+}
+
+function HeaderNavLink({
+  href,
+  label,
+  active = false,
+  compact = false,
+  emphasis = false,
+}: {
+  readonly href: string;
+  readonly label: string;
+  readonly active?: boolean | undefined;
+  readonly compact?: boolean | undefined;
+  readonly emphasis?: boolean | undefined;
+}): ReactElement {
+  const theme = useTheme();
+  const external = href.startsWith('http');
+  return (
+    <Link
+      href={href as Href}
+      target={external ? '_blank' : undefined}
+      rel={external ? 'noopener noreferrer' : undefined}
+      asChild
+    >
+      <Pressable
+        accessibilityRole="link"
+        aria-current={active ? 'page' : undefined}
+        style={StyleSheet.flatten([
+          styles.headerNavLink,
+          compact ? styles.headerNavLinkCompact : null,
+          active ? { backgroundColor: theme.colors.primarySoft } : null,
+          emphasis
+            ? { backgroundColor: theme.colors.text, borderColor: theme.colors.text }
+            : null,
+        ])}
+      >
+        <RNText
+          style={[
+            styles.headerNavLabel,
+            {
+              color: emphasis
+                ? theme.colors.surface
+                : active
+                  ? theme.colors.primaryStrong
+                  : theme.colors.textMuted,
+            },
+          ]}
+        >
+          {label}
+        </RNText>
+      </Pressable>
+    </Link>
   );
 }
 
 function Breadcrumbs({ items }: { readonly items: readonly BreadcrumbItem[] }): ReactElement {
   const theme = useTheme();
   return (
-    <Semantic as="nav">
-      <View accessibilityLabel="현재 문서 경로" style={styles.breadcrumbs}>
+    <Semantic as="nav" label="현재 문서 경로">
+      <View style={styles.breadcrumbs}>
         {items.map((item, index) => (
           <View key={`${item.label}-${index}`} style={styles.breadcrumbItem}>
             {index > 0 ? (
@@ -171,7 +275,7 @@ function Breadcrumbs({ items }: { readonly items: readonly BreadcrumbItem[] }): 
             {item.href ? (
               <TextLink href={item.href} subtle>{item.label}</TextLink>
             ) : (
-              <RNText style={[styles.breadcrumbCurrent, { color: theme.colors.text }]}>{item.label}</RNText>
+              <RNText aria-current="page" style={[styles.breadcrumbCurrent, { color: theme.colors.text }]}>{item.label}</RNText>
             )}
           </View>
         ))}
@@ -192,8 +296,10 @@ export function SeoPageHeading({
   readonly preview?: string | undefined;
 }): ReactElement {
   const theme = useTheme();
+  const width = useHydratedWindowWidth();
+  const compact = width < 600;
   return (
-    <View style={styles.hero}>
+    <View style={[styles.hero, compact ? styles.heroCompact : null]}>
       <View style={styles.eyebrowRow}>
         <RNText style={[styles.eyebrow, { color: theme.colors.primary }]}>{eyebrow}</RNText>
         {preview ? (
@@ -205,11 +311,17 @@ export function SeoPageHeading({
       <RNText
         accessibilityRole="header"
         aria-level={1}
-        style={[styles.title, { color: theme.colors.text }]}
+        style={[styles.title, compact ? styles.titleCompact : null, { color: theme.colors.text }]}
       >
         {title}
       </RNText>
-      <Text role="body" color="textMuted" style={styles.description}>{description}</Text>
+      <Text
+        role="body"
+        color="textMuted"
+        style={[styles.description, compact ? styles.descriptionCompact : null]}
+      >
+        {description}
+      </Text>
     </View>
   );
 }
@@ -291,11 +403,11 @@ export function SeoLinkGrid({
     readonly badge?: string | undefined;
   }[];
 }): ReactElement {
-  return (
-    <View style={styles.linkGrid}>
-      {items.map((item) => <SeoLinkCard key={item.href} {...item} />)}
-    </View>
-  );
+  const cards = items.map((item) => <SeoLinkCard key={item.href} {...item} />);
+  if (Platform.OS === 'web') {
+    return createElement('div', { className: 'seo-link-grid' }, cards);
+  }
+  return <View style={styles.linkGrid}>{cards}</View>;
 }
 
 function SeoLinkCard({
@@ -314,7 +426,7 @@ function SeoLinkCard({
     <Link href={href as Href} asChild>
       <Pressable
         accessibilityRole="link"
-        style={({ pressed }) => [styles.linkCardPressable, pressed ? styles.pressed : null]}
+        style={styles.linkCardPressable}
       >
         <Surface padding="xl" style={styles.linkCard}>
           <View style={styles.linkCardHeading}>
@@ -323,8 +435,8 @@ function SeoLinkCard({
               <RNText style={[styles.linkCardBadge, { color: theme.colors.warning }]}>{badge}</RNText>
             ) : null}
           </View>
-          <Text role="caption" color="textMuted" style={styles.linkCardDescription}>{description}</Text>
-          <RNText aria-hidden style={[styles.linkCardArrow, { color: theme.colors.primary }]}>문서 보기 →</RNText>
+          <Text role="body" color="textMuted" style={styles.linkCardDescription}>{description}</Text>
+          <RNText aria-hidden style={[styles.linkCardArrow, { color: theme.colors.primaryStrong }]}>자세히 보기 <RNText>→</RNText></RNText>
         </Surface>
       </Pressable>
     </Link>
@@ -344,37 +456,52 @@ export function ReleaseNotice({ version }: { readonly version: string }): ReactE
 }
 
 const styles = StyleSheet.create({
-  page: { flex: 1, minHeight: '100%' },
+  page: { minHeight: '100%' },
+  pageNative: { flex: 1 },
+  pageWeb: { minHeight: '100vh' as never },
   scroll: { flex: 1 },
   scrollContent: { paddingBottom: 40 },
+  documentContent: { width: '100%' },
+  landmarkHost: { alignItems: 'center', width: '100%' },
   header: { borderBottomWidth: 1 },
   headerInner: {
     alignItems: 'center',
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 18,
+    gap: 16,
     justifyContent: 'space-between',
   },
-  brand: { alignItems: 'center', flexDirection: 'row', gap: 10 },
-  brandMark: { alignItems: 'center', borderRadius: 10, height: 36, justifyContent: 'center', width: 36 },
-  brandGlyph: { fontSize: 20, fontWeight: '900' },
+  brand: { alignItems: 'center', flexDirection: 'row', gap: 11, minHeight: 44 },
   brandName: { fontSize: 14, fontWeight: '800' },
   brandMeta: { fontSize: 11, marginTop: 2 },
-  headerNav: { alignItems: 'center', flexDirection: 'row', flexWrap: 'wrap', gap: 16 },
-  textLink: { alignSelf: 'flex-start' },
+  headerNav: { alignItems: 'center', flexDirection: 'row', flexWrap: 'wrap', gap: 4, justifyContent: 'flex-end' },
+  headerNavLink: {
+    alignItems: 'center',
+    borderColor: 'transparent',
+    borderRadius: 10,
+    borderWidth: 1,
+    justifyContent: 'center',
+    minHeight: 40,
+    paddingHorizontal: 12,
+  },
+  headerNavLinkCompact: { paddingHorizontal: 8 },
+  headerNavLabel: { fontSize: 13, fontWeight: '800' },
+  textLink: { alignSelf: 'flex-start', justifyContent: 'center', minHeight: 36 },
   textLinkLabel: { fontSize: 13, fontWeight: '700' },
-  pressed: { opacity: 0.72 },
   breadcrumbs: { alignItems: 'center', flexDirection: 'row', flexWrap: 'wrap', gap: 8, paddingTop: 24 },
   breadcrumbItem: { alignItems: 'center', flexDirection: 'row', gap: 8 },
   breadcrumbSeparator: { fontSize: 12 },
   breadcrumbCurrent: { fontSize: 13, fontWeight: '700' },
   hero: { paddingBottom: 38, paddingTop: 36 },
+  heroCompact: { paddingBottom: 28, paddingTop: 28 },
   eyebrowRow: { alignItems: 'center', flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginBottom: 14 },
   eyebrow: { fontSize: 12, fontWeight: '900', letterSpacing: 1.4 },
   previewBadge: { borderRadius: 999, paddingHorizontal: 10, paddingVertical: 5 },
   previewText: { fontSize: 11, fontWeight: '800' },
   title: { fontSize: 42, fontWeight: '900', letterSpacing: -1.5, lineHeight: 50, maxWidth: 760 },
+  titleCompact: { fontSize: 36, letterSpacing: -1.1, lineHeight: 43 },
   description: { fontSize: 17, lineHeight: 28, marginTop: 18, maxWidth: 760 },
+  descriptionCompact: { fontSize: 16, lineHeight: 26, marginTop: 16 },
   section: { gap: 16, paddingBottom: 22, paddingTop: 22 },
   sectionTitle: { fontSize: 24, fontWeight: '800', lineHeight: 32 },
   paragraph: { fontSize: 15, lineHeight: 26 },
@@ -382,14 +509,14 @@ const styles = StyleSheet.create({
   codePanel: { borderRadius: 14, borderWidth: 1, gap: 12, overflow: 'hidden', padding: 20 },
   codeLabel: { color: '#8FA4C7', fontSize: 10, fontWeight: '800', letterSpacing: 1.2 },
   codeText: { color: '#E7ECF5', fontFamily: 'monospace', fontSize: 13, lineHeight: 22 },
-  linkGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 14 },
-  linkCardPressable: { flexBasis: 270, flexGrow: 1, minWidth: 250 },
-  linkCard: { flex: 1, minHeight: 170 },
+  linkGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 16 },
+  linkCardPressable: { flexBasis: 280, flexGrow: 1, minWidth: 260 },
+  linkCard: { flex: 1, minHeight: 176 },
   linkCardHeading: { alignItems: 'flex-start', flexDirection: 'row', flexWrap: 'wrap', gap: 8, justifyContent: 'space-between' },
   linkCardTitle: { flexShrink: 1, fontSize: 17, fontWeight: '800', lineHeight: 24 },
   linkCardBadge: { fontSize: 10, fontWeight: '800' },
-  linkCardDescription: { lineHeight: 21, marginTop: 10 },
-  linkCardArrow: { fontSize: 12, fontWeight: '800', marginTop: 18 },
+  linkCardDescription: { fontSize: 14, lineHeight: 22, marginTop: 10 },
+  linkCardArrow: { fontSize: 12, fontWeight: '800', marginTop: 'auto', paddingTop: 18 },
   releaseNotice: { borderWidth: 1, gap: 6, marginBottom: 8 },
   releaseTitle: { fontSize: 13, fontWeight: '900' },
   footer: {
@@ -403,6 +530,7 @@ const styles = StyleSheet.create({
     paddingTop: 28,
   },
   footerBrand: { fontSize: 14, fontWeight: '800' },
-  footerCopy: { fontSize: 12, marginTop: 4 },
+  footerIdentity: { flexShrink: 1, maxWidth: '100%', minWidth: 0 },
+  footerCopy: { flexShrink: 1, fontSize: 12, marginTop: 4, maxWidth: '100%' },
   footerLinks: { flexDirection: 'row', flexWrap: 'wrap', gap: 16 },
 });

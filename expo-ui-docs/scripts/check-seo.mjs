@@ -74,7 +74,8 @@ for (const route of indexableRoutes) {
   const expectedUrl = `${siteUrl}${route}`;
   if (canonical !== expectedUrl) fail(`${route} canonical is ${canonical}, expected ${expectedUrl}`);
   if (ogUrl !== expectedUrl) fail(`${route} og:url is ${ogUrl}, expected ${expectedUrl}`);
-  if (!/<h1\b/i.test(html)) fail(`${route} has no h1`);
+  const h1Count = (html.match(/<h1\b/gi) ?? []).length;
+  if (h1Count !== 1) fail(`${route} has ${h1Count} h1 elements, expected exactly 1`);
   if (/name="robots"[^>]+content="[^"]*noindex/i.test(html)) fail(`${route} is unexpectedly noindex`);
   if (!/type="application\/ld\+json"/i.test(html)) fail(`${route} has no JSON-LD`);
   if ((html.match(/<a\b[^>]+href=/gi) ?? []).length === 0) fail(`${route} has no crawlable links`);
@@ -96,9 +97,70 @@ for (const route of indexableRoutes) {
 for (const entry of previews) {
   const route = `/docs/components/${entry.slug}`;
   const html = await readFile(routeFile(route), 'utf8');
+  const expectedUrl = `${siteUrl}${route}`;
   if (!/name="robots"[^>]+content="[^"]*noindex/i.test(html)) {
     fail(`${route} must remain noindex until npm v${entry.since} is public`);
   }
+  const canonical = matchContent(
+    html,
+    /<link[^>]+rel="canonical"[^>]+href="([^"]+)"/i,
+    'canonical',
+    route,
+  );
+  const ogUrl = matchContent(
+    html,
+    /<meta[^>]+property="og:url"[^>]+content="([^"]+)"/i,
+    'og:url',
+    route,
+  );
+  matchContent(html, /<title[^>]*>([^<]+)<\/title>/i, 'title', route);
+  matchContent(
+    html,
+    /<meta[^>]+name="description"[^>]+content="([^"]+)"/i,
+    'meta description',
+    route,
+  );
+  if (canonical !== expectedUrl || ogUrl !== expectedUrl) {
+    fail(`${route} preview metadata does not use its self URL`);
+  }
+  if ((html.match(/<h1\b/gi) ?? []).length !== 1) fail(`${route} preview must have exactly 1 h1`);
+  if (!/type="application\/ld\+json"/i.test(html)) fail(`${route} preview has no JSON-LD`);
+}
+
+const componentIndexHtml = await readFile(routeFile('/docs/components'), 'utf8');
+const expectedComponentPaths = catalog.components.map(
+  (entry) => `/docs/components/${entry.slug}`,
+);
+const actualComponentPaths = [
+  ...componentIndexHtml.matchAll(/<a\b[^>]+href="(\/docs\/components\/[^"#?]+)"/gi),
+].map((match) => match[1]);
+if (JSON.stringify(actualComponentPaths) !== JSON.stringify(expectedComponentPaths)) {
+  fail('component index crawlable links do not exactly match catalog order');
+}
+for (const requiredClass of ['seo-directory-hero', 'seo-directory-layout', 'seo-component-grid']) {
+  if (!componentIndexHtml.includes(requiredClass)) {
+    fail(`component index is missing the ${requiredClass} layout hook`);
+  }
+}
+
+const componentSchemas = [
+  ...componentIndexHtml.matchAll(
+    /<script[^>]+type="application\/ld\+json"[^>]*>([\s\S]*?)<\/script>/gi,
+  ),
+].map((match) => JSON.parse(match[1]));
+const itemList = componentSchemas.find((schema) => schema['@type'] === 'ItemList');
+if (!itemList) fail('component index has no ItemList JSON-LD');
+if (itemList.numberOfItems !== catalog.components.length) {
+  fail('component ItemList numberOfItems does not match catalog');
+}
+const expectedItemList = catalog.components.map((entry, index) => ({
+  '@type': 'ListItem',
+  position: index + 1,
+  name: entry.name,
+  url: `${siteUrl}/docs/components/${entry.slug}`,
+}));
+if (JSON.stringify(itemList.itemListElement) !== JSON.stringify(expectedItemList)) {
+  fail('component ItemList entries do not match catalog names, URLs, and order');
 }
 
 const notFound = await readFile(path.join(distDir, '+not-found.html'), 'utf8');

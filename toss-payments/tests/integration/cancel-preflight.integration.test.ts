@@ -30,7 +30,7 @@ afterAll(() => ctx.cleanup(), 60_000);
 interface PreflightFixture {
   readonly fixture: PaidBillingFixture;
   /** 잔액 1000의 취소 대상 — 이 파일의 테스트들은 잔액을 바꾸지 않는다. */
-  readonly target: SettledCancelable;
+  readonly target: Extract<SettledCancelable, { readonly partialAllowed: true }>;
 }
 
 let cached: Promise<PreflightFixture> | null = null;

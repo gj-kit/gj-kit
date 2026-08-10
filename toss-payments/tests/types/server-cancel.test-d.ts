@@ -20,6 +20,8 @@ describe('§3.2 cancel — 오용 = 컴파일 에러', () => {
   const awaiting = forge<AwaitingDepositCancelable>();
   const vaDeposited = forge<DepositedVaCancelable>();
   const settled = forge<SettledCancelable>();
+  const partialVa = forge<Extract<DepositedVaCancelable, { readonly partialAllowed: true }>>();
+  const partialSettled = forge<Extract<SettledCancelable, { readonly partialAllowed: true }>>();
   const reason = forge<CancelReason>();
   const acct = forge<RefundAccount>();
 
@@ -57,8 +59,8 @@ describe('§3.2 cancel — 오용 = 컴파일 에러', () => {
       refundAccount: acct,
     });
     void client.cancels.cancelFully(awaiting, { reason, expectedAmount: 1000 });
-    void client.cancels.cancelPartially(settled, { reason, amount: 500 });
-    void client.cancels.cancelPartially(vaDeposited, { reason, amount: 500, refundAccount: acct });
+    void client.cancels.cancelPartially(partialSettled, { reason, amount: 500 });
+    void client.cancels.cancelPartially(partialVa, { reason, amount: 500, refundAccount: acct });
     void client.cancels.retry(forge<CancelRetryTicket>());
   });
 
@@ -73,8 +75,8 @@ describe('§3.2 cancel — 오용 = 컴파일 에러', () => {
       cancelRequestId: crid,
     });
     void client.cancels.cancelFully(awaiting, { reason, expectedAmount: 1000, cancelRequestId: crid });
-    void client.cancels.cancelPartially(settled, { reason, amount: 500, cancelRequestId: crid });
-    void client.cancels.cancelPartially(vaDeposited, {
+    void client.cancels.cancelPartially(partialSettled, { reason, amount: 500, cancelRequestId: crid });
+    void client.cancels.cancelPartially(partialVa, {
       reason,
       amount: 500,
       refundAccount: acct,
@@ -82,6 +84,6 @@ describe('§3.2 cancel — 오용 = 컴파일 에러', () => {
     });
 
     // @ts-expect-error 평문 문자열은 불가 — cancelRequestId() 스마트 생성자(6-64자 검증) 통과 필수
-    void client.cancels.cancelPartially(settled, { reason, amount: 500, cancelRequestId: 'raw-1' });
+    void client.cancels.cancelPartially(partialSettled, { reason, amount: 500, cancelRequestId: 'raw-1' });
   });
 });

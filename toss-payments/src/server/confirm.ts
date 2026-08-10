@@ -538,7 +538,19 @@ export function createConfirmFlow<E extends Env>(
     // 2xx라도 빈 body/비객체 JSON이면 '빈 Payment' 제조 금지 — 필수 필드 가드 통과 후에만 Ok
     const parsed = parsePaymentChecked(r.value);
     if (!parsed.ok) return parsed;
-    // 승인 성공 응답의 status는 DONE|WAITING_FOR_DEPOSIT(가상계좌) — 응답 협착 단언(문서 근거)
+    if (
+      (parsed.value.status !== 'DONE' && parsed.value.status !== 'WAITING_FOR_DEPOSIT') ||
+      parsed.value.paymentKey !== checkout.paymentKey ||
+      parsed.value.orderId !== checkout.orderId ||
+      parsed.value.totalAmount !== checkout.amount
+    ) {
+      return err({
+        source: 'network',
+        code: 'NETWORK_ERROR',
+        retryable: true,
+        cause: new Error('결제 승인 2xx 응답이 요청(status/paymentKey/orderId/amount)과 일치하지 않습니다.'),
+      });
+    }
     return ok(parsed.value as ConfirmedPayment);
   };
 

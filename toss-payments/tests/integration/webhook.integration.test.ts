@@ -126,14 +126,17 @@ describe('DEPOSIT_CALLBACK secret 대조', () => {
 
 describe('dedupe — 재전송/이중 수신', () => {
   it('같은 픽스처 산출물(같은 transmission-id) 2회째 verify는 duplicate verdict', async () => {
-    const verifier = createWebhookVerifier({ dedupe: memoryDedupeStore() });
+    const verifier = createWebhookVerifier({ dedupe: memoryDedupeStore(), allowedSourceIps: false });
     const payload = webhookFixture.legacyEvent('BILLING_DELETED', {
       billingKey: 'wh-dedupe-billing-key',
       reason: '고객 요청',
     });
 
-    const first = expectOk(await verifier.verify(payload.rawBody, payload.headers), 'dedupe — 1회째');
-    expectFresh(first, 'dedupe — 1회째');
+    const first = expectFresh(
+      expectOk(await verifier.verify(payload.rawBody, payload.headers), 'dedupe — 1회째'),
+      'dedupe — 1회째',
+    );
+    await verifier.complete(first.webhook);
 
     const second = expectOk(await verifier.verify(payload.rawBody, payload.headers), 'dedupe — 2회째');
     if (!second.duplicate) {

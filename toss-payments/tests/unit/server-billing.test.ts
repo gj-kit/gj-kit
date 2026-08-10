@@ -1,6 +1,6 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
-import { customerKey, isErr, isOk, orThrow, orderId, orderName } from '../../src/server';
+import { customerKey, idempotencyKey, isErr, isOk, orThrow, orderId, orderName } from '../../src/server';
 import {
   confirmPendingAuth,
   createBillingFlow,
@@ -17,6 +17,7 @@ import { mockFetch, rawPayment, type RecordedCall } from './helpers';
 
 const CK = 'cust-0001';
 const sessionCk = () => orThrow(customerKey(CK));
+const approveOptions = () => ({ idempotencyKey: orThrow(idempotencyKey('billing-test-cycle-1')) });
 
 function apiClient(fetchImpl: typeof fetch) {
   return createTossClient(orThrow(parseApiSecretKey('test_sk_abcdef')), { fetch: fetchImpl });
@@ -180,7 +181,12 @@ describe('billing.issue — store.save 성공 후에만 Ok', () => {
 
 describe('billing.approve — 봉인 쌍으로만 승인', () => {
   const approveResponse = () =>
-    rawPayment({ type: 'BILLING', status: 'DONE', orderId: 'sub-202608-0001' });
+    rawPayment({
+      type: 'BILLING',
+      status: 'DONE',
+      orderId: 'sub-202608-0001',
+      totalAmount: 12_900,
+    });
 
   async function issuedProfile(pair: { fetch: typeof fetch; calls: RecordedCall[] }) {
     const store = memoryBillingStore();
@@ -204,7 +210,7 @@ describe('billing.approve — 봉인 쌍으로만 승인', () => {
     });
     const { billing, profile } = await issuedProfile(pair);
 
-    const paid = await billing.approve(profile, order());
+    const paid = await billing.approve(profile, order(), approveOptions());
     expect(isOk(paid)).toBe(true);
     if (isOk(paid)) expect(paid.value.status).toBe('DONE');
 
@@ -215,12 +221,61 @@ describe('billing.approve — 봉인 쌍으로만 승인', () => {
     expect(body['amount']).toBe(12_900);
   });
 
+  it('TypeScript 우회로 options를 누락해도 API 호출 전에 거부한다', async () => {
+    const pair = mockFetch(() => ({ status: 200, body: issueResponse }));
+    const { billing, profile } = await issuedProfile(pair);
+    const callsBefore = pair.calls.length;
+    const unsafeApprove = billing.approve as unknown as (
+      profile: BillingProfile,
+      billingOrder: ReturnType<typeof order>,
+    ) => ReturnType<typeof billing.approve>;
+    const r = await unsafeApprove(profile, order());
+    expect(isErr(r)).toBe(true);
+    if (isErr(r) && r.error.source === 'library') {
+      expect(r.error.kind).toBe('missing-idempotency-key');
+    }
+    expect(pair.calls.length).toBe(callsBefore);
+  });
+
+  it('approve는 토스 빌링 승인 최소 대기시간보다 긴 65초 timeout을 사용한다', async () => {
+    const timeoutSpy = vi.spyOn(AbortSignal, 'timeout').mockImplementation(() => new AbortController().signal);
+    try {
+      const pair = mockFetch((_call, index) =>
+        index === 0 ? { status: 200, body: issueResponse } : { status: 200, body: approveResponse() },
+      );
+      const { billing, profile } = await issuedProfile(pair);
+      await billing.approve(profile, order(), approveOptions());
+      expect(timeoutSpy).toHaveBeenLastCalledWith(65_000);
+    } finally {
+      timeoutSpy.mockRestore();
+    }
+  });
+
+  it('전역 timeout이 65초보다 길면 billing override가 사용자 설정을 줄이지 않는다', async () => {
+    const timeoutSpy = vi.spyOn(AbortSignal, 'timeout').mockImplementation(() => new AbortController().signal);
+    try {
+      const pair = mockFetch((_call, index) =>
+        index === 0 ? { status: 200, body: issueResponse } : { status: 200, body: approveResponse() },
+      );
+      const client = createTossClient(orThrow(parseApiSecretKey('test_sk_abcdef')), {
+        fetch: pair.fetch,
+        timeoutMs: 120_000,
+      });
+      const billing = createBillingFlow(client, memoryBillingStore());
+      const profile = orThrow(await billing.issue(receivedAuth()));
+      await billing.approve(profile, order(), approveOptions());
+      expect(timeoutSpy).toHaveBeenLastCalledWith(120_000);
+    } finally {
+      timeoutSpy.mockRestore();
+    }
+  });
+
   it('approve 200 + 빈 body → 빈 BillingPayment 제조 금지 — TransportFailure(재시도 가능)', async () => {
     const pair = mockFetch((_call, index) =>
       index === 0 ? { status: 200, body: issueResponse } : { status: 200 }, // 승인 응답이 0바이트
     );
     const { billing, profile } = await issuedProfile(pair);
-    const r = await billing.approve(profile, order());
+    const r = await billing.approve(profile, order(), approveOptions());
     expect(isErr(r)).toBe(true);
     if (isErr(r) && 'source' in r.error && r.error.source === 'network') {
       expect(r.error.code).toBe('NETWORK_ERROR');
@@ -236,7 +291,7 @@ describe('billing.approve — 봉인 쌍으로만 승인', () => {
     const callsBefore = pair.calls.length;
 
     const cloned = { ...profile } as BillingProfile; // 비열거 봉인 소실
-    const r = await billing.approve(cloned, order());
+    const r = await billing.approve(cloned, order(), approveOptions());
     expect(isErr(r)).toBe(true);
     if (isErr(r) && 'kind' in r.error && r.error.kind === 'profile-detached')
       expect(r.error.customerKey).toBe(CK);
@@ -253,7 +308,7 @@ describe('billing.approve — 봉인 쌍으로만 승인', () => {
     const loaded = orThrow(await billing.load(sessionCk()));
     expect(loaded).not.toBeNull();
     if (loaded === null) return;
-    const paid = await billing.approve(loaded, order());
+    const paid = await billing.approve(loaded, order(), approveOptions());
     expect(isOk(paid)).toBe(true);
   });
 
@@ -282,21 +337,18 @@ describe('billing.revoke — DELETE + store.delete', () => {
     expect(store.map.has(CK)).toBe(false);
   });
 
-  it('이미 삭제된 키 → 400 ALREADY_REMOVED_BILLING_KEY (재발급 유도)', async () => {
+  it('이미 삭제된 키 → 로컬 store도 정리하고 멱등 성공', async () => {
     const pair = mockFetch((_call, index) =>
       index === 0
         ? { status: 200, body: issueResponse }
         : { status: 400, body: { code: 'ALREADY_REMOVED_BILLING_KEY', message: '이미 삭제된 빌링키입니다.' } },
     );
-    const billing = createBillingFlow(apiClient(pair.fetch), memoryBillingStore());
+    const store = memoryBillingStore();
+    const billing = createBillingFlow(apiClient(pair.fetch), store);
     const profile = orThrow(await billing.issue(receivedAuth()));
     const r = await billing.revoke(profile);
-    expect(isErr(r)).toBe(true);
-    if (isErr(r) && 'source' in r.error && r.error.source === 'toss') {
-      expect(r.error.code).toBe('ALREADY_REMOVED_BILLING_KEY');
-    } else {
-      expect.unreachable('toss 실패여야 한다');
-    }
+    expect(isOk(r)).toBe(true);
+    expect(store.map.has(CK)).toBe(false);
   });
 });
 
@@ -313,7 +365,12 @@ describe('billing.import — 마이그레이션 이관 경로 (§7 확정 6)', (
   it('형식 검증 통과 → store.save 후 BillingProfile 반환 (approve 가능)', async () => {
     const pair = mockFetch(() => ({
       status: 200,
-      body: rawPayment({ type: 'BILLING', status: 'DONE' }),
+      body: rawPayment({
+        type: 'BILLING',
+        status: 'DONE',
+        orderId: 'sub-202608-0002',
+        totalAmount: 1000,
+      }),
     }));
     const store = memoryBillingStore();
     const billing = createBillingFlow(apiClient(pair.fetch), store);
@@ -323,11 +380,15 @@ describe('billing.import — 마이그레이션 이관 경로 (§7 확정 6)', (
     expect(store.map.get(CK)?.billingKey).toBe('bill_migrated_1');
     if (!r.ok) return;
 
-    const paid = await billing.approve(r.value, {
-      orderId: orThrow(orderId('sub-202608-0002')),
-      orderName: orThrow(orderName('이관 후 첫 결제')),
-      amount: 1000,
-    });
+    const paid = await billing.approve(
+      r.value,
+      {
+        orderId: orThrow(orderId('sub-202608-0002')),
+        orderName: orThrow(orderName('이관 후 첫 결제')),
+        amount: 1000,
+      },
+      approveOptions(),
+    );
     expect(isOk(paid)).toBe(true);
     expect(pair.calls[0]?.url).toBe('https://api.tosspayments.com/v1/billing/bill_migrated_1');
   });

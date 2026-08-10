@@ -45,12 +45,24 @@ async function signPayload(rawBody: string, transmissionTime: string, keyHex: st
 
 function memoryDedupe(): WebhookDedupeStore & { readonly seen: Set<string> } {
   const seen = new Set<string>();
+  const states = new Map<string, 'processing' | 'completed'>();
   return {
     seen,
     claim: (id) => {
-      if (seen.has(id)) return Promise.resolve(false);
+      const state = states.get(id);
+      if (state !== undefined) return Promise.resolve(state);
       seen.add(id);
-      return Promise.resolve(true);
+      states.set(id, 'processing');
+      return Promise.resolve('claimed');
+    },
+    complete: (id) => {
+      states.set(id, 'completed');
+      return Promise.resolve();
+    },
+    release: (id) => {
+      states.delete(id);
+      seen.delete(id);
+      return Promise.resolve();
     },
   };
 }
@@ -71,6 +83,8 @@ function verifier(overrides?: Partial<WebhookVerifierConfig>) {
     dedupe: memoryDedupe(),
     securityKeys: [secKey(KEY_A_HEX)],
     depositSecrets: { getSecret: (orderId) => Promise.resolve(orderId === 'order-va-1' ? 'sec-1' : null) },
+    allowedSourceIps: false,
+    clock: () => new Date(TIME),
     ...overrides,
   });
 }
@@ -170,6 +184,36 @@ describe('verify — HMAC 서명 (payout.changed / seller.changed)', () => {
     if (r.ok) return;
     expect(r.error).toEqual({ kind: 'missing-config', needed: 'securityKeys' });
   });
+
+  it('허용 폭을 지난 서명 전송 시각은 유효한 서명이더라도 거부한다', async () => {
+    const staleTime = '2026-08-09T11:54:59+09:00';
+    const signature = await signPayload(PAYOUT_BODY, staleTime, KEY_A_HEX);
+    const r = await verifier().verify(PAYOUT_BODY, {
+      ...headersFor(),
+      'tosspayments-webhook-transmission-time': staleTime,
+      'tosspayments-webhook-signature': signature,
+    });
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.error).toEqual({ kind: 'stale-transmission-time', value: staleTime });
+  });
+
+  it('서명 이벤트는 transmission-id가 달라도 eventId 기준으로 중복 제거한다', async () => {
+    const dedupe = memoryDedupe();
+    const v = verifier({ dedupe });
+    const signature = await signPayload(PAYOUT_BODY, TIME, KEY_A_HEX);
+    const first = await v.verify(
+      PAYOUT_BODY,
+      headersFor({ 'tosspayments-webhook-signature': signature }),
+    );
+    expect(first.ok && !first.value.duplicate).toBe(true);
+    if (!first.ok || first.value.duplicate) return;
+    expect(first.value.webhook.meta.dedupeKey).toBe('signed:evt-1');
+    await v.complete(first.value.webhook);
+
+    const secondHeaders = headersFor({ 'tosspayments-webhook-signature': signature });
+    const second = await v.verify(PAYOUT_BODY, secondHeaders);
+    expect(second.ok && second.value.duplicate).toBe(true);
+  });
 });
 
 // ── secret 대조 (DEPOSIT_CALLBACK) ─────────────────────────────────────────
@@ -230,6 +274,7 @@ describe('verify — dedupe.claim (진위 통과 후에만)', () => {
     const headers = headersFor();
     const first = await v.verify(LEGACY_BODY, headers);
     expect(first.ok && !first.value.duplicate).toBe(true);
+    if (first.ok && !first.value.duplicate) await v.complete(first.value.webhook);
     const second = await v.verify(LEGACY_BODY, headers);
     expect(second.ok).toBe(true);
     if (!second.ok) return;
@@ -257,31 +302,56 @@ describe('verify — dedupe.claim (진위 통과 후에만)', () => {
   });
 
   it('dedupe.claim 예외 → store-failure', async () => {
-    const v = verifier({ dedupe: { claim: () => Promise.reject(new Error('redis down')) } });
+    const v = verifier({
+      dedupe: {
+        claim: () => Promise.reject(new Error('redis down')),
+        complete: () => Promise.resolve(),
+        release: () => Promise.resolve(),
+      },
+    });
     const r = await v.verify(LEGACY_BODY, headersFor());
     expect(r.ok).toBe(false);
     if (r.ok) return;
     expect(r.error.kind).toBe('store-failure');
   });
+
+  it('첫 처리가 끝나기 전 같은 key가 오면 duplicate 200이 아니라 processing 재시도 신호다', async () => {
+    const v = verifier();
+    const headers = headersFor();
+    const first = await v.verify(LEGACY_BODY, headers);
+    expect(first.ok && !first.value.duplicate).toBe(true);
+    const second = await v.verify(LEGACY_BODY, headers);
+    expect(second.ok).toBe(false);
+    if (!second.ok) expect(second.error.kind).toBe('processing');
+  });
 });
 
 // ── IP 검사 ────────────────────────────────────────────────────────────────
 
-describe('verify — 소스 IP 검사 (context.sourceIp 전달 시에만)', () => {
-  it('sourceIp 미전달이면 검사하지 않는다', async () => {
-    const r = await verifier().verify(LEGACY_BODY, headersFor());
-    expect(r.ok).toBe(true);
+describe('verify — 서명 없는 웹훅 소스 IP fail-closed', () => {
+  it('sourceIp 미전달이면 missing-source-ip', async () => {
+    const r = await verifier({ allowedSourceIps: ['13.124.18.147'] }).verify(LEGACY_BODY, headersFor());
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.error).toEqual({ kind: 'missing-source-ip' });
   });
 
   it('기본 내장 목록에 없는 IP → untrusted-source-ip', async () => {
-    const r = await verifier().verify(LEGACY_BODY, headersFor(), { sourceIp: '1.2.3.4' });
+    const r = await verifier({ allowedSourceIps: ['13.124.18.147'] }).verify(
+      LEGACY_BODY,
+      headersFor(),
+      { sourceIp: '1.2.3.4' },
+    );
     expect(r.ok).toBe(false);
     if (r.ok) return;
     expect(r.error).toEqual({ kind: 'untrusted-source-ip', ip: '1.2.3.4' });
   });
 
   it('기본 내장 목록의 IP는 통과한다 (문서 발신 IP)', async () => {
-    const r = await verifier().verify(LEGACY_BODY, headersFor(), { sourceIp: '13.124.18.147' });
+    const r = await verifier({ allowedSourceIps: ['13.124.18.147'] }).verify(
+      LEGACY_BODY,
+      headersFor(),
+      { sourceIp: '13.124.18.147' },
+    );
     expect(r.ok).toBe(true);
   });
 
@@ -301,19 +371,20 @@ describe('verify — 소스 IP 검사 (context.sourceIp 전달 시에만)', () =
 
   it('IPv4-mapped IPv6(::ffff:) 정규화 — dual-stack Node의 remoteAddress 형태로 정상 웹훅이 거부되면 안 된다', async () => {
     // Node 기본 dual-stack 리스너의 req.socket.remoteAddress는 '::ffff:13.124.18.147' 형태
-    const mapped = await verifier().verify(LEGACY_BODY, headersFor(), {
+    const defaultVerifier = verifier({ allowedSourceIps: ['13.124.18.147'] });
+    const mapped = await defaultVerifier.verify(LEGACY_BODY, headersFor(), {
       sourceIp: '::ffff:13.124.18.147',
     });
     expect(mapped.ok).toBe(true);
 
     // 대문자 접두사 표기도 수용 (정규화는 소문자 비교)
-    const upper = await verifier().verify(LEGACY_BODY, headersFor(), {
+    const upper = await defaultVerifier.verify(LEGACY_BODY, headersFor(), {
       sourceIp: '::FFFF:13.124.18.147',
     });
     expect(upper.ok).toBe(true);
 
     // 목록 밖 IP는 mapped 표기로도 여전히 거부 — 거부 에러의 ip는 원본 형태 유지
-    const blocked = await verifier().verify(LEGACY_BODY, headersFor(), {
+    const blocked = await defaultVerifier.verify(LEGACY_BODY, headersFor(), {
       sourceIp: '::ffff:1.2.3.4',
     });
     expect(blocked.ok).toBe(false);
@@ -322,7 +393,7 @@ describe('verify — 소스 IP 검사 (context.sourceIp 전달 시에만)', () =
     }
 
     // 순수 IPv6 임의 주소는 거부 유지
-    const ipv6 = await verifier().verify(LEGACY_BODY, headersFor(), { sourceIp: '2001:db8::1' });
+    const ipv6 = await defaultVerifier.verify(LEGACY_BODY, headersFor(), { sourceIp: '2001:db8::1' });
     expect(ipv6.ok).toBe(false);
   });
 

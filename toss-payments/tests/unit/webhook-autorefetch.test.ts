@@ -18,12 +18,21 @@ import { asPaymentFixture, rawPayment } from './helpers';
 const TIME = '2026-08-09T12:00:00+09:00';
 
 function memoryDedupe(): WebhookDedupeStore {
-  const seen = new Set<string>();
+  const states = new Map<string, 'processing' | 'completed'>();
   return {
     claim: (id) => {
-      if (seen.has(id)) return Promise.resolve(false);
-      seen.add(id);
-      return Promise.resolve(true);
+      const state = states.get(id);
+      if (state !== undefined) return Promise.resolve(state);
+      states.set(id, 'processing');
+      return Promise.resolve('claimed');
+    },
+    complete: (id) => {
+      states.set(id, 'completed');
+      return Promise.resolve();
+    },
+    release: (id) => {
+      states.delete(id);
+      return Promise.resolve();
     },
   };
 }
@@ -72,53 +81,35 @@ function makeRequest(body: string, headers: Record<string, string>): Request {
 }
 
 function verifierWith(config: Partial<WebhookVerifierConfig> = {}) {
-  return createWebhookVerifier({ dedupe: memoryDedupe(), ...config });
+  return createWebhookVerifier({ dedupe: memoryDedupe(), allowedSourceIps: false, ...config });
 }
 
 afterEach(() => {
   vi.restoreAllMocks();
 });
 
-/** waitUntil 수집기 — 서버리스 런타임의 waitUntil을 흉내 낸다(잡 완료 대기용). */
-function waitUntilCollector() {
-  const jobs: Promise<unknown>[] = [];
-  return {
-    waitUntil: (p: Promise<unknown>) => {
-      jobs.push(p);
-    },
-    settle: () => Promise.all(jobs),
-  };
-}
-
 describe('§3.5 autoRefetch — 어댑터 경유 prefetched 첨부', () => {
-  it('fetchHandler(waitUntil 주입) + autoRefetch → prefetched Ok(조회 결과), trust는 unverified 불변', async () => {
+  it('fetchHandler + autoRefetch → prefetched Ok(조회 결과), trust는 unverified 불변', async () => {
     const client = lookupMock();
     const verifier = verifierWith({ autoRefetch: { client } });
     const received: { trust: string; prefetchedStatus: string | null }[] = [];
-    const wu = waitUntilCollector();
-    const handler = verifier.fetchHandler(
-      {
+    const handler = verifier.fetchHandler({
         onPaymentStatusChanged: (w) => {
           received.push({
             trust: w.trust,
             prefetchedStatus: w.prefetched?.ok === true ? w.prefetched.value.status : null,
           });
         },
-      },
-      { waitUntil: wu.waitUntil },
-    );
+    });
 
     const res = await handler(makeRequest(PAYMENT_BODY, headersFor()));
     expect(res.status).toBe(200);
-    await wu.settle();
     // payload가 아닌 조회 결과가 채워진다 — trust 승격은 없다(§7-2)
     expect(received).toEqual([{ trust: 'unverified', prefetchedStatus: 'DONE' }]);
     expect(client.calls).toEqual(['pk:pay_123']);
   });
 
-  it('waitUntil 미주입 기본(sync-complete) — prefetch 건너뜀: 조회 0회·prefetched undefined(10초 규약 보존)', async () => {
-    vi.spyOn(console, 'warn').mockImplementation(() => {});
-    // 조회가 응답 전에 실행되면 이 지연이 200 ack을 잠식한다 — 건너뛰므로 호출 자체가 없어야 한다
+  it('autoRefetch는 응답 전 내구 처리의 일부로 실행된다', async () => {
     const client = lookupMock();
     const verifier = verifierWith({ autoRefetch: { client } });
     const prefetchedSeen: (unknown | undefined)[] = [];
@@ -130,27 +121,22 @@ describe('§3.5 autoRefetch — 어댑터 경유 prefetched 첨부', () => {
 
     const res = await handler(makeRequest(PAYMENT_BODY, headersFor()));
     expect(res.status).toBe(200);
-    // 핸들러는 동기 완료 방식으로 실행됐지만(이벤트 유실 방지), prefetch는 실행되지 않았다
-    expect(prefetchedSeen).toEqual([undefined]);
-    expect(client.calls).toEqual([]);
+    expect(prefetchedSeen[0]).toBeDefined();
+    expect(client.calls).toEqual(['pk:pay_123']);
   });
 
-  it("onMissingWaitUntil 'warn-and-detach' — 분리 실행에서는 prefetched 첨부(응답 후 실행)", async () => {
-    vi.spyOn(console, 'warn').mockImplementation(() => {});
+  it('핸들러에서 prefetched 결과를 즉시 사용할 수 있다', async () => {
     const client = lookupMock();
     const verifier = verifierWith({ autoRefetch: { client } });
     let resolveDone!: (status: string | null) => void;
     const done = new Promise<string | null>((resolve) => {
       resolveDone = resolve;
     });
-    const handler = verifier.fetchHandler(
-      {
+    const handler = verifier.fetchHandler({
         onPaymentStatusChanged: (w) => {
           resolveDone(w.prefetched?.ok === true ? w.prefetched.value.status : null);
         },
-      },
-      { onMissingWaitUntil: 'warn-and-detach' },
-    );
+    });
 
     const res = await handler(makeRequest(PAYMENT_BODY, headersFor()));
     expect(res.status).toBe(200);
@@ -158,7 +144,7 @@ describe('§3.5 autoRefetch — 어댑터 경유 prefetched 첨부', () => {
     expect(client.calls).toEqual(['pk:pay_123']);
   });
 
-  it('수동 verify 경로는 불변 — prefetched undefined, 조회 0회(10초 규약·순수성 보존)', async () => {
+  it('수동 verify 경로는 불변 — prefetched undefined, 조회 0회(verify 순수성 보존)', async () => {
     const client = lookupMock();
     const verifier = verifierWith({ autoRefetch: { client } });
     const r = await verifier.verify(PAYMENT_BODY, headersFor());
@@ -180,18 +166,13 @@ describe('§3.5 autoRefetch — 어댑터 경유 prefetched 첨부', () => {
     );
     const verifier = verifierWith({ autoRefetch: { client } });
     const outcomes: boolean[] = [];
-    const wu = waitUntilCollector();
-    const handler = verifier.fetchHandler(
-      {
+    const handler = verifier.fetchHandler({
         onPaymentStatusChanged: (w) => {
           outcomes.push(w.prefetched !== undefined && !w.prefetched.ok);
         },
-      },
-      { waitUntil: wu.waitUntil },
-    );
+    });
 
     expect((await handler(makeRequest(PAYMENT_BODY, headersFor()))).status).toBe(200);
-    await wu.settle();
     expect(outcomes).toEqual([true]);
   });
 
@@ -201,18 +182,13 @@ describe('§3.5 autoRefetch — 어댑터 경유 prefetched 첨부', () => {
       autoRefetch: { client, eventTypes: ['CANCEL_STATUS_CHANGED'] },
     });
     const prefetchedSeen: (unknown | undefined)[] = [];
-    const wu = waitUntilCollector();
-    const handler = verifier.fetchHandler(
-      {
+    const handler = verifier.fetchHandler({
         onPaymentStatusChanged: (w) => {
           prefetchedSeen.push(w.prefetched);
         },
-      },
-      { waitUntil: wu.waitUntil },
-    );
+    });
 
     expect((await handler(makeRequest(PAYMENT_BODY, headersFor()))).status).toBe(200);
-    await wu.settle();
     expect(prefetchedSeen).toEqual([undefined]);
     expect(client.calls).toEqual([]);
   });
@@ -221,18 +197,13 @@ describe('§3.5 autoRefetch — 어댑터 경유 prefetched 첨부', () => {
     const client = lookupMock();
     const verifier = verifierWith({ autoRefetch: { client } });
     const prefetchedSeen: (unknown | undefined)[] = [];
-    const wu = waitUntilCollector();
-    const handler = verifier.fetchHandler(
-      {
+    const handler = verifier.fetchHandler({
         onBillingDeleted: (w) => {
           prefetchedSeen.push(w.prefetched);
         },
-      },
-      { waitUntil: wu.waitUntil },
-    );
+    });
 
     expect((await handler(makeRequest(BILLING_DELETED_BODY, headersFor()))).status).toBe(200);
-    await wu.settle();
     expect(prefetchedSeen).toEqual([undefined]);
     expect(client.calls).toEqual([]);
   });
@@ -240,16 +211,11 @@ describe('§3.5 autoRefetch — 어댑터 경유 prefetched 첨부', () => {
   it('duplicate는 조회하지 않는다 — 재전송 7회가 조회 7회가 되지 않음', async () => {
     const client = lookupMock();
     const verifier = verifierWith({ autoRefetch: { client } });
-    const wu = waitUntilCollector();
-    const handler = verifier.fetchHandler(
-      { onPaymentStatusChanged: () => {} },
-      { waitUntil: wu.waitUntil },
-    );
+    const handler = verifier.fetchHandler({ onPaymentStatusChanged: () => {} });
 
     await handler(makeRequest(PAYMENT_BODY, headersFor('atx-dup')));
     const res2 = await handler(makeRequest(PAYMENT_BODY, headersFor('atx-dup')));
     expect(res2.status).toBe(200);
-    await wu.settle();
     expect(client.calls).toHaveLength(1);
   });
 
@@ -287,7 +253,9 @@ describe('§3.3 webhook 이벤트 — verdict 확정 후 요약 필드만', () =
     });
     const verifier = verifierWith({ events });
 
-    expect((await verifier.verify(PAYMENT_BODY, headersFor('atx-ev'))).ok).toBe(true);
+    const first = await verifier.verify(PAYMENT_BODY, headersFor('atx-ev'));
+    expect(first.ok).toBe(true);
+    if (first.ok && !first.value.duplicate) await verifier.complete(first.value.webhook);
     expect((await verifier.verify(PAYMENT_BODY, headersFor('atx-ev'))).ok).toBe(true); // duplicate verdict
     expect((await verifier.verify('{broken', headersFor())).ok).toBe(false);
     expect(seen).toEqual([

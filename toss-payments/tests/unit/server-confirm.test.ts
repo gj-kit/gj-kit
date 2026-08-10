@@ -206,7 +206,10 @@ describe('createConfirmFlow — verify/confirm (검증 강제)', () => {
   });
 
   it('confirm — body {paymentKey, orderId, amount}, 멱등키는 기본 미부착(§7 확정 5)', async () => {
-    const pair = mockFetch(() => ({ status: 200, body: rawPayment({ status: 'DONE' }) }));
+    const pair = mockFetch(() => ({
+      status: 200,
+      body: rawPayment({ status: 'DONE', paymentKey: 'pk-abc' }),
+    }));
     const flow = await flowWithOrder(pair);
     const r = await flow.confirmCallback(CALLBACK_URL);
     expect(isOk(r)).toBe(true);
@@ -220,7 +223,10 @@ describe('createConfirmFlow — verify/confirm (검증 강제)', () => {
   });
 
   it('confirm — 멱등키 일급 옵션 지정 시에만 헤더 부착 + testCode 헤더', async () => {
-    const pair = mockFetch(() => ({ status: 200, body: rawPayment({ status: 'DONE' }) }));
+    const pair = mockFetch(() => ({
+      status: 200,
+      body: rawPayment({ status: 'DONE', paymentKey: 'pk-abc' }),
+    }));
     const flow = await flowWithOrder(pair);
     const parsed = parseSuccessCallback(CALLBACK_URL);
     if (!parsed.ok) return expect.unreachable('파싱 성공해야 한다');
@@ -237,7 +243,12 @@ describe('createConfirmFlow — verify/confirm (검증 강제)', () => {
   it('가상계좌 confirm은 DONE이 아니다 — WAITING_FOR_DEPOSIT도 성공', async () => {
     const pair = mockFetch(() => ({
       status: 200,
-      body: rawPayment({ status: 'WAITING_FOR_DEPOSIT', method: '가상계좌', secret: 'vs-1' }),
+      body: rawPayment({
+        status: 'WAITING_FOR_DEPOSIT',
+        method: '가상계좌',
+        secret: 'vs-1',
+        paymentKey: 'pk-abc',
+      }),
     }));
     const flow = await flowWithOrder(pair);
     const r = await flow.confirmCallback(CALLBACK_URL);

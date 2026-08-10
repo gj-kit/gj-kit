@@ -1,8 +1,8 @@
 /**
- * §3.3 billing 이벤트 4종 + §3.6 requireApproveIdempotencyKey capability.
+ * §3.3 billing 이벤트 4종 + §3.6 approve 멱등키 강제.
  *
  * - 이벤트 payload에 billingKey 원천 부재(봉인 원칙) — JSON 직렬화로 검증.
- * - capability는 타입 협착만 — 런타임 동작(멱등키 헤더 부착)은 기존과 동일.
+ * - approve 멱등키는 모든 구성에서 타입·런타임 필수다.
  */
 import { describe, expect, it } from 'vitest';
 
@@ -70,6 +70,8 @@ function billingOrder(): BillingOrder {
   };
 }
 
+const approveOptions = () => ({ idempotencyKey: orThrow(idempotencyKey('billing-event-cycle-1')) });
+
 /** 호출 순서대로 응답을 돌려주는 fetch — 이벤트 검증용 시나리오 조립. */
 function sequencedFetch(responses: readonly MockResponse[]) {
   return mockFetch((_call: RecordedCall, index: number) => {
@@ -99,7 +101,7 @@ describe('§3.3 billing 이벤트 — Result 확정 후 발화, billingKey 미�
   it('approve Ok → billing.approved(payment + customerKey)', async () => {
     const { fetch } = sequencedFetch([
       { status: 200, body: issueResponse },
-      { status: 200, body: rawPayment({ type: 'BILLING', status: 'DONE' }) },
+      { status: 200, body: rawPayment({ type: 'BILLING', status: 'DONE', totalAmount: 9_900 }) },
     ]);
     const events = createTossEvents();
     const approved: unknown[] = [];
@@ -109,7 +111,7 @@ describe('§3.3 billing 이벤트 — Result 확정 후 발화, billingKey 미�
     const flow = createBillingFlow(apiClient(fetch), memoryBillingStore(), { events });
 
     const profile = orThrow(await flow.issue(receivedAuth()));
-    expect(isOk(await flow.approve(profile, billingOrder()))).toBe(true);
+    expect(isOk(await flow.approve(profile, billingOrder(), approveOptions()))).toBe(true);
     expect(approved).toHaveLength(1);
     const e = approved[0] as { customerKey: string; payment: { status: string } };
     expect(e.customerKey).toBe(CK);
@@ -133,7 +135,7 @@ describe('§3.3 billing 이벤트 — Result 확정 후 발화, billingKey 미�
     const flow = createBillingFlow(apiClient(fetch), memoryBillingStore(), { events });
 
     const profile = orThrow(await flow.issue(receivedAuth()));
-    expect(isErr(await flow.approve(profile, billingOrder()))).toBe(true);
+    expect(isErr(await flow.approve(profile, billingOrder(), approveOptions()))).toBe(true);
     expect(seen).toEqual(['failed:NOT_MATCHES_CUSTOMER_KEY']);
   });
 
@@ -163,15 +165,13 @@ describe('§3.3 billing 이벤트 — Result 확정 후 발화, billingKey 미�
   });
 });
 
-describe('§3.6 requireApproveIdempotencyKey — 타입 협착만, 런타임 동일', () => {
-  it('capability 켠 approve — 멱등키가 헤더로 부착되고 정상 승인된다', async () => {
+describe('§3.6 billing approve — 멱등키 상시 강제', () => {
+  it('기본 구성 approve도 멱등키가 헤더로 부착되고 정상 승인된다', async () => {
     const { fetch, calls } = sequencedFetch([
       { status: 200, body: issueResponse },
-      { status: 200, body: rawPayment({ type: 'BILLING', status: 'DONE' }) },
+      { status: 200, body: rawPayment({ type: 'BILLING', status: 'DONE', totalAmount: 9_900 }) },
     ]);
-    const flow = createBillingFlow(apiClient(fetch), memoryBillingStore(), {
-      capabilities: { requireApproveIdempotencyKey: true },
-    });
+    const flow = createBillingFlow(apiClient(fetch), memoryBillingStore());
 
     const profile = orThrow(await flow.issue(receivedAuth()));
     const r = await flow.approve(profile, billingOrder(), {
@@ -181,7 +181,7 @@ describe('§3.6 requireApproveIdempotencyKey — 타입 협착만, 런타임 동
     expect(calls[1]?.headers['idempotency-key']).toBe('sub:2026-08:cust-0001');
   });
 
-  it('capability를 켜도 base 메서드(load/revoke 등)는 그대로 존재한다', async () => {
+  it('deprecated capability를 둔 기존 설정도 base 메서드(load/revoke 등)를 유지한다', async () => {
     const { fetch } = sequencedFetch([{ status: 200, body: issueResponse }]);
     const flow = createBillingFlow(apiClient(fetch), memoryBillingStore(), {
       capabilities: { requireApproveIdempotencyKey: true },

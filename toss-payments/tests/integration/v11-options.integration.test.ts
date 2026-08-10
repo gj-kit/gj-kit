@@ -7,7 +7,7 @@
  * ② retry 409 — TossPayments-Test-Code로 IDEMPOTENT_REQUEST_PROCESSING 시뮬 가능 여부
  *    실측 후 분기 검증(시뮬 가능 → onRetry 'idempotent-processing' / 불가 → transport 재시도).
  * ③ autoRefetch 실조회 — 실결제 Payment로 PAYMENT_STATUS_CHANGED(Unverified) 픽스처 합성 →
- *    fetchHandler(waitUntil 주입) 경유 → 핸들러의 w.prefetched가 실 서버 조회 Ok인지 단언.
+ *    fetchHandler 완료 수명주기 경유 → 핸들러의 w.prefetched가 실 서버 조회 Ok인지 단언.
  *    ⚠ DEPOSIT_CALLBACK은 SecretVerified라 autoRefetch 대상이 아니다 — 대상은 Unverified뿐(§3.5).
  * ④ audit 실응답 redaction 전수 스냅샷 — ①의 memoryAuditSink 엔트리 전체를 순회해
  *    AUDIT_REDACTED_KEYS의 어떤 키도 원문 값으로 남지 않음을 단언.
@@ -75,7 +75,7 @@ const kit = createTossPayments({
   depositSecrets: memoryDepositSecretStore(),
   billingKeys,
   billing: { capabilities: { directCardIssue: true } },
-  webhook: { dedupe: memoryDedupeStore(), autoRefetch: true },
+  webhook: { dedupe: memoryDedupeStore(), autoRefetch: true, allowedSourceIps: false },
   events,
   audit: { sink },
 });
@@ -103,11 +103,15 @@ function fullLoop(): Promise<LoopResult> {
 
     await pace();
     const payment = expectOk(
-      await kit.billing.approve(profile, {
-        orderId: generateOrderId('gjv11'),
-        orderName: testOrderName(),
-        amount: 1000,
-      }),
+      await kit.billing.approve(
+        profile,
+        {
+          orderId: generateOrderId('gjv11'),
+          orderName: testOrderName(),
+          amount: 1000,
+        },
+        { idempotencyKey: generateIdempotencyKey() },
+      ),
       '① 빌링 승인(approve)',
     );
 
@@ -365,7 +369,7 @@ describe('② retry 409 — TossPayments-Test-Code 시뮬 실측', () => {
 
 // ─── ③ autoRefetch 실조회 — Unverified(PAYMENT_STATUS_CHANGED) 경유 ──────────
 
-describe('③ autoRefetch 실조회 — fetchHandler(waitUntil 주입)', () => {
+describe('③ autoRefetch 실조회 — fetchHandler 완료 수명주기', () => {
   it(
     '핸들러가 받은 w.prefetched가 Ok이고 실 서버 조회값(paymentKey 일치)이다',
     async () => {
@@ -380,21 +384,12 @@ describe('③ autoRefetch 실조회 — fetchHandler(waitUntil 주입)', () => {
         },
       });
 
-      const jobs: Promise<unknown>[] = [];
       let captured: (Unverified & { event: PaymentStatusChangedEvent }) | null = null;
-      const handler = kit.webhook.fetchHandler(
-        {
+      const handler = kit.webhook.fetchHandler({
           onPaymentStatusChanged: (w) => {
             captured = w;
           },
-        },
-        // waitUntil 주입 필수 — sync-complete 폴백 모드에서는 prefetch가 실행되지 않는다(§3.5)
-        {
-          waitUntil: (promise) => {
-            jobs.push(promise);
-          },
-        },
-      );
+      });
 
       await pace(); // prefetch가 실 getPayment 1회를 수행한다
       const response = await handler(
@@ -404,14 +399,13 @@ describe('③ autoRefetch 실조회 — fetchHandler(waitUntil 주입)', () => {
           body: fixture.rawBody,
         }),
       );
-      expect(response.status).toBe(200); // 200 ack 확정이 prefetch·핸들러에 선행(§3.5 계약)
-      await Promise.all(jobs);
+      expect(response.status).toBe(200); // prefetch·핸들러·complete 성공 뒤에만 200
 
       if (captured === null) throw new Error('③ onPaymentStatusChanged 핸들러가 호출되지 않았습니다');
       const webhook: Unverified & { event: PaymentStatusChangedEvent } = captured;
       expect(webhook.trust).toBe('unverified'); // 조회 성공해도 승격 없음(§7-2)
       if (webhook.prefetched === undefined) {
-        throw new Error('③ prefetched 미첨부 — autoRefetch 배선 또는 waitUntil 경로 실패');
+        throw new Error('③ prefetched 미첨부 — autoRefetch 배선 또는 어댑터 경로 실패');
       }
       const prefetched = expectOk(webhook.prefetched, '③ prefetched');
       expect(prefetched.paymentKey).toBe(payment.paymentKey); // 실 서버 조회값

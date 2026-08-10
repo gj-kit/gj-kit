@@ -13,6 +13,7 @@ import {
   createBillingFlow,
   createTossClient,
   generateCustomerKey,
+  generateIdempotencyKey,
   generateOrderId,
   isTestKey,
   orThrow,
@@ -174,11 +175,15 @@ export async function createPaidBillingPayment(
   ctx.trackForCleanup(profile);
 
   await pace();
-  const approved = await ctx.flow.approve(profile, {
-    orderId: generateOrderId('gjit'),
-    orderName: testOrderName(),
-    amount,
-  });
+  const approved = await ctx.flow.approve(
+    profile,
+    {
+      orderId: generateOrderId('gjit'),
+      orderName: testOrderName(),
+      amount,
+    },
+    { idempotencyKey: generateIdempotencyKey() },
+  );
   const payment = expectOk(approved, `빌링 승인(approve, amount=${amount})`);
   return { profile, customerKey, payment };
 }
@@ -188,14 +193,14 @@ export async function loadSettledTarget(
   ctx: IntegrationContext,
   key: PaymentKey,
   label: string,
-): Promise<SettledCancelable> {
+): Promise<Extract<SettledCancelable, { readonly partialAllowed: true }>> {
   await pace();
   const looked = await ctx.client.getPayment(key);
   const payment = expectOk(looked, `${label} — getPayment`);
   const cancelable = expectOk(asCancelable(payment), `${label} — asCancelable`);
-  if (cancelable.kind !== 'settled') {
+  if (cancelable.kind !== 'settled' || !cancelable.partialAllowed) {
     throw new Error(
-      `${label} — settled 기대, 실제 kind=${cancelable.kind}: ${JSON.stringify(cancelable.payment)}`,
+      `${label} — 부분취소 가능 settled 기대, 실제 kind=${cancelable.kind}: ${JSON.stringify(cancelable.payment)}`,
     );
   }
   return cancelable;

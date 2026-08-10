@@ -22,6 +22,8 @@ function makeVerifier(overrides?: Partial<WebhookVerifierConfig>) {
     depositSecrets: {
       getSecret: (orderId) => Promise.resolve(orderId === 'order-va-1' ? 'sec-1' : null),
     },
+    allowedSourceIps: false,
+    transmissionTimeToleranceMs: false,
     ...overrides,
   });
 }
@@ -251,6 +253,7 @@ describe('픽스처 헤더', () => {
     const verifier = makeVerifier();
     const fx = webhookFixture.depositCallback({ orderId: 'order-va-1', secret: 'sec-1' });
     const first = await verifier.verify(fx.rawBody, fx.headers);
+    if (first.ok && !first.value.duplicate) await verifier.complete(first.value.webhook);
     const second = await verifier.verify(fx.rawBody, fx.headers);
     expect(first.ok && !first.value.duplicate).toBe(true);
     expect(second.ok).toBe(true);

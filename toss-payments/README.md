@@ -51,7 +51,7 @@ const client = createTossClient(orThrow(parseApiSecretKey(process.env.TOSS_SECRE
 **골든 패스입니다.** 파사드는 순수 조립층으로, 기존 팩토리 4종(`createTossClient`/`createConfirmFlow`/`createBillingFlow`/`createWebhookVerifier`)에 전량 위임합니다 — 검증 로직 중복이 0이고, 파사드를 써도 검증 강제(브랜디드 타입·필수 스토어)는 그대로입니다. 파사드가 추가로 주는 것은 하나입니다: **배선하지 않은 플로우는 반환 타입에 프로퍼티 자체가 없다** — 부분 배선(키 쌍 혼동, depositSecrets 반쪽 배선, billingKeyStore 미배선)이 런타임이 아니라 사용 시점 컴파일 에러가 됩니다.
 
 ```ts
-import { orThrow } from '@gj-kit/toss-payments';
+import { idempotencyKey, orThrow } from '@gj-kit/toss-payments';
 import { createTossEvents, createTossPayments, parseApiSecretKey } from '@gj-kit/toss-payments/server';
 
 const toss = createTossPayments({
@@ -69,8 +69,13 @@ const toss = createTossPayments({
     find: (ck) => db.billingKeys.find(ck),
     delete: (ck) => db.billingKeys.remove(ck),
   },
+  cancelRetries: {                             // exact body는 반드시 암호화 at-rest 저장
+    save: (record) => db.cancelRetries.saveEncrypted(record),
+    load: (ticketId) => db.cancelRetries.loadDecrypted(ticketId),
+    delete: (ticketId) => db.cancelRetries.remove(ticketId),
+  },
   webhook: {
-    dedupe: { claim: (id) => redis.set(`twh:${id}`, '1', { NX: true, EX: 432_000 }).then(Boolean) },
+    dedupe,                                      // PROCESSING/COMPLETED + crash-recovery lease 구현
     autoRefetch: true,                         // Unverified 이벤트에 조회 재확인 결과 자동 첨부(§3.5)
   },
   events: createTossEvents(),                  // 관측·부수 반응 버스 — 4곳(client/confirm/billing/webhook) 자동 배선(§3.3)
@@ -78,7 +83,9 @@ const toss = createTossPayments({
 
 await toss.confirm.confirmCallback(req.url);   // OK — orders 배선됨
 toss.webhook.fetchHandler({ /* ... */ });      // OK — webhook 배선됨
-await toss.billing.approve(profile, order, {}); // OK — billingKeys 배선됨 (§3.6 capability 권장)
+await toss.billing.approve(profile, order, {
+  idempotencyKey: orThrow(idempotencyKey('sub:2026-08:customer-1')),
+});                                              // OK — 모든 billing approve에 멱등키 필수
 ```
 
 배선을 빼먹으면 그 플로우를 **쓰는 줄에서** 컴파일 에러가 납니다:
@@ -108,11 +115,12 @@ await confirmOnly.billing.approve(profile, order);
 | `Property 'billing' does not exist ...` | `billingKeys` 미배선 — 또는 위젯 시크릿 키 파사드(빌링은 API 키 전용) | `billingKeys: BillingKeyStore` 추가 / `sk` 파사드 분리 |
 | `Property 'webhook' does not exist ...` | `webhook` 미배선 | `webhook: { dedupe }` 추가 |
 | `No overload matches this call` | ① 위젯 시크릿 키 + `billingKeys`(키 쌍 규칙 선차단 — 서버 400 `INVALID_API_KEY`를 컴파일에 당겨옴) ② raw string 키(파서 미통과) | ① 빌링은 `sk` 파사드로 ② `orThrow(parseApiSecretKey(...))` |
-| `Expected 3 arguments, but got 2` (billing.approve) | `requireApproveIdempotencyKey` capability 켜짐 | `options.idempotencyKey` 전달(§3.6) |
+| `Expected 3 arguments, but got 2` (billing.approve) | 모든 빌링 승인은 멱등키가 필수 | `options.idempotencyKey` 전달(§3.6) |
 
 ### 알아둘 것
 
 - **단일 키 = 파사드 1개.** 위젯 결제와 빌링을 병용하는 상점은 파사드 2개(`gsk`용/`sk`용)를 만드세요 — 키 쌍 규칙이 파사드 경계와 일치해, "confirm은 어느 클라이언트로?" 같은 암묵 규칙이 생기지 않습니다.
+- **live 키의 API origin은 고정입니다.** 기본적으로 `https://api.tosspayments.com` 외 `baseUrl`은 부팅 시 거부됩니다. 사내 프록시가 꼭 필요할 때만 `dangerouslyAllowCustomLiveBaseUrl: true`를 명시하고, 시크릿 키가 프록시 운영자에게 노출되는 위험을 별도로 승인하세요.
 - **config를 스프레드로 동적 구성하지 마세요.** `const` 추론이 풀려 조건부 프로퍼티 판정이 무너질 수 있습니다 — 동적 구성이 필요하면 개별 팩토리(§4)를 직접 쓰고, DI 컨테이너 등 간접 전달에는 `defineTossPaymentsConfig`로 정의 시점에 타입을 고정하세요.
 
 ```ts
@@ -262,13 +270,13 @@ export const POST = toss.webhook.fetchHandler({
 });
 ```
 
-- **실행 시점(협상 불가)**: 어댑터(`fetchHandler`/`nodeHandler`)가 **200 응답을 확정한 후**, 핸들러 디스패치 직전입니다 — 조회 왕복이 10초 규약을 건드리지 않습니다. dedupe 통과분에만 수행됩니다(재전송 7회가 조회 7회가 되지 않음). 수동 `verify()` 경로는 불변입니다 — verify에 네트워크 호출을 심지 않습니다.
-- **실패 시맨틱**: `prefetched`가 Err여도 이벤트는 버려지지 않고 핸들러에 도달합니다(판단은 핸들러 몫 — 웹훅 자체가 최대 7회 재전송되므로 다음 전송이 자연 재시도). **prefetched 실패 시 payload 폴백은 금물입니다.**
+- **실행 시점**: 어댑터(`fetchHandler`/`nodeHandler`)의 핸들러 디스패치 직전이며 dedupe 통과분에만 수행됩니다. prefetch와 핸들러가 성공하고 claim이 `COMPLETED`가 된 뒤에만 200을 반환합니다. 빠른 응답이 필요하면 핸들러가 내구적 큐에 적재하는 지점까지 책임지세요.
+- **실패 시맨틱**: `prefetched`가 Err여도 핸들러에는 도달합니다. 핸들러가 실패를 던지면 claim을 해제하고 5xx로 재전송을 유도합니다. **prefetched 실패 시 payload 폴백은 금물입니다.**
 - **trust는 `'unverified'` 그대로입니다** — 조회 성공은 웹훅 발신자 진위를 증명하지 않습니다(위조 웹훅이 실존 orderId를 찍으면 조회는 성공합니다). 개별 조립 시에는 `autoRefetch: { client, eventTypes?: [...] }`로 결속하고, `eventTypes` 필터로 분당 100건 쿼터를 방어할 수 있습니다.
 
-### 3.6 `requireApproveIdempotencyKey` — 빌링 approve 멱등키 타입 필수화
+### 3.6 빌링 approve — 멱등키 상시 강제
 
-cron 중복 실행·큐 at-least-once에서 멱등키 없는 `billing.approve` 2회 = **이중 과금**입니다. 이 라이브러리에서 "옵션 누락 = 금전 사고"인 유일한 지점이라, capability로 켜면 `options`(와 `idempotencyKey`)가 타입 필수가 됩니다. **빌링 절의 골든 패스로 켜는 것을 권장합니다.**
+cron 중복 실행·큐 at-least-once에서 멱등키 없는 `billing.approve` 2회 = **이중 과금**입니다. 그래서 모든 구성에서 `options.idempotencyKey`가 타입 필수이며, JavaScript나 강제 캐스팅으로 우회해도 API 전송 전에 `missing-idempotency-key`로 거부합니다.
 
 ```ts
 import { idempotencyKey, orThrow } from '@gj-kit/toss-payments';
@@ -281,10 +289,9 @@ const strict = createTossPayments({
     find: (ck) => db.billingKeys.find(ck),
     delete: (ck) => db.billingKeys.remove(ck),
   },
-  billing: { capabilities: { requireApproveIdempotencyKey: true } },
 });
 
-// @ts-expect-error 멱등키 없는 approve — capability가 options를 타입 필수로 만든다(이중 과금 컴파일 차단)
+// @ts-expect-error 멱등키 없는 approve — 모든 구성에서 컴파일 차단
 await strict.billing.approve(profile, order);
 
 await strict.billing.approve(profile, order, {
@@ -294,7 +301,7 @@ await strict.billing.approve(profile, order, {
 
 - **키 권장**: 청구 주기 결정적 값(`sub:${period}:${customerKey}`) — 재실행 시 첫 응답 재생으로 무해합니다.
 - ⚠ **4xx 실패 후 파라미터를 고쳐 재시도할 땐 반드시 새 키**(실측 — 동일 키는 15일간 같은 에러를 재생). 일시 오류가 결정적 키에 바인딩되면 해당 주기 재청구가 15일 막힙니다 — 재시도에는 `sub:${period}:${customerKey}:retry-${attempt}`처럼 attempt suffix를 붙이세요.
-- 켜지 않으면 기존 시그니처 그대로입니다(파괴 없음). orderId 기반 키 자동 유도는 의도적으로 제공하지 않습니다 — 결정적 키 + 4xx 재생 조합의 함정을 라이브러리가 사용자 몰래 떠안게 되기 때문입니다.
+- orderId 기반 키 자동 유도는 의도적으로 제공하지 않습니다 — 결정적 키 + 4xx 재생 조합의 함정을 라이브러리가 사용자 몰래 떠안게 되기 때문입니다.
 
 ### 3.7 `resolveConfirmFailure` — confirm 실패는 결제 실패가 아니다
 
@@ -455,20 +462,25 @@ app.post('/admin/refunds', async (req, res) => {
   const order = await db.orders.byPaymentKey(pk.value);             // 기대 금액은 우리 장부에서!
 
   const c = checked.value;
-  const result = c.kind === 'deposited-virtual-account'             // [3] 실행 — kind 내로잉이 컴파일 강제
-    ? await client.cancels.cancelFully(c, {
-        reason, expectedAmount: order.paidAmount,
-        refundAccount: orThrow(refundAccount({ bank: '88', accountNumber: req.body.account, holderName: req.body.holder })),
-      })
-    : c.kind === 'awaiting-deposit'                                 // 입금 전 — 전액취소만 가능
-      ? await client.cancels.cancelFully(c, { reason, expectedAmount: order.paidAmount })
-      : req.body.amount != null                                     // 여기부터 c는 settled로 내로잉 완료
-        ? await client.cancels.cancelPartially(c, { reason, amount: req.body.amount })
-        : await client.cancels.cancelFully(c, { reason, expectedAmount: order.paidAmount });
+  let result;
+  if (c.kind === 'deposited-virtual-account') {                     // [3] 실행 — kind 내로잉이 컴파일 강제
+    result = await client.cancels.cancelFully(c, {
+      reason, expectedAmount: order.paidAmount,
+      refundAccount: orThrow(refundAccount({ bank: '88', accountNumber: req.body.account, holderName: req.body.holder })),
+    });
+  } else if (c.kind === 'awaiting-deposit') {                       // 입금 전 — 전액취소만 가능
+    result = await client.cancels.cancelFully(c, { reason, expectedAmount: order.paidAmount });
+  } else if (req.body.amount != null) {
+    if (!c.partialAllowed) return res.status(422).json({ error: 'partial cancel not allowed' });
+    result = await client.cancels.cancelPartially(c, { reason, amount: req.body.amount });
+  } else {
+    result = await client.cancels.cancelFully(c, { reason, expectedAmount: order.paidAmount });
+  }
 
   if (isErr(result)) {
     if (result.error.source === 'network') {
-      await retryQueue.push(result.error.retry);                    // 재시도 티켓 — §5 에러 처리 참고
+      if (!result.error.retry.durable) opsAlert(result.error.retry);
+      else await retryQueue.push(result.error.retry.ticketId);      // 불투명 ID만 큐에 적재 — §5
       return res.status(503).end();
     }
     return res.status(422).json(result.error);
@@ -484,6 +496,7 @@ app.post('/admin/refunds', async (req, res) => {
 > - **전액 취소 후에도 status는 `CANCELED`가 아닐 수 있다(실측)** — 부분취소 이력이 있는 결제를 잔액 전액 취소하면 status가 `PARTIAL_CANCELED`로 남습니다. 완전 취소 판정의 유일한 기준은 `balanceAmount === 0`이고, 라이브러리는 이를 `CancelOutcome.fullyCanceled`로 제공합니다. `asCancelable`도 잔액 0이면 status와 무관하게 `already-fully-canceled`를 반환합니다.
 > - **재취소 에러는 두 얼굴(실측)** — 단일 전액취소 후 재취소는 400 `ALREADY_CANCELED_PAYMENT`, 부분취소 이력 후 재취소는 403 `NOT_CANCELABLE_AMOUNT`. `isAlreadyFullyCanceledError`가 양쪽을 수용합니다.
 > - **가상계좌 분기는 오버로드로 강제** — 입금 완료 가상계좌는 `refundAccount` 필수, 일반 결제는 `?: never`로 금지, 입금 전(`WAITING_FOR_DEPOSIT`)은 전액취소만 가능(부분취소 오버로드 자체가 없음).
+> - **부분취소 가능 여부도 강제** — 조회 응답의 `isPartialCancelable`이 `true`인 결제만 `cancelPartially`에 전달할 수 있고, 강제 캐스팅 우회도 런타임에서 거부됩니다.
 > - **잔액 초과 취소는 API 호출 전에 차단** — 우회해서 보내면 서버가 403 `NOT_CANCELABLE_AMOUNT`를 반환합니다(실측). 동시 취소 경합은 서버 낙관적 잠금(`NOT_MATCHES_REFUNDABLE_AMOUNT`)이 잡아내며, 라이브러리는 조회 시점 잔액을 항상 `refundableAmount`로 전송합니다.
 
 ### 4.3 자동결제(빌링): 인증 → 발급 → 승인
@@ -506,7 +519,7 @@ await requestBillingAuth(ck, customer, {
 
 #### 서버: 콜백 → 세션 대조 → 발급 (명시적 단계)
 
-`requireApproveIdempotencyKey` capability를 켠 구성이 골든 패스입니다(§3.6) — 정기 승인에서 멱등키 누락이 컴파일 에러가 됩니다.
+정기 승인에서는 모든 구성에서 멱등키 누락이 컴파일 에러입니다(§3.6).
 
 ```ts
 import { isErr, customerKey } from '@gj-kit/toss-payments';
@@ -518,8 +531,6 @@ const billingFlow = createBillingFlow(client, {              // client는 API �
   save: (r) => db.billingKeys.upsert(r),                     // 저장이 유일한 보관 수단 — 조회 API 없음
   find: (ck) => db.billingKeys.find(ck),
   delete: (ck) => db.billingKeys.remove(ck),
-}, {
-  capabilities: { requireApproveIdempotencyKey: true },      // §3.6 — 이중 과금 컴파일 차단
 });
 
 app.get('/billing/callback', async (c) => {
@@ -557,7 +568,7 @@ async function chargeMonthly(rawCk: string, amount: number) {
     orderId: generateOrderId('sub'),
     orderName: orThrow(orderName('2026년 8월 구독')),
     amount,
-  }, { idempotencyKey: orThrow(idempotencyKey(`sub:2026-08:${rawCk}`)) }); // capability가 이 인자를 필수로 만든다
+  }, { idempotencyKey: orThrow(idempotencyKey(`sub:2026-08:${rawCk}`)) }); // 모든 구성에서 필수
 
   if (isErr(paid) && paid.error.source === 'toss' && paid.error.code === 'ALREADY_REMOVED_BILLING_KEY')
     await requestReauth(rawCk);                              // 갱신 API 없음 — 재발급 플로우 재시작
@@ -580,7 +591,7 @@ import { orThrow } from '@gj-kit/toss-payments';
 import { depositSecrets } from '@/lib/toss';
 
 const verifier = createWebhookVerifier({
-  dedupe: { claim: (id) => redis.set(`twh:${id}`, '1', { NX: true, EX: 432_000 }).then(Boolean) },
+  dedupe,                                           // 원자적 claim + complete/release + lease 구현
   securityKeys: [orThrow(parseSecurityKey(process.env.TOSS_SECURITY_KEY!))],  // 로테이션 시 [새 키, 옛 키]
   depositSecrets,                                  // §3.1 — confirm측 자동 저장과 같은 store
   autoRefetch: { client },                         // §3.5 — 어댑터 경유 Unverified에 prefetched 첨부
@@ -591,13 +602,24 @@ const verifier = createWebhookVerifier({
 
 ```ts
 const result = await verifier.verify(rawBody, headers, { sourceIp: clientIp });
-if (!result.ok) return respond400();
+if (!result.ok) {
+  return result.error.kind === 'store-failure' || result.error.kind === 'processing'
+    ? respond503()
+    : respond400();
+}
 if (result.value.duplicate) return respond200();   // 재전송 — 정상 ack 후 스킵
-respond200();                                       // 10초 규약: 먼저 200
 const webhook = result.value.webhook;
-if (webhook.trust === 'unverified') {
-  const fresh = await webhook.refetch(client);      // 조회 API로 승격 — payload를 믿지 않는다
-  if (fresh.ok) await syncStatus(fresh.value);
+try {
+  if (webhook.trust === 'unverified') {
+    const fresh = await webhook.refetch(client);    // 조회 API로 승격 — payload를 믿지 않는다
+    if (!fresh.ok) throw new Error('payment refetch failed');
+    await syncStatus(fresh.value);
+  }
+  await verifier.complete(webhook);                 // 내구적 처리 완료 뒤에만 COMPLETED
+  return respond200();
+} catch {
+  await verifier.release(webhook);                  // 재전송이 다시 처리에 진입하도록 보상
+  return respond503();
 }
 ```
 
@@ -605,7 +627,9 @@ if (webhook.trust === 'unverified') {
 >
 > - **토스는 모든 이벤트에 서명을 제공하지 않습니다** — 서명(HMAC)이 있는 이벤트는 `payout.changed`/`seller.changed`뿐이고, 가상계좌 입금(`DEPOSIT_CALLBACK`)은 승인 시 저장한 `secret` 대조, 나머지(결제 상태 변경 포함)는 **암호학적 검증 수단이 없습니다**. 그래서 이 라이브러리에는 단일 `Verified` 타입이 없고 신뢰 3등급(§6 표)을 정직하게 노출합니다. `unverified` 등급은 조회 API 재확인(`prefetched` 또는 `refetch`)을 거쳐야 신뢰 가능한 `Payment`가 됩니다.
 > - **verify는 raw body만 받습니다** — 파싱된 객체를 받는 오버로드는 없습니다. JSON 파싱을 먼저 하면 서명 검증이 원천 불가능해지기 때문입니다.
-> - **dedupe 스토어는 필수입니다** — 토스는 최대 7회 재전송하고, 가상계좌는 이벤트가 이중으로 옵니다. 중복은 Err가 아닌 정상 verdict(`duplicate: true`)입니다 — 400으로 응답하면 3일 19시간 동안 재전송이 계속됩니다.
+> - **일반 이벤트의 source IP는 기본 fail-closed입니다** — 서명·secret이 없는 이벤트는 `sourceIp`가 없거나 내장 허용목록 밖이면 거부됩니다. 프록시가 재작성한 신뢰 가능한 주소만 전달하세요. 로컬 픽스처 테스트에서만 `allowedSourceIps: false`를 명시적으로 사용할 수 있습니다.
+> - **서명 이벤트는 전송 시각도 검증합니다** — 기본 과거/미래 허용 폭은 5분이며, 유효한 HMAC이라도 오래된 재생 요청은 거부됩니다.
+> - **dedupe 스토어는 필수입니다** — `claim`은 원자적이어야 하고 `PROCESSING`에는 crash-recovery lease, `COMPLETED`에는 최장 재전송 기간보다 긴 TTL을 두어야 합니다. 완료된 중복은 정상 verdict(`duplicate: true`)지만 처리 중 동시 전달은 503 재시도 신호입니다.
 
 ---
 
@@ -643,10 +667,11 @@ if (isErr(result) && result.error.source === 'toss') {
 
 ### 취소 재시도 티켓 — 응답 유실 시 안전한 재실행
 
-취소 요청이 `network` 실패하면 응답을 못 받았을 뿐 서버에는 도달했을 수 있습니다. 에러에 동봉된 `CancelRetryTicket`에는 실행 전에 봉인한 **동일 멱등키 + 동일 body**가 각인되어 있어, `client.cancels.retry(ticket)`은 서버에 도달했었다면 멱등 재생을, 아니면 재실행을 합니다 — 이중 취소가 발생하지 않습니다. 토스의 멱등 판정에 body가 포함되지 않으므로(문서 명시) body 동일성은 티켓 봉인이 보장합니다. 멱등키는 최초 사용 후 15일 유효 — 오래된 티켓 재실행은 새 요청으로 처리될 수 있습니다.
+취소 요청이 `network` 실패하면 응답을 못 받았을 뿐 서버에는 도달했을 수 있습니다. 에러에 동봉된 `CancelRetryTicket`에는 동일 요청을 가리키는 불투명 `ticketId`와 멱등키 메타만 있고, 실제 path/body는 `cancelRetries` 저장소에 보관됩니다. 저장소를 배선하면 **네트워크 요청 전에** record를 저장하고, 저장 실패 시 취소 요청을 보내지 않습니다. 따라서 토스 처리 직후 프로세스가 종료돼도 `retryById(ticketId)`로 **동일 멱등키 + 동일 body**를 재실행할 수 있습니다. 정상 응답 또는 확정적인 토스 오류 뒤에는 record를 제거하고, 응답 유실 때만 남깁니다. 티켓은 15일이 지나면 로컬에서 거부되어 멱등 TTL 만료 뒤 새 취소로 실행되는 사고를 막습니다.
 
 ```ts
 const retried = await client.cancels.retry(ticket);
+const recoveredAfterRestart = await client.cancels.retryById(ticket.ticketId);
 ```
 
 confirm 실패의 복구는 §3.7 `resolveConfirmFailure`가 담당합니다 — transport 실패를 티켓 없이 조회로 확정합니다.
@@ -680,10 +705,12 @@ export const POST = verifier.fetchHandler({
     // prefetched가 Err면 payload 폴백 금물 — 다음 재전송(최대 7회)이 자연 재시도다
   },
   onBillingDeleted: async (w) => { await deactivateSubscription(w.event.data.billingKey); },
+}, {
+  // 이 헤더는 외부 요청 값을 그대로 통과시키지 않고 ingress가 반드시 덮어써야 합니다.
+  sourceIp: (request) => request.headers.get('x-trusted-client-ip'),
 });
-// raw body 보존·검증·dedupe·10초 내 200 — 전부 어댑터가 소유합니다.
-// Vercel/Lambda에서는 options.waitUntil을 넘기세요. 미제공 감지 시 기본 폴백:
-// 핸들러 동기 완료 후 200(이벤트 유실 방지) + 경고 로그.
+// raw body 보존·검증·dedupe·complete/release를 어댑터가 소유합니다.
+// 핸들러 성공 뒤에만 200, 실패하면 claim 해제 + 500으로 재전송을 유도합니다.
 ```
 
 ### Express (Node 어댑터) — `express.raw` 주의
@@ -692,6 +719,11 @@ export const POST = verifier.fetchHandler({
 // ⚠ JSON 파싱 미들웨어(express.json)를 이 경로에 두지 마세요 — raw body가 파괴되면 서명 검증이 불가능합니다.
 app.post('/webhooks/toss', express.raw({ type: '*/*' }), verifier.nodeHandler({
   onDepositCallback: async ({ event }) => { await fulfillOrder(event.orderId); },
+}, {
+  sourceIp: (request) => {
+    const value = request.headers['x-trusted-client-ip'];
+    return typeof value === 'string' ? value : undefined;
+  },
 }));
 ```
 
@@ -738,6 +770,8 @@ const sink = memoryAuditSink();
 다른 시스템에서 이미 발급받은 빌링키가 있다면 `import`로 스토어에 이관합니다. 형식 검증 후 `store.save`를 거쳐 `BillingProfile`로 승격됩니다.
 
 ```ts
+import { idempotencyKey, orThrow } from '@gj-kit/toss-payments';
+
 const imported = await billing.import({
   customerKey: 'legacy-user-42',
   billingKey: 'Zm9v...',
@@ -747,7 +781,9 @@ const imported = await billing.import({
   transfers: null,
 });
 if (imported.ok) {
-  await billing.approve(imported.value, order); // 이후는 일반 프로필과 동일
+  await billing.approve(imported.value, order, {
+    idempotencyKey: orThrow(idempotencyKey('legacy:first-charge:42')),
+  }); // 이후는 일반 프로필과 동일
 }
 ```
 

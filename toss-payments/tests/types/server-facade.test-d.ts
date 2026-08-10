@@ -87,17 +87,16 @@ describe('§2 오버로드 — 키 쌍 규칙을 오버로드 불충족으로 �
   });
 });
 
-describe('§3.6 capability 결합 — billing.capabilities가 BillingFlow 타입에 반영된다', () => {
-  it('requireApproveIdempotencyKey 선언 시 approve의 options 자체가 필수', () => {
+describe('§3.6 billing approve — 파사드에서도 멱등키 상시 강제', () => {
+  it('capability 선언 없이도 approve의 options와 idempotencyKey가 필수', () => {
     const kit = createTossPayments({
       secretKey: sk,
       billingKeys,
-      billing: { capabilities: { requireApproveIdempotencyKey: true } },
     });
     const profile = forge<BillingProfile>();
     const order = forge<BillingOrder>();
 
-    // @ts-expect-error 멱등키 없는 approve — capability가 options(idempotencyKey)를 타입 필수화
+    // @ts-expect-error 멱등키 없는 approve — 모든 구성에서 타입 필수
     void kit.billing.approve(profile, order);
 
     void kit.billing.approve(profile, order, { idempotencyKey: forge<IdempotencyKey>() }); // 정상 경로

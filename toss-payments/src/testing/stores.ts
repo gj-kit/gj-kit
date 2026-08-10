@@ -15,6 +15,7 @@ import type {
   OrderStore,
   StoredOrder,
 } from '../server/stores';
+import type { CancelRetryRecord, CancelRetryStore } from '../server/cancel';
 import type { WebhookDedupeStore } from '../webhook/verifier';
 
 /** orderId 키 인메모리 OrderStore — saveOrder는 같은 orderId를 덮어쓴다. */
@@ -79,13 +80,38 @@ export function memoryAuditSink(): AuditSink & { readonly entries: readonly Audi
 
 /** 인메모리 dedupe — 단일 프로세스 한정. 분산 환경은 Redis `SET NX` 등으로 대체할 것. */
 export function memoryDedupeStore(): WebhookDedupeStore {
-  const claimed = new Set<string>();
+  const states = new Map<string, 'processing' | 'completed'>();
   return {
-    claim(transmissionId) {
+    claim(dedupeKey) {
       // 검사와 점유 사이에 await가 없다 — JS run-to-completion 모델상 원자적 claim.
-      if (claimed.has(transmissionId)) return Promise.resolve(false);
-      claimed.add(transmissionId);
-      return Promise.resolve(true);
+      const state = states.get(dedupeKey);
+      if (state !== undefined) return Promise.resolve(state);
+      states.set(dedupeKey, 'processing');
+      return Promise.resolve('claimed');
+    },
+    complete(dedupeKey) {
+      states.set(dedupeKey, 'completed');
+      return Promise.resolve();
+    },
+    release(dedupeKey) {
+      if (states.get(dedupeKey) === 'processing') states.delete(dedupeKey);
+      return Promise.resolve();
+    },
+  };
+}
+
+/** 취소 재시도 레코드 인메모리 저장소 — 단위 테스트/프로토타입 전용. */
+export function memoryCancelRetryStore(): CancelRetryStore {
+  const records = new Map<string, CancelRetryRecord>();
+  return {
+    async save(record) {
+      records.set(record.ticketId, record);
+    },
+    async load(ticketId) {
+      return records.get(ticketId) ?? null;
+    },
+    async delete(ticketId) {
+      records.delete(ticketId);
     },
   };
 }

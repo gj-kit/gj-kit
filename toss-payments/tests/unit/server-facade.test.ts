@@ -101,7 +101,7 @@ afterEach(() => {
 
 describe('§2 파사드 — 개별 팩토리 위임 동일성', () => {
   it('confirmCallback: 파사드와 개별 조립의 Result·와이어 요청이 일치한다', async () => {
-    const confirmBody = rawPayment();
+    const confirmBody = rawPayment({ paymentKey: 'pk-abc' });
 
     const viaFacadeFetch = routedFetch(confirmBody);
     const kit = createTossPayments({
@@ -128,6 +128,7 @@ describe('§3.1 depositSecrets — 1회 배선으로 confirm 저장 → 웹훅 �
   it('가상계좌 confirm Ok가 저장한 secret으로 DEPOSIT_CALLBACK이 검증된다', async () => {
     const depositSecrets = memoryDepositSecretStore();
     const confirmBody = rawPayment({
+      paymentKey: 'pk-abc',
       method: '가상계좌',
       status: 'WAITING_FOR_DEPOSIT',
       secret: VA_SECRET,
@@ -138,7 +139,7 @@ describe('§3.1 depositSecrets — 1회 배선으로 confirm 저장 → 웹훅 �
       secretKey: sk(),
       orders: await preloadedOrders(),
       depositSecrets,
-      webhook: { dedupe: memoryDedupeStore() },
+      webhook: { dedupe: memoryDedupeStore(), allowedSourceIps: false },
       client: { fetch },
     });
 
@@ -168,12 +169,12 @@ describe('§3.3 events — 버스 1개가 4곳(client/confirm/billing/webhook)�
     events.on('billing.issued', (e) => void seen.push(e.type));
     events.on('webhook.accepted', (e) => void seen.push(e.type));
 
-    const { fetch } = routedFetch(rawPayment());
+    const { fetch } = routedFetch(rawPayment({ paymentKey: 'pk-abc' }));
     const kit = createTossPayments({
       secretKey: sk(),
       orders: await preloadedOrders(),
       billingKeys: memoryBillingKeyStore(),
-      webhook: { dedupe: memoryDedupeStore() },
+      webhook: { dedupe: memoryDedupeStore(), allowedSourceIps: false },
       events,
       client: { fetch },
     });
@@ -200,7 +201,7 @@ describe('§3.3 events — 버스 1개가 4곳(client/confirm/billing/webhook)�
   });
 
   it('events 미주입 → kit.events는 no-op 구독 표면(구독해도 발화 없음, 해제 무해)', async () => {
-    const { fetch } = routedFetch(rawPayment());
+    const { fetch } = routedFetch(rawPayment({ paymentKey: 'pk-abc' }));
     const kit = createTossPayments({
       secretKey: sk(),
       orders: await preloadedOrders(),
@@ -218,31 +219,22 @@ describe('§3.3 events — 버스 1개가 4곳(client/confirm/billing/webhook)�
 
 describe('§3.5 webhook.autoRefetch: true — 파사드 내부 client 자동 결속', () => {
   it('어댑터 경유 Unverified에 내부 client 조회 결과가 prefetched로 첨부된다', async () => {
-    const { fetch, calls } = routedFetch(rawPayment());
+    const { fetch, calls } = routedFetch(rawPayment({ paymentKey: 'pk-abc' }));
     const kit = createTossPayments({
       secretKey: sk(),
-      webhook: { dedupe: memoryDedupeStore(), autoRefetch: true },
+      webhook: { dedupe: memoryDedupeStore(), autoRefetch: true, allowedSourceIps: false },
       client: { fetch },
     });
 
     const received: { trust: string; prefetchedStatus: string | null }[] = [];
-    // waitUntil 주입 — sync-complete 모드는 prefetch를 건너뛴다(§3.5 10초 규약 보존)
-    const jobs: Promise<unknown>[] = [];
-    const handler = kit.webhook.fetchHandler(
-      {
+    const handler = kit.webhook.fetchHandler({
         onPaymentStatusChanged: (w) => {
           received.push({
             trust: w.trust,
             prefetchedStatus: w.prefetched?.ok === true ? w.prefetched.value.status : null,
           });
         },
-      },
-      {
-        waitUntil: (p) => {
-          jobs.push(p);
-        },
-      },
-    );
+    });
 
     const { rawBody, headers } = webhookFixture.paymentStatusChanged({
       payment: { paymentKey: 'pay_123', orderId: OID, status: 'DONE' },
@@ -255,7 +247,6 @@ describe('§3.5 webhook.autoRefetch: true — 파사드 내부 client 자동 결
       }),
     );
     expect(res.status).toBe(200);
-    await Promise.all(jobs);
     // 내부 client가 결속된 증거 — 별도 client 주입 없이 조회가 수행됐다(trust 승격은 없음)
     expect(received).toEqual([{ trust: 'unverified', prefetchedStatus: 'DONE' }]);
     expect(calls.some((c) => c.url.includes('/v1/payments/pay_123'))).toBe(true);

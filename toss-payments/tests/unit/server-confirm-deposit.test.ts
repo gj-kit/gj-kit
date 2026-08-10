@@ -43,6 +43,7 @@ function memoryOrders(): OrderStore {
 /** 가상계좌 confirm 성공 응답 — secret non-null, status WAITING_FOR_DEPOSIT(문서). */
 function vaPayment(): Record<string, unknown> {
   return rawPayment({
+    paymentKey: 'pk-abc',
     method: '가상계좌',
     status: 'WAITING_FOR_DEPOSIT',
     secret: VA_SECRET,
@@ -84,7 +85,7 @@ describe('§3.1 depositSecrets — 가상계좌 secret 자동 저장', () => {
   it('method 가드 — 카드 결제는 secret non-null이어도 저장하지 않는다(BILLING 실측 근거)', async () => {
     const { fetch } = mockFetch(() => ({
       status: 200,
-      body: rawPayment({ method: '카드', secret: 'ps_billing_nonnull' }),
+      body: rawPayment({ paymentKey: 'pk-abc', method: '카드', secret: 'ps_billing_nonnull' }),
     }));
     const deposits = memoryDepositSecretStore();
     const flow = createConfirmFlow(testClient(fetch), memoryOrders(), { depositSecrets: deposits });
@@ -130,7 +131,7 @@ describe('§3.1 depositSecrets — 가상계좌 secret 자동 저장', () => {
     expect(infos).toHaveLength(1);
     expect(infos[0]?.orderId).toBe(OID);
     // paymentKey는 승인 응답 Payment의 값 — 조회 복구(getPayment)에 쓰는 키
-    expect(infos[0]?.paymentKey).toBe('tviva20260809abcdef');
+    expect(infos[0]?.paymentKey).toBe('pk-abc');
     expect((infos[0]?.cause as Error).message).toBe('db down');
     // secret 원문은 통지 payload 어디에도 없다(로그 유출 방지)
     expect(JSON.stringify(infos)).not.toContain(VA_SECRET);
@@ -222,7 +223,10 @@ describe('§3.3 confirm 이벤트 — Result 확정 후 발화', () => {
   });
 
   it('events 미주입 = 발행 지점 no-op(현행 동작 동일)', async () => {
-    const { fetch } = mockFetch(() => ({ status: 200, body: rawPayment() }));
+    const { fetch } = mockFetch(() => ({
+      status: 200,
+      body: rawPayment({ paymentKey: 'pk-abc' }),
+    }));
     const flow = createConfirmFlow(testClient(fetch), memoryOrders());
     await seedOrder(flow);
     expect(isOk(await flow.confirmCallback(CALLBACK))).toBe(true);

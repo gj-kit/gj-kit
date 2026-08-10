@@ -14,6 +14,7 @@ import {
   classifyTossErrorCode,
   createTossClient,
   generateCustomerKey,
+  generateIdempotencyKey,
   generateOrderId,
   isTestKey,
   orThrow,
@@ -108,7 +109,7 @@ describe('TossPayments-Test-Code 시뮬레이션 (시나리오 7)', () => {
           amount: 100,
         },
         // testCode는 E='test' 내로잉된 클라이언트에서만 타입 허용 — 라이브 키면 컴파일 에러
-        { testCode: 'REJECT_CARD_PAYMENT' },
+        { testCode: 'REJECT_CARD_PAYMENT', idempotencyKey: generateIdempotencyKey() },
       );
 
       // 실동작 실측 확정(2026-08-09, 이 테스트 단건 실행으로 확인): 빌링 승인 경로에서도

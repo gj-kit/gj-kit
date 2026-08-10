@@ -54,6 +54,8 @@ function billingOrder(): BillingOrder {
   };
 }
 
+const approveOptions = () => ({ idempotencyKey: orThrow(idempotencyKey('billing-audit-cycle-1')) });
+
 const secretKey = () => orThrow(parseApiSecretKey('test_sk_abcdef'));
 
 describe('billing approve/revoke — 관측 채널 3곳의 billingKey 경로 치환', () => {
@@ -66,13 +68,13 @@ describe('billing approve/revoke — 관측 채널 3곳의 billingKey 경로 치
     });
     const { fetch, calls } = mockFetch(() => ({
       status: 200,
-      body: rawPayment({ type: 'BILLING', status: 'DONE' }),
+      body: rawPayment({ type: 'BILLING', status: 'DONE', totalAmount: 9_900 }),
     }));
     const client = createTossClient(secretKey(), { fetch, audit: { sink }, events });
     const billing = createBillingFlow(client, memoryBillingKeyStore());
     const profile = orThrow(await billing.import(record()));
 
-    const r = await billing.approve(profile, billingOrder());
+    const r = await billing.approve(profile, billingOrder(), approveOptions());
     expect(isOk(r)).toBe(true);
 
     // ① AuditEntry.path — 치환본만

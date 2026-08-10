@@ -25,6 +25,22 @@ describe('createTossClient — 인증/요청 형식', () => {
     expect(createTossClient(secretKey(), { fetch }).env).toBe('test');
   });
 
+  it('live 키는 공식 HTTPS origin 외 baseUrl을 기본 거부한다', () => {
+    const liveKey = orThrow(parseApiSecretKey('live_sk_abcdef'));
+    expect(() => createTossClient(liveKey, { baseUrl: 'https://proxy.example.com' })).toThrow(
+      'live 키의 baseUrl',
+    );
+    expect(() => createTossClient(liveKey, { baseUrl: 'http://api.tosspayments.com' })).toThrow(
+      'live 키의 baseUrl',
+    );
+    expect(() =>
+      createTossClient(liveKey, {
+        baseUrl: 'https://proxy.example.com',
+        dangerouslyAllowCustomLiveBaseUrl: true,
+      }),
+    ).not.toThrow();
+  });
+
   it('경로의 paymentKey/orderId는 encodeURIComponent 처리된다', async () => {
     const { fetch, calls } = mockFetch(() => ({ status: 200, body: rawPayment() }));
     const client = createTossClient(secretKey(), { fetch });

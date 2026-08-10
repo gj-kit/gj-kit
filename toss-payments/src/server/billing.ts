@@ -45,6 +45,8 @@ import type { BillingKeyRecord, BillingKeyStore } from './stores';
  * 실제 전송 경로는 불변이다.
  */
 const BILLING_AUDIT_PATH = '/v1/billing/[REDACTED]';
+/** 공식 빌링 승인 API의 최소 timeout(60초)보다 여유를 둔 값. */
+const BILLING_APPROVE_TIMEOUT_MS = 65_000;
 
 // ─── 봉인 심볼 — 비열거·비공개. JSON.stringify/스프레드에 새지 않는다 ───────────
 const authKeySeal: unique symbol = Symbol('gj-kit/toss-payments#billing-auth-key');
@@ -237,6 +239,16 @@ export type IssueBillingKeyError =
 export type BillingApproveError =
   | TossApiFailure<BillingErrorCode>
   | TransportFailure
+  | {
+      readonly source: 'library';
+      readonly kind: 'missing-idempotency-key';
+    }
+  | {
+      readonly source: 'library';
+      readonly kind: 'invalid-input';
+      readonly field: string;
+      readonly reason: string;
+    }
   /** 봉인 소실 복제본 — billing.load()로 재수화하라. */
   | {
       readonly source: 'library';
@@ -267,17 +279,7 @@ export type ImportBillingKeyError =
 export interface BillingCapabilities {
   /** 카드 정보 직접 전달 발급(/v1/billing/authorizations/card) — 추가 계약 필요. */
   readonly directCardIssue?: true;
-  /**
-   * §3.6 approve 멱등키 타입 필수화 — cron 중복 실행·큐 at-least-once에서 키 없는
-   * approve 2회 = 이중 과금(이 라이브러리에서 "옵션 누락 = 금전 사고"인 유일 지점).
-   * 켜면 approve의 options 파라미터 자체가 필수가 되고 idempotencyKey가 요구된다.
-   *
-   * 키 권장: 청구 주기 결정적 값 — `idempotencyKey(\`sub:${period}:${customerKey}\`)`.
-   * 재실행 시 첫 응답 재생으로 무해하다. **단 4xx 실패 후 파라미터를 고쳐 재시도할 땐
-   * 반드시 새 키**(Phase 5 실측 — 동일 키는 15일간 같은 에러를 재생한다). 일시 오류가
-   * 결정적 키에 바인딩되면 해당 주기 재청구가 15일 막히는 함정 → 재시도 시
-   * `sub:${period}:${customerKey}:retry-${attempt}`처럼 attempt suffix를 붙여라.
-   */
+  /** @deprecated approve는 이제 모든 구성에서 멱등키가 필수다. */
   readonly requireApproveIdempotencyKey?: true;
 }
 
@@ -309,17 +311,13 @@ export interface BillingFlowBase<E extends Env> {
    * NOT_MATCHES_CUSTOMER_KEY 구조적 방지. 봉인이 소실된 profile(스프레드 복제본 등)은
    * 런타임 Err('profile-detached') — billing.load로 재수화 안내.
    *
-   * ⚠ 메서드 단축 구문이 아닌 **프로퍼티 함수 타입**이다 — 메서드는 파라미터가 bivariant로
-   * 검사되어 `BillingFlow<E, {requireApproveIdempotencyKey: true}>`가 이 광의 타입에
-   * 에러 없이 대입되고, 넓힌 참조로 멱등키 없는 approve가 컴파일된다(§3.6 컴파일 방어의
-   * 침묵 우회 — G7 "옵션 누락 = 금전 사고" 지점). strictFunctionTypes 하에서 프로퍼티
-   * 함수 타입은 contravariant 검사라 그 넓힘 대입이 명시적 컴파일 에러가 된다.
-   * 호출 구문은 메서드와 동일 — 소비 측 파괴 없음.
+   * options와 idempotencyKey는 모든 구성에서 필수다. TypeScript 우회를 거친 런타임 호출도
+   * missing-idempotency-key로 API 전송 전에 거부한다.
    */
   readonly approve: (
     profile: BillingProfile,
     order: BillingOrder,
-    options?: CallOptions<E>,
+    options: CallOptions<E> & { readonly idempotencyKey: IdempotencyKey },
   ) => Promise<Result<BillingPayment, BillingApproveError>>;
 
   /**
@@ -333,25 +331,7 @@ export interface BillingFlowBase<E extends Env> {
 }
 
 export type BillingFlow<E extends Env, C extends BillingCapabilities = {}> =
-  // §3.6 — requireApproveIdempotencyKey 선언 시 approve의 options 자체가 필수(멱등키 요구).
-  // 미선언이면 기존 BillingFlowBase 그대로(파괴 없음). 런타임 동작은 동일 — 타입만 협착.
-  (C extends { requireApproveIdempotencyKey: true }
-    ? Omit<BillingFlowBase<E>, 'approve'> & {
-        /**
-         * capability로 멱등키가 타입 필수화된 approve — 키 없는 approve 중복 실행 =
-         * 이중 과금을 컴파일에 차단한다. 키 지침은 {@link BillingCapabilities.requireApproveIdempotencyKey}.
-         *
-         * 프로퍼티 함수 타입인 이유는 {@link BillingFlowBase.approve} 참조 — 메서드
-         * bivariance로 광의 타입(`BillingFlow<E>`/`BillingFlowBase<E>`)에 대입해 멱등키
-         * 강제를 침묵 우회하는 경로를 contravariant 검사로 차단한다.
-         */
-        readonly approve: (
-          profile: BillingProfile,
-          order: BillingOrder,
-          options: CallOptions<E> & { readonly idempotencyKey: IdempotencyKey },
-        ) => Promise<Result<BillingPayment, BillingApproveError>>;
-      }
-    : BillingFlowBase<E>) &
+  BillingFlowBase<E> &
   (C extends { directCardIssue: true }
     ? {
         /**
@@ -539,6 +519,28 @@ export function createBillingFlow<E extends Env, C extends BillingCapabilities =
     order: BillingOrder,
     callOptions?: CallOptions<E>,
   ): Promise<Result<BillingPayment, BillingApproveError>> => {
+    if (callOptions?.idempotencyKey === undefined) {
+      return err({ source: 'library', kind: 'missing-idempotency-key' });
+    }
+    if (!Number.isSafeInteger(order.amount) || order.amount <= 0) {
+      return err({
+        source: 'library',
+        kind: 'invalid-input',
+        field: 'amount',
+        reason: '금액은 0보다 큰 안전한 정수여야 합니다',
+      });
+    }
+    for (const field of ['taxFreeAmount', 'taxExemptionAmount'] as const) {
+      const value = order[field];
+      if (value !== undefined && (!Number.isSafeInteger(value) || value < 0)) {
+        return err({
+          source: 'library',
+          kind: 'invalid-input',
+          field,
+          reason: '0 이상의 안전한 정수여야 합니다',
+        });
+      }
+    }
     const billingKey = readSeal(profile, billingKeySeal);
     if (billingKey === undefined) {
       return err({ source: 'library', kind: 'profile-detached', customerKey: profile.customerKey });
@@ -567,12 +569,25 @@ export function createBillingFlow<E extends Env, C extends BillingCapabilities =
       idempotencyKey: callOptions?.idempotencyKey,
       testCode: callOptions?.testCode,
       signal: callOptions?.signal,
+      timeoutMs: BILLING_APPROVE_TIMEOUT_MS,
     });
     if (!r.ok) return err(r.error);
     // 2xx라도 빈 body/비객체 JSON이면 '빈 Payment' 제조 금지 — 필수 필드 가드 통과 후에만 Ok
     const parsed = parsePaymentChecked(r.value);
     if (!parsed.ok) return parsed;
-    // 승인 성공 응답은 type BILLING, status DONE(문서) — 응답 협착 단언
+    if (
+      parsed.value.type !== 'BILLING' ||
+      parsed.value.status !== 'DONE' ||
+      parsed.value.orderId !== order.orderId ||
+      parsed.value.totalAmount !== order.amount
+    ) {
+      return err({
+        source: 'network',
+        code: 'NETWORK_ERROR',
+        retryable: true,
+        cause: new Error('빌링 승인 2xx 응답이 요청(type/status/orderId/amount)과 일치하지 않습니다.'),
+      });
+    }
     return ok(parsed.value as BillingPayment);
   };
 
@@ -593,7 +608,9 @@ export function createBillingFlow<E extends Env, C extends BillingCapabilities =
       testCode: callOptions?.testCode,
       signal: callOptions?.signal,
     });
-    if (!r.ok) return err(r.error);
+    if (!r.ok && !(r.error.source === 'toss' && r.error.code === 'ALREADY_REMOVED_BILLING_KEY')) {
+      return err(r.error);
+    }
     try {
       await store.delete(profile.customerKey);
     } catch (cause) {

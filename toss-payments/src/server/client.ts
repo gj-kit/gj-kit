@@ -9,11 +9,17 @@ import type { AuditEntry, AuditOptions } from '../core/audit';
 import { classifyTossErrorCode } from '../core/errors';
 import type { TossApiFailure, TransportFailure } from '../core/errors';
 import { getInternalEmit } from '../core/events';
-import type { IdempotencyKey, OrderId, PaymentKey } from '../core/ids';
+import {
+  orderId as parseOrderId,
+  paymentKey as parsePaymentKey,
+  type IdempotencyKey,
+  type OrderId,
+  type PaymentKey,
+} from '../core/ids';
 import type { ApiSecretKey, Env, WidgetSecretKey } from '../core/keys';
 import type { Payment } from '../core/payment';
 import { err, ok, type Result } from '../core/result';
-import { createCancels, type TossCancels } from './cancel';
+import { createCancels, type CancelRetryStore, type TossCancels } from './cancel';
 import type { TossEventMap, TossEvents } from './events';
 
 export type KeyKind = 'api' | 'widget';
@@ -64,6 +70,11 @@ export interface TossClientOptions {
   readonly fetch?: typeof fetch;
   /** 기본 https://api.tosspayments.com */
   readonly baseUrl?: string;
+  /**
+   * live 키로 공식 API 호스트 외 주소를 사용하는 위험한 탈출구.
+   * 일반 운영에서는 절대 켜지 말 것.
+   */
+  readonly dangerouslyAllowCustomLiveBaseUrl?: true;
   /** 기본 30_000ms — AbortSignal.timeout과 호출자 signal을 결합해 적용한다(재시도 시 시도별 독립 적용). */
   readonly timeoutMs?: number;
   /** §3.2 아웃바운드 req/res 증거 기록 — 기본 꺼짐. 시도 1건 = AuditEntry 1건. */
@@ -72,6 +83,8 @@ export interface TossClientOptions {
   readonly retry?: RetryOptions;
   /** §3.3 이벤트 버스 — 'api.call' 전용(논리 요청당 최종 1회). createTossEvents 산출물만 발행이 흐른다. */
   readonly events?: TossEvents;
+  /** 취소 transport 실패 티켓을 프로세스 재시작 후에도 재실행하기 위한 영속 저장소. */
+  readonly cancelRetries?: CancelRetryStore;
 }
 
 export interface CallOptions<E extends Env> {
@@ -130,6 +143,8 @@ export interface TossHttpInit {
   readonly idempotencyKey?: string | undefined;
   readonly testCode?: string | undefined;
   readonly signal?: AbortSignal | undefined;
+  /** 엔드포인트별 공식 최소 대기시간. 전역 timeoutMs보다 클 때만 상향한다. */
+  readonly timeoutMs?: number | undefined;
 }
 
 /** (내부) 공통 요청 계층 — 인증/타임아웃/에러 분류를 소유한다. */
@@ -185,18 +200,63 @@ export function parsePayment(data: unknown): Payment {
  */
 export function parsePaymentChecked(data: unknown): Result<Payment, TransportFailure> {
   const record = typeof data === 'object' && data !== null ? (data as Record<string, unknown>) : null;
+  const paymentKeyValue = typeof record?.['paymentKey'] === 'string'
+    ? parsePaymentKey(record['paymentKey'])
+    : null;
+  const orderIdValue = typeof record?.['orderId'] === 'string'
+    ? parseOrderId(record['orderId'])
+    : null;
+  const validStatus =
+    typeof record?.['status'] === 'string' &&
+    [
+      'READY',
+      'IN_PROGRESS',
+      'WAITING_FOR_DEPOSIT',
+      'DONE',
+      'CANCELED',
+      'PARTIAL_CANCELED',
+      'ABORTED',
+      'EXPIRED',
+    ].includes(record['status']);
+  const validType =
+    typeof record?.['type'] === 'string' &&
+    ['NORMAL', 'BILLING', 'BRANDPAY'].includes(record['type']);
+  const validMethod =
+    record?.['method'] === null ||
+    (typeof record?.['method'] === 'string' &&
+      [
+        '카드',
+        '가상계좌',
+        '간편결제',
+        '휴대폰',
+        '계좌이체',
+        '문화상품권',
+        '도서문화상품권',
+        '게임문화상품권',
+      ].includes(record['method']));
+  const validAmount = (value: unknown): boolean =>
+    typeof value === 'number' && Number.isSafeInteger(value) && value >= 0;
   if (
     record === null ||
-    typeof record['paymentKey'] !== 'string' ||
-    typeof record['orderId'] !== 'string' ||
-    typeof record['status'] !== 'string'
+    paymentKeyValue === null ||
+    !paymentKeyValue.ok ||
+    orderIdValue === null ||
+    !orderIdValue.ok ||
+    !validStatus ||
+    !validType ||
+    !validMethod ||
+    !validAmount(record['totalAmount']) ||
+    !validAmount(record['balanceAmount']) ||
+    typeof record['isPartialCancelable'] !== 'boolean' ||
+    (record['cancels'] !== null && !Array.isArray(record['cancels'])) ||
+    (record['status'] === 'DONE' && typeof record['approvedAt'] !== 'string')
   ) {
     return err({
       source: 'network',
       code: 'NETWORK_ERROR',
       retryable: true,
       cause: new Error(
-        '2xx 응답에 Payment 필수 필드(paymentKey/orderId/status)가 없습니다 — 응답 이상. 조회 API로 실제 상태를 재확인하세요.',
+        '2xx 응답이 Payment 계약을 만족하지 않습니다 — 필수 필드(ID·enum·금액·취소)를 검증하세요. 조회 API로 실제 상태를 재확인하세요.',
       ),
     });
   }
@@ -281,8 +341,27 @@ const DEFAULT_RETRY_DELAYS_MS: readonly number[] = [500, 2_000, 8_000];
 
 function createHttp(secretKey: string, env: Env, options: TossClientOptions): TossHttp {
   const fetchImpl = options.fetch ?? globalThis.fetch;
-  const baseUrl = options.baseUrl ?? 'https://api.tosspayments.com';
+  const baseUrl = (options.baseUrl ?? 'https://api.tosspayments.com').replace(/\/+$/, '');
+  let parsedBaseUrl: URL;
+  try {
+    parsedBaseUrl = new URL(baseUrl);
+  } catch {
+    throw new TypeError('baseUrl은 유효한 절대 URL이어야 합니다.');
+  }
+  if (
+    env === 'live' &&
+    options.dangerouslyAllowCustomLiveBaseUrl !== true &&
+    (parsedBaseUrl.protocol !== 'https:' || parsedBaseUrl.origin !== 'https://api.tosspayments.com')
+  ) {
+    throw new TypeError(
+      'live 키의 baseUrl은 https://api.tosspayments.com만 허용됩니다. ' +
+        '프록시가 반드시 필요하면 dangerouslyAllowCustomLiveBaseUrl: true를 명시하세요.',
+    );
+  }
   const timeoutMs = options.timeoutMs ?? 30_000;
+  if (!Number.isSafeInteger(timeoutMs) || timeoutMs <= 0) {
+    throw new TypeError('timeoutMs는 0보다 큰 안전한 정수여야 합니다.');
+  }
   // Basic 인증 캡슐화 — 콜론 필수(문서: 콜론 누락·UTF-8 BOM이 대표 실수)
   const authorization = `Basic ${btoa(`${secretKey}:`)}`;
 
@@ -316,7 +395,18 @@ function createHttp(secretKey: string, env: Env, options: TossClientOptions): To
 
   /** 단일 시도 — 인증/타임아웃(시도별 독립)/에러 분류 소유. 기존 request() 본문과 동일. */
   const attemptOnce = async (init: TossHttpInit): Promise<AttemptResult> => {
-    const timeout = AbortSignal.timeout(timeoutMs);
+    const requestTimeoutMs = Math.max(timeoutMs, init.timeoutMs ?? 0);
+    if (!Number.isSafeInteger(requestTimeoutMs) || requestTimeoutMs <= 0) {
+      return {
+        result: err({
+          source: 'network',
+          code: 'NETWORK_ERROR',
+          retryable: true,
+          cause: new TypeError('요청 timeoutMs는 0보다 큰 안전한 정수여야 합니다.'),
+        }),
+      };
+    }
+    const timeout = AbortSignal.timeout(requestTimeoutMs);
     const signal = init.signal === undefined ? timeout : combineSignals(timeout, init.signal);
 
     const headers: Record<string, string> = { Authorization: authorization };
@@ -554,7 +644,11 @@ export function createTossClient(
       lookup(`/v1/payments/orders/${encodeURIComponent(orderId)}`, callOptions?.signal),
     // §3.3 'cancel.executed'/'cancel.failed' 발행 배선 — createTossEvents 산출물이 아니면
     // null(발행 no-op). 파사드는 events를 client 옵션으로 병합 주입하므로 자동 커버된다.
-    cancels: createCancels(http, getInternalEmit<TossEventMap>(options.events)),
+    cancels: createCancels(
+      http,
+      getInternalEmit<TossEventMap>(options.events),
+      options.cancelRetries,
+    ),
   };
   Object.defineProperty(client, internalHttp, { value: http, enumerable: false });
   return client;

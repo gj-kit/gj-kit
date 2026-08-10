@@ -17,6 +17,7 @@ import { createFetchHandler, createNodeHandler } from './adapters';
 import type {
   FetchHandlerOptions,
   NodeIncomingMessageLike,
+  NodeHandlerOptions,
   NodeServerResponseLike,
   WebhookPrefetchFn,
 } from './adapters';
@@ -76,12 +77,19 @@ export function parseSecurityKey(raw: string): Result<SecurityKey, KeyParseError
 // ── 주입 인터페이스 ────────────────────────────────────────────────────────
 
 /**
- * 원자적 단일 메서드 — seen/markSeen 2단계는 TOCTOU 레이스라 금지.
- * 처음 봤으면 점유 후 true, 이미 봤으면 false. 예: Redis `SET NX`.
- * TTL은 재전송 최장 기간(약 3일 19시간)보다 길게 잡을 것 — 권장 5일(432,000초).
+ * claim은 원자적이어야 한다 — 조회 후 생성하는 2단계 구현은 TOCTOU 레이스라 금지.
+ * PROCESSING에는 crash-recovery lease를, COMPLETED에는 토스의 최장 재전송 기간보다 긴
+ * TTL(권장 5일)을 적용한다.
  */
+export type WebhookClaimState = 'claimed' | 'processing' | 'completed';
+
 export interface WebhookDedupeStore {
-  claim(transmissionId: string): Promise<boolean>;
+  /** 원자적 상태 전이. processing 레코드는 lease 만료 후 재점유 가능해야 한다. */
+  claim(dedupeKey: string): Promise<WebhookClaimState>;
+  /** 비즈니스 핸들러가 내구적 처리를 완료한 후만 호출된다. */
+  complete(dedupeKey: string): Promise<void>;
+  /** 처리 실패 시 재전송이 다시 점유할 수 있게 한다. */
+  release(dedupeKey: string): Promise<void>;
 }
 
 export interface DepositSecretSource {
@@ -98,8 +106,8 @@ export interface WebhookVerifierConfig {
   readonly depositSecrets?: DepositSecretSource;
   /**
    * 기본: 문서 IP 목록({@link TOSS_WEBHOOK_SOURCE_IPS}) 내장. `false` = 끔.
-   * 검사는 verify의 `context.sourceIp` 전달 시에만 수행한다(§7 확정) —
-   * 프록시/로드밸런서 뒤에서는 X-Forwarded-For 신뢰 문제로 오탐하기 쉽기 때문.
+   * 서명·secret이 없는 이벤트는 sourceIp가 없으면 거부한다(fail-closed).
+   * 프록시/로드밸런서 뒤에서는 검증된 ingress가 복원한 주소만 전달해야 한다.
    * Unverified 이벤트의 보조 방어선일 뿐 암호학적 검증을 대체하지 않는다.
    *
    * IPv4-mapped IPv6(`::ffff:x.x.x.x`)는 비교 전에 순수 IPv4 표기로 정규화한다 —
@@ -107,6 +115,10 @@ export interface WebhookVerifierConfig {
    * 쪽도 동일 정규화). 항목은 순수 IPv4 표기 권장.
    */
   readonly allowedSourceIps?: readonly string[] | false;
+  /** 서명 전송 시각의 과거/미래 허용 폭. 기본 5분, false는 비권장 비활성화. */
+  readonly transmissionTimeToleranceMs?: number | false;
+  /** 테스트와 시계 주입용. */
+  readonly clock?: () => Date;
   /**
    * §3.3 이벤트 버스 — webhook.accepted/duplicate/rejected 발행 지점(요약 필드만 —
    * DEPOSIT_CALLBACK rawBody의 secret은 어떤 이벤트 payload에도 실리지 않는다).
@@ -114,19 +126,12 @@ export interface WebhookVerifierConfig {
    */
   readonly events?: TossEvents;
   /**
-   * §3.5 — 설정 시 fetchHandler/nodeHandler의 핸들러 디스패치 직전(200 ack 이후)에
+   * §3.5 — 설정 시 fetchHandler/nodeHandler의 핸들러 디스패치 직전에
    * 결제 참조가 있는 Unverified 이벤트를 자동 재조회해 `prefetched`로 첨부한다.
    * dedupe 통과분에만 수행(재전송 7회가 조회 7회가 되지 않음).
-   *
-   * ⚠ waitUntil 없는 fetchHandler의 기본(sync-complete) 모드에서는 **prefetch가 실행되지
-   * 않는다**(prefetched undefined) — 그 모드는 핸들러 완료가 200 응답의 전제라 조회 왕복이
-   * 응답 '전'에 실행되어 "200 ack 이후"라는 본 계약과 10초 규약을 잠식하기 때문이다.
-   * waitUntil 주입 또는 핸들러의 refetch() 직접 호출로 대체하라(nodeHandler는 응답 후
-   * 실행이라 영향 없음).
-   *
-   * 수동 verify() 경로는 불변 — verify에 네트워크 호출을 심지 않는다(순수성 + 10초 규약
-   * 보존). trust 등급 승격도 없다('unverified' 불변 — 조회 성공은 발신자 진위를 증명하지
-   * 않는다, §7-2).
+   * 어댑터는 prefetch와 핸들러가 성공하고 claim을 COMPLETED로 바꾼 뒤에만 200을 반환한다.
+   * 빠른 응답이 필요하면 핸들러가 내구적 큐에 적재하는 지점까지 책임져야 한다.
+   * 수동 verify() 경로에는 네트워크 호출을 넣지 않으며 trust 등급도 승격하지 않는다.
    */
   readonly autoRefetch?: {
     /** 기존 PaymentLookup 구조적 인터페이스 재사용 — webhook→server 런타임 의존 없음. */
@@ -147,7 +152,7 @@ export type IncomingHeaders =
 export interface WebhookVerifier {
   /**
    * raw body 강제 — 파싱된 객체를 받는 오버로드는 없다(서명 검증 원천 보장).
-   * 순서: 헤더 추출 → (sourceIp 전달 시) IP 검사 → 봉투 판별 → 진위 검증 →
+   * 순서: 헤더 추출 → 봉투 판별 → 진위 검증(일반 이벤트는 sourceIp 필수) →
    * dedupe.claim(진위 통과 후에만) → verdict.
    */
   verify(
@@ -156,10 +161,14 @@ export interface WebhookVerifier {
     context?: { readonly sourceIp?: string },
   ): Promise<Result<WebhookVerdict, WebhookRejection>>;
 
+  /** 수동 verify 경로의 비즈니스 처리 완료 표시. 어댑터는 자동 호출한다. */
+  complete(webhook: AcceptedWebhook): Promise<void>;
+  /** 수동 verify 경로의 처리 실패 보상. 어댑터는 자동 호출한다. */
+  release(webhook: AcceptedWebhook): Promise<void>;
+
   /**
-   * Fetch 표준 어댑터(Next.js Route Handler / Hono) — raw body 추출·검증·dedupe·
-   * 10초 내 200 응답을 소유. waitUntil 미제공 서버리스 감지 시 기본은
-   * 경고 로그 + 핸들러 동기 완료 후 200 폴백(이벤트 유실 방지).
+   * Fetch 표준 어댑터(Next.js Route Handler / Hono) — raw body 추출·검증·dedupe와
+   * 처리 완료/실패 claim 전이를 소유한다. 핸들러 완료 후에만 200을 반환한다.
    */
   fetchHandler(
     handlers: WebhookHandlers,
@@ -169,6 +178,7 @@ export interface WebhookVerifier {
   /** Express/Node — 모든 content-type을 받는 `express.raw()` 뒤에 장착(JSON 파싱 미들웨어 금지). */
   nodeHandler(
     handlers: WebhookHandlers,
+    options?: NodeHandlerOptions,
   ): (req: NodeIncomingMessageLike, res: NodeServerResponseLike) => Promise<void>;
 }
 
@@ -286,6 +296,14 @@ export function createWebhookVerifier(config: WebhookVerifierConfig): WebhookVer
   const emit: InternalTossEmit<WebhookEmitMap> | null = getInternalEmit<WebhookEmitMap>(
     config.events,
   );
+  const clock = config.clock ?? (() => new Date());
+  const transmissionTimeToleranceMs = config.transmissionTimeToleranceMs ?? 300_000;
+  if (
+    transmissionTimeToleranceMs !== false &&
+    (!Number.isSafeInteger(transmissionTimeToleranceMs) || transmissionTimeToleranceMs <= 0)
+  ) {
+    throw new TypeError('transmissionTimeToleranceMs는 false 또는 0보다 큰 안전한 정수여야 합니다.');
+  }
 
   const verifyImpl: WebhookVerifier['verify'] = async (rawBody, headers, context) => {
     // (1) 헤더 추출 — 공통 헤더(문서)가 없으면 토스 발신으로 볼 수 없다
@@ -299,27 +317,13 @@ export function createWebhookVerifier(config: WebhookVerifierConfig): WebhookVer
     }
     const retriedRaw = headerValue(headers, HEADER_RETRIED_COUNT);
     const retriedParsed = retriedRaw === null ? Number.NaN : Number.parseInt(retriedRaw, 10);
-    const meta: WebhookMeta = {
+    const baseMeta = {
       transmissionId,
       transmissionTime,
       retriedCount: Number.isNaN(retriedParsed) ? 0 : retriedParsed,
     };
 
-    // (2) IP 검사 — context.sourceIp 전달 시에만 (§7 확정)
-    if (context?.sourceIp !== undefined && config.allowedSourceIps !== false) {
-      const allowed = config.allowedSourceIps ?? TOSS_WEBHOOK_SOURCE_IPS;
-      // IPv4-mapped IPv6 정규화 — Node dual-stack 리스너(server.listen(port) → '::' 바인딩)의
-      // req.socket.remoteAddress는 IPv4 클라이언트를 '::ffff:13.124.18.147' 형태로 보고한다.
-      // 문자열 완전 일치만 하면 순수 IPv4 표기 허용목록과 전량 불일치 → 정상 웹훅 전량 거부.
-      // 허용목록 항목 쪽도 같은 정규화를 적용한다(사용자 제공 목록의 표기 자유 허용).
-      const ip = normalizeSourceIp(context.sourceIp);
-      if (!allowed.some((entry) => normalizeSourceIp(entry) === ip)) {
-        // 거부 에러의 ip는 원본 값 유지 — 디버깅 시 실제 수신 형태가 보이도록
-        return err({ kind: 'untrusted-source-ip', ip: context.sourceIp });
-      }
-    }
-
-    // (3) 봉투 구조 판별
+    // (2) 봉투 구조 판별
     const bodyText = typeof rawBody === 'string' ? rawBody : textDecoder.decode(rawBody);
     const parsed = parseWebhookEnvelope(bodyText);
     if (!parsed.ok) return parsed;
@@ -330,6 +334,15 @@ export function createWebhookVerifier(config: WebhookVerifierConfig): WebhookVer
       case 'signed': {
         const keys = config.securityKeys ?? [];
         if (keys.length === 0) return err({ kind: 'missing-config', needed: 'securityKeys' });
+        if (transmissionTimeToleranceMs !== false) {
+          const transmittedAt = Date.parse(transmissionTime);
+          if (!Number.isFinite(transmittedAt)) {
+            return err({ kind: 'invalid-transmission-time', value: transmissionTime });
+          }
+          if (Math.abs(clock().getTime() - transmittedAt) > transmissionTimeToleranceMs) {
+            return err({ kind: 'stale-transmission-time', value: transmissionTime });
+          }
+        }
         const signatures = parseSignatureHeader(headerValue(headers, HEADER_SIGNATURE));
         // 서명 대상은 수신한 raw body 바이트 그대로 — JSON 재직렬화 후 검증하면 실패한다(문서 경고)
         const bodyBytes = typeof rawBody === 'string' ? textEncoder.encode(rawBody) : rawBody;
@@ -349,7 +362,11 @@ export function createWebhookVerifier(config: WebhookVerifierConfig): WebhookVer
             keysTried: keys.length,
           });
         }
-        webhook = { trust: 'signature', event: parsed.value.event, meta };
+        webhook = {
+          trust: 'signature',
+          event: parsed.value.event,
+          meta: { ...baseMeta, dedupeKey: `signed:${parsed.value.event.eventId}` },
+        };
         break;
       }
       case 'deposit': {
@@ -367,22 +384,44 @@ export function createWebhookVerifier(config: WebhookVerifierConfig): WebhookVer
           return err({ kind: 'secret-mismatch', orderId: event.orderId });
         }
         // secret은 여기서 소비 완료 — event에는 처음부터 포함되지 않는다(로그 유출 방지)
-        webhook = { trust: 'secret', event, meta };
+        webhook = {
+          trust: 'secret',
+          event,
+          meta: {
+            ...baseMeta,
+            dedupeKey: `deposit:${event.orderId}:${event.transactionKey}:${event.status}`,
+          },
+        };
         break;
       }
-      case 'unverified':
-        webhook = createUnverified(parsed.value.event, meta);
+      case 'unverified': {
+        // 서명·secret이 없는 일반 결제 이벤트는 IP가 유일한 출처 보조 신호다.
+        // 기본은 source IP 미제공까지 거부하고, 비활성화는 false로만 명시하게 한다.
+        if (config.allowedSourceIps !== false) {
+          if (context?.sourceIp === undefined) return err({ kind: 'missing-source-ip' });
+          const allowed = config.allowedSourceIps ?? TOSS_WEBHOOK_SOURCE_IPS;
+          const ip = normalizeSourceIp(context.sourceIp);
+          if (!allowed.some((entry) => normalizeSourceIp(entry) === ip)) {
+            return err({ kind: 'untrusted-source-ip', ip: context.sourceIp });
+          }
+        }
+        webhook = createUnverified(parsed.value.event, {
+          ...baseMeta,
+          dedupeKey: `transmission:${transmissionId}`,
+        });
         break;
+      }
     }
 
     // (5) dedupe — 진위 통과 후에만 점유한다 (위조 요청이 정상 웹훅의 id를 선점하지 못하게)
-    let fresh: boolean;
+    let claim: WebhookClaimState;
     try {
-      fresh = await config.dedupe.claim(meta.transmissionId);
+      claim = await config.dedupe.claim(webhook.meta.dedupeKey);
     } catch (cause) {
       return err({ kind: 'store-failure', cause });
     }
-    if (!fresh) return ok({ duplicate: true, transmissionId: meta.transmissionId });
+    if (claim === 'processing') return err({ kind: 'processing', dedupeKey: webhook.meta.dedupeKey });
+    if (claim === 'completed') return ok({ duplicate: true, transmissionId });
 
     // (6) verdict
     return ok({ duplicate: false, webhook });
@@ -443,7 +482,25 @@ export function createWebhookVerifier(config: WebhookVerifierConfig): WebhookVer
 
   return {
     verify,
-    fetchHandler: (handlers, options) => createFetchHandler(verify, handlers, options, prefetch),
-    nodeHandler: (handlers) => createNodeHandler(verify, handlers, prefetch),
+    complete: (webhook) => config.dedupe.complete(webhook.meta.dedupeKey),
+    release: (webhook) => config.dedupe.release(webhook.meta.dedupeKey),
+    fetchHandler: (handlers, options) =>
+      createFetchHandler(
+        verify,
+        handlers,
+        options,
+        prefetch,
+        (key) => config.dedupe.complete(key),
+        (key) => config.dedupe.release(key),
+      ),
+    nodeHandler: (handlers, options) =>
+      createNodeHandler(
+        verify,
+        handlers,
+        options,
+        prefetch,
+        (key) => config.dedupe.complete(key),
+        (key) => config.dedupe.release(key),
+      ),
   };
 }

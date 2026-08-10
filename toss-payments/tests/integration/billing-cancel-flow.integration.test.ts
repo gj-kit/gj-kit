@@ -56,7 +56,7 @@ function runFlow(): Promise<FlowRun> {
     );
 
     const target1000 = expectOk(asCancelable(fetched), '정상 플로우 — asCancelable(잔액 1000)');
-    if (target1000.kind !== 'settled') {
+    if (target1000.kind !== 'settled' || !target1000.partialAllowed) {
       throw new Error(`정상 플로우 — settled 기대, 실제 kind=${target1000.kind}`);
     }
 

@@ -1,8 +1,8 @@
 /**
  * 프레임워크 어댑터 — fetchHandler(Next.js Route Handler / Hono) + nodeHandler(Express).
  *
- * raw body 보존·검증·dedupe·"10초 내 200" 규약을 라이브러리가 소유한다.
- * 거부(WebhookRejection)는 400 — 토스가 재전송하므로 일시 장애(store-failure)도 회수된다.
+ * raw body 보존·검증·dedupe·처리 claim 수명주기를 라이브러리가 소유한다.
+ * 영구 거부는 400, store 장애와 이미 처리 중인 전달은 503으로 재전송을 유도한다.
  * duplicate는 정상 200 ack — 400을 돌려주면 3일 19시간 재전송 폭탄을 맞는다.
  */
 import type { Result } from '../core/result';
@@ -15,33 +15,33 @@ import type {
 // 타입 전용 import — verifier ↔ adapters의 런타임 순환을 만들지 않는다(verbatimModuleSyntax로 완전 소거)
 import type { IncomingHeaders } from './verifier';
 
-/** verifier.verify와 동일 시그니처(어댑터는 sourceIp를 전달하지 않는다 — 프록시 오탐 회피). */
+/** verifier.verify와 동일 시그니처. 어댑터는 신뢰 가능한 sourceIp 추출 결과를 전달한다. */
 export type WebhookVerifyFn = (
   rawBody: string | Uint8Array,
   headers: IncomingHeaders,
+  context?: { readonly sourceIp?: string },
 ) => Promise<Result<WebhookVerdict, WebhookRejection>>;
+
+export type WebhookClaimAction = (dedupeKey: string) => Promise<void>;
 
 /**
  * §3.5 autoRefetch 첨부 훅(내부) — verifier가 조립해 어댑터에 넘긴다.
- * 실행 시점 계약(협상 불가): 200 ack 확정 **후**·핸들러 디스패치 **직전**·dedupe 통과분만.
+ * 실행 시점 계약: 핸들러 디스패치 직전·dedupe 통과분만.
  * 반환 웹훅은 prefetched만 첨부될 뿐 trust 등급·event는 불변이다.
  */
 export type WebhookPrefetchFn = (webhook: AcceptedWebhook) => Promise<AcceptedWebhook>;
 
 export interface FetchHandlerOptions {
-  /** 서버리스(Vercel/Lambda 등)의 waitUntil — 200 응답 후 핸들러 실행을 회수해 준다. */
-  readonly waitUntil?: (promise: Promise<unknown>) => void;
   /**
-   * waitUntil 미주입 시 동작. 기본 'sync-complete': 핸들러 동기 완료 후 200(이벤트 유실 방지).
-   * 'warn-and-detach': 즉시 200 + 핸들러는 분리 실행 — 서버리스에서는 응답 후 실행이
-   * 회수되지 않고 중단될 수 있다(경고 로그).
-   *
-   * ⚠ 'sync-complete'에서는 autoRefetch(§3.5)의 prefetch를 **건너뛴다**(prefetched는
-   * undefined) — 핸들러 완료가 200 응답의 전제라 조회 왕복이 응답 '전'에 실행되어
-   * "200 ack 이후 실행"이라는 §3.5 협상 불가 계약과 10초 규약을 잠식하기 때문이다.
-   * 조회가 필요하면 핸들러에서 `w.refetch(client)`를 직접 호출하거나 waitUntil을 주입하라.
+   * 신뢰할 수 있는 런타임/ingress 메타데이터에서 원본 클라이언트 IP를 추출한다.
+   * X-Forwarded-For를 무조건 믿지 말고, 해당 ingress가 재작성한 값만 사용할 것.
    */
-  readonly onMissingWaitUntil?: 'sync-complete' | 'warn-and-detach';
+  readonly sourceIp?: (request: Request) => string | null | undefined;
+}
+
+export interface NodeHandlerOptions {
+  /** 프록시 트러스트 설정을 반영한 원본 IP 추출기. 생략 시 socket.remoteAddress. */
+  readonly sourceIp?: (request: NodeIncomingMessageLike) => string | null | undefined;
 }
 
 /** Node IncomingMessage와 구조 호환 — node: 빌트인 타입 import 없이 플랫폼 중립을 유지한다. */
@@ -49,6 +49,7 @@ export interface NodeIncomingMessageLike extends AsyncIterable<unknown> {
   readonly headers: Readonly<Record<string, string | readonly string[] | undefined>>;
   /** express.raw() 사용 시 Buffer가 이미 실려 온다 — 스트림 대신 그것을 쓴다. */
   readonly body?: unknown;
+  readonly socket?: { readonly remoteAddress?: string | undefined };
 }
 
 /** Node ServerResponse와 구조 호환. */
@@ -60,9 +61,8 @@ export interface NodeServerResponseLike {
 /**
  * 이벤트 → 핸들러 디스패치.
  *
- * 핸들러 예외는 삼키고 로그만 남긴다 — dedupe가 이미 transmission-id를 점유했으므로
- * 여기서 500을 돌려줘도 재전송분은 duplicate로 스킵되어 이벤트가 복구되지 않는다.
- * 재처리가 필요한 실패는 핸들러 안에서 자체 큐로 넘길 것.
+ * 핸들러 예외는 호출자에게 전파된다. 어댑터가 claim을 release하고 500을 반환하므로
+ * 재전송이 다시 비즈니스 처리에 도달할 수 있다.
  */
 export async function dispatchWebhook(
   handlers: WebhookHandlers,
@@ -120,52 +120,37 @@ export function createFetchHandler(
   handlers: WebhookHandlers,
   options?: FetchHandlerOptions,
   prefetch?: WebhookPrefetchFn,
+  complete?: WebhookClaimAction,
+  release?: WebhookClaimAction,
 ): (request: Request) => Promise<Response> {
-  let warned = false;
   return async (request) => {
     const rawBody = await request.text();
-    const result = await verify(rawBody, request.headers);
-    if (!result.ok) return new Response(null, { status: 400 });
+    const sourceIp = options?.sourceIp?.(request) ?? undefined;
+    const result = await verify(
+      rawBody,
+      request.headers,
+      sourceIp === undefined ? undefined : { sourceIp },
+    );
+    if (!result.ok) {
+      const retryable = result.error.kind === 'store-failure' || result.error.kind === 'processing';
+      return new Response(null, { status: retryable ? 503 : 400 });
+    }
     if (result.value.duplicate) return new Response(null, { status: 200 });
-
-    // 200 ack은 이 시점에 이미 확정 — prefetch(§3.5)는 응답 판정에 관여하지 못하고
-    // 핸들러 디스패치 직전에만 수행된다(dedupe 통과분 한정 — duplicate는 위에서 반환).
     const webhook = result.value.webhook;
-    const mode = options?.onMissingWaitUntil ?? 'sync-complete';
-    // §3.5 실행 시점 계약(협상 불가): 조회 왕복은 '200 응답 확정 후'에만 — waitUntil 미주입
-    // 기본(sync-complete)에서는 job 완료가 200 응답의 전제라 prefetch를 켜면 조회가 응답
-    // '전'에 실행되어 10초 규약을 잠식한다(getPayment 기본 timeout 30s + retry 결합 시 수십 초).
-    // → sync-complete에서는 prefetch를 건너뛴다. prefetched undefined는 문서화된 상태
-    // ('옵션 꺼짐 또는 수동 verify 경로'와 동일)이며, 필요하면 핸들러에서 w.refetch()를 쓰거나
-    // waitUntil을 주입하라(nodeHandler는 res.end() 후 prefetch라 영향 없음).
-    const syncComplete = options?.waitUntil === undefined && mode === 'sync-complete';
-    const job = (async () => {
-      const prepared =
-        prefetch === undefined || syncComplete ? webhook : await prefetch(webhook);
+    try {
+      const prepared = prefetch === undefined ? webhook : await prefetch(webhook);
       await dispatchWebhook(handlers, prepared);
-    })().catch(logHandlerFailure);
-    if (options?.waitUntil !== undefined) {
-      options.waitUntil(job);
+      await complete?.(webhook.meta.dedupeKey);
       return new Response(null, { status: 200 });
-    }
-    if (!warned) {
-      warned = true;
-      if (options?.onMissingWaitUntil === undefined) {
-        console.warn(
-          '[@gj-kit/toss-payments] fetchHandler: waitUntil이 주입되지 않아 핸들러 동기 완료 후 200을 반환합니다(기본 폴백 — 이벤트 유실 방지). ' +
-            '서버리스에서는 fetchHandler(handlers, { waitUntil })로 런타임의 waitUntil을 주입하세요. 10초 안에 응답하지 못하면 재전송됩니다.' +
-            (prefetch === undefined
-              ? ''
-              : ' autoRefetch의 prefetch는 이 모드에서 실행되지 않습니다(10초 규약 보존) — prefetched 대신 핸들러의 w.refetch()를 쓰거나 waitUntil을 주입하세요.'),
-        );
-      } else if (mode === 'warn-and-detach') {
-        console.warn(
-          '[@gj-kit/toss-payments] fetchHandler: waitUntil 없이 warn-and-detach 모드 — 200 응답 후 핸들러 실행이 서버리스 런타임에 회수되지 않아 중단될 수 있습니다.',
-        );
+    } catch (cause) {
+      logHandlerFailure(cause);
+      try {
+        await release?.(webhook.meta.dedupeKey);
+      } catch (releaseCause) {
+        logHandlerFailure(releaseCause);
       }
+      return new Response(null, { status: 500 });
     }
-    if (mode === 'sync-complete') await job;
-    return new Response(null, { status: 200 });
   };
 }
 
@@ -185,7 +170,10 @@ function concatChunks(chunks: readonly Uint8Array[]): Uint8Array {
 export function createNodeHandler(
   verify: WebhookVerifyFn,
   handlers: WebhookHandlers,
+  options?: NodeHandlerOptions,
   prefetch?: WebhookPrefetchFn,
+  complete?: WebhookClaimAction,
+  release?: WebhookClaimAction,
 ): (req: NodeIncomingMessageLike, res: NodeServerResponseLike) => Promise<void> {
   const encoder = new TextEncoder();
   return async (req, res) => {
@@ -216,23 +204,39 @@ export function createNodeHandler(
       rawBody = concatChunks(chunks);
     }
 
-    const result = await verify(rawBody, req.headers);
+    const sourceIp = options?.sourceIp?.(req) ?? req.socket?.remoteAddress;
+    const result = await verify(
+      rawBody,
+      req.headers,
+      sourceIp === undefined ? undefined : { sourceIp },
+    );
     if (!result.ok) {
-      res.statusCode = 400;
+      res.statusCode = result.error.kind === 'store-failure' || result.error.kind === 'processing'
+        ? 503
+        : 400;
       res.end();
       return;
     }
-    // 10초 규약 — 응답을 먼저 보내고 처리한다 (Node 장수 프로세스는 응답 후에도 계속 실행됨)
-    res.statusCode = 200;
-    res.end();
-    if (result.value.duplicate) return;
+    if (result.value.duplicate) {
+      res.statusCode = 200;
+      res.end();
+      return;
+    }
+    const webhook = result.value.webhook;
     try {
-      // §3.5 — 200 ack 이후·디스패치 직전에만 prefetch(dedupe 통과분 한정)
-      const webhook = result.value.webhook;
       const prepared = prefetch === undefined ? webhook : await prefetch(webhook);
       await dispatchWebhook(handlers, prepared);
+      await complete?.(webhook.meta.dedupeKey);
+      res.statusCode = 200;
     } catch (cause) {
       logHandlerFailure(cause);
+      try {
+        await release?.(webhook.meta.dedupeKey);
+      } catch (releaseCause) {
+        logHandlerFailure(releaseCause);
+      }
+      res.statusCode = 500;
     }
+    res.end();
   };
 }

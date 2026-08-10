@@ -9,6 +9,8 @@ import type { CancelErrorCode, TossApiFailure, TransportFailure } from '../core/
 import type { InternalTossEmit } from '../core/events';
 import {
   generateIdempotencyKey,
+  idempotencyKey as parseIdempotencyKey,
+  paymentKey as parsePaymentKey,
   type CancelReason,
   type CancelRequestId,
   type IdempotencyKey,
@@ -25,7 +27,7 @@ import type {
 import { err, ok, type Result } from '../core/result';
 // parsePayment는 값 import — client.ts와의 순환은 함수 선언만 서로 참조하므로 안전하다
 // (ESM 라이브 바인딩 + tsup 번들 시 단일 청크).
-import { parsePayment, type CallOptions, type TossHttp } from './client';
+import { parsePaymentChecked, type CallOptions, type TossHttp } from './client';
 // 타입 전용 import — events.ts도 이 모듈을 type-only로 참조하므로 런타임 순환이 없다
 import type { TossEventMap } from './events';
 
@@ -42,7 +44,7 @@ export type CancelablePayment =
   | DepositedVaCancelable
   | AwaitingDepositCancelable;
 
-export interface SettledCancelable extends Brand<'Cancelable'> {
+interface SettledCancelableBase extends Brand<'Cancelable'> {
   /** DONE|PARTIAL_CANCELED, 가상계좌 아님. */
   readonly kind: 'settled';
   readonly payment: Exclude<Payment, VirtualAccountPayment> & {
@@ -52,12 +54,40 @@ export interface SettledCancelable extends Brand<'Cancelable'> {
   readonly balanceAmount: number;
 }
 
-export interface DepositedVaCancelable extends Brand<'Cancelable'> {
+export type SettledCancelable =
+  | (SettledCancelableBase & {
+      readonly partialAllowed: true;
+      readonly payment: SettledCancelableBase['payment'] & { readonly isPartialCancelable: true };
+    })
+  | (SettledCancelableBase & {
+      readonly partialAllowed: false;
+      readonly payment: SettledCancelableBase['payment'] & { readonly isPartialCancelable: false };
+    });
+
+interface DepositedVaCancelableBase extends Brand<'Cancelable'> {
   /** 가상계좌 + 입금 완료 → refundAccount 필수. */
   readonly kind: 'deposited-virtual-account';
   readonly payment: VirtualAccountPayment & { readonly status: 'DONE' | 'PARTIAL_CANCELED' };
   readonly balanceAmount: number;
 }
+
+export type DepositedVaCancelable =
+  | (DepositedVaCancelableBase & {
+      readonly partialAllowed: true;
+      readonly payment: DepositedVaCancelableBase['payment'] & {
+        readonly isPartialCancelable: true;
+      };
+    })
+  | (DepositedVaCancelableBase & {
+      readonly partialAllowed: false;
+      readonly payment: DepositedVaCancelableBase['payment'] & {
+        readonly isPartialCancelable: false;
+      };
+    });
+
+export type PartiallyCancelable =
+  | Extract<SettledCancelable, { readonly partialAllowed: true }>
+  | Extract<DepositedVaCancelable, { readonly partialAllowed: true }>;
 
 export interface AwaitingDepositCancelable extends Brand<'Cancelable'> {
   /** WAITING_FOR_DEPOSIT → 전액만 + refundAccount 금지(환불할 금액이 없다). */
@@ -108,6 +138,7 @@ export function asCancelable(payment: Payment): Result<CancelablePayment, NotCan
         kind: 'deposited-virtual-account',
         payment,
         balanceAmount: payment.balanceAmount,
+        partialAllowed: payment.isPartialCancelable,
       } as DepositedVaCancelable);
     }
     // 검증 통과가 브랜드 부여의 유일한 경로 — method/status 협착은 분기로 확인 완료
@@ -115,6 +146,7 @@ export function asCancelable(payment: Payment): Result<CancelablePayment, NotCan
       kind: 'settled',
       payment,
       balanceAmount: payment.balanceAmount,
+      partialAllowed: payment.isPartialCancelable,
     } as SettledCancelable);
   }
   return err({ source: 'library', kind: 'not-cancelable-status', status });
@@ -166,17 +198,36 @@ export interface CancelOutcome {
 }
 
 /**
- * transport 실패 시 봉인된 재시도 티켓 — 같은 멱등키 + 같은 body(직렬화 바이트 그대로)가
- * 비공개 심볼(비열거)로 각인되어 있다. 멱등 판정은 body를 포함하지 않으므로(실측)
- * body 동일성은 이 봉인이 보장한다.
- *
- * ⚠ 멱등키는 최초 사용 후 15일 유효 — issuedAt 기준 15일이 지난 티켓의 retry는 새 요청으로
- * 처리될 수 있다(중복 취소 위험, 문서 근거).
+ * transport 실패 시 발급되는 불투명 재시도 티켓. 같은 프로세스에서는 비열거 봉인을,
+ * 재시작 뒤에는 CancelRetryStore의 암호화 record를 사용해 동일 멱등키+body를 복원한다.
+ * issuedAt 기준 15일이 지난 티켓은 새 요청으로 처리될 위험이 있어 로컬에서 거부한다.
  */
 export interface CancelRetryTicket extends Brand<'CancelRetryTicket'> {
+  readonly ticketId: string;
   readonly paymentKey: PaymentKey;
   readonly idempotencyKey: IdempotencyKey;
-  readonly issuedAt: Date;
+  readonly issuedAt: string;
+  /** true면 네트워크 요청 전에 주입된 CancelRetryStore에 요청 바이트가 저장된 상태. */
+  readonly durable: boolean;
+}
+
+/** 환불계좌 등 민감 요청을 포함할 수 있으므로 반드시 암호화 at-rest 저장할 것. */
+export interface CancelRetryRecord {
+  readonly ticketId: string;
+  readonly paymentKey: string;
+  readonly idempotencyKey: string;
+  readonly issuedAt: string;
+  readonly path: string;
+  readonly bodyJson: string;
+  readonly testCode: string | undefined;
+  readonly expectedCancelAmount: number;
+  readonly previousBalanceAmount: number;
+}
+
+export interface CancelRetryStore {
+  save(record: CancelRetryRecord): Promise<void>;
+  load(ticketId: string): Promise<CancelRetryRecord | null>;
+  delete(ticketId: string): Promise<void>;
 }
 
 export type CancelPreflightError =
@@ -198,6 +249,22 @@ export type CancelPreflightError =
       readonly kind: 'invalid-input';
       readonly field: string;
       readonly reason: string;
+    }
+  | {
+      readonly source: 'library';
+      readonly kind: 'partial-cancel-not-allowed';
+      readonly paymentKey: PaymentKey;
+    }
+  | {
+      readonly source: 'library';
+      readonly kind: 'retry-ticket-expired';
+      readonly issuedAt: string;
+    }
+  | {
+      readonly source: 'library';
+      readonly kind: 'retry-store-failure';
+      readonly operation: 'save' | 'load' | 'delete';
+      readonly cause: unknown;
     };
 
 export type CancelError =
@@ -261,7 +328,7 @@ export interface TossCancels<E extends Env> {
    * (서버: NOT_ALLOWED_PARTIAL_REFUND_WAITING_DEPOSIT). 사전검증: amount ≤ balanceAmount.
    */
   cancelPartially(
-    target: SettledCancelable,
+    target: Extract<SettledCancelable, { readonly partialAllowed: true }>,
     request: {
       readonly reason: CancelReason;
       readonly amount: number;
@@ -274,7 +341,7 @@ export interface TossCancels<E extends Env> {
     options?: CallOptions<E>,
   ): Promise<Result<CancelOutcome, CancelError>>;
   cancelPartially(
-    target: DepositedVaCancelable,
+    target: Extract<DepositedVaCancelable, { readonly partialAllowed: true }>,
     request: {
       readonly reason: CancelReason;
       readonly amount: number;
@@ -292,6 +359,12 @@ export interface TossCancels<E extends Env> {
     ticket: CancelRetryTicket,
     options?: Pick<CallOptions<E>, 'signal'>,
   ): Promise<Result<CancelOutcome, CancelError>>;
+
+  /** 영속 CancelRetryStore의 opaque ticketId로 프로세스 재시작 후 재실행. */
+  retryById(
+    ticketId: string,
+    options?: Pick<CallOptions<E>, 'signal'>,
+  ): Promise<Result<CancelOutcome, CancelError>>;
 }
 
 // ─── 내부 구현 ───────────────────────────────────────────────────────────────
@@ -303,6 +376,74 @@ interface SealedCancelRequest {
   readonly path: string;
   readonly bodyJson: string;
   readonly testCode: string | undefined;
+  readonly expectedCancelAmount: number;
+  readonly previousBalanceAmount: number;
+}
+
+const CANCEL_RETRY_TTL_MS = 15 * 24 * 60 * 60 * 1000;
+
+function restoreSealedRecord(record: CancelRetryRecord): SealedCancelRequest | null {
+  const parsedPaymentKey = parsePaymentKey(record.paymentKey);
+  if (!parsedPaymentKey.ok) return null;
+  const expectedPath = `/v1/payments/${encodeURIComponent(parsedPaymentKey.value)}/cancel`;
+  if (record.path !== expectedPath) return null;
+  if (record.testCode !== undefined && typeof record.testCode !== 'string') return null;
+  if (
+    !Number.isSafeInteger(record.expectedCancelAmount) ||
+    record.expectedCancelAmount <= 0 ||
+    !Number.isSafeInteger(record.previousBalanceAmount) ||
+    record.previousBalanceAmount < record.expectedCancelAmount
+  ) {
+    return null;
+  }
+  try {
+    const body = JSON.parse(record.bodyJson) as unknown;
+    if (typeof body !== 'object' || body === null || Array.isArray(body)) return null;
+    const bodyRecord = body as Record<string, unknown>;
+    if (typeof bodyRecord['cancelReason'] !== 'string' || bodyRecord['cancelReason'].length === 0) {
+      return null;
+    }
+    const cancelAmount = bodyRecord['cancelAmount'];
+    if (bodyRecord['refundableAmount'] !== record.previousBalanceAmount) return null;
+    if (cancelAmount !== undefined && cancelAmount !== record.expectedCancelAmount) return null;
+    if (cancelAmount === undefined && record.expectedCancelAmount !== record.previousBalanceAmount) {
+      return null;
+    }
+  } catch {
+    return null;
+  }
+  return {
+    path: record.path,
+    bodyJson: record.bodyJson,
+    testCode: record.testCode,
+    expectedCancelAmount: record.expectedCancelAmount,
+    previousBalanceAmount: record.previousBalanceAmount,
+  };
+}
+
+function invalidResponse(cause: string, retry: CancelRetryTicket): CancelError {
+  return {
+    source: 'network',
+    code: 'NETWORK_ERROR',
+    retryable: true,
+    cause: new Error(cause),
+    retry,
+  };
+}
+
+function isCancelTransaction(value: unknown): value is CancelTransaction {
+  if (typeof value !== 'object' || value === null) return false;
+  const record = value as Record<string, unknown>;
+  return (
+    typeof record['transactionKey'] === 'string' &&
+    record['transactionKey'].length > 0 &&
+    typeof record['cancelAmount'] === 'number' &&
+    Number.isFinite(record['cancelAmount']) &&
+    record['cancelAmount'] > 0 &&
+    (record['cancelStatus'] === 'DONE' ||
+      record['cancelStatus'] === 'IN_PROGRESS' ||
+      record['cancelStatus'] === 'ABORTED')
+  );
 }
 
 /** (내부) 취소 요청 공통 실행 — 티켓 봉인·응답 해석을 소유한다. */
@@ -313,12 +454,49 @@ async function executeCancel(
   sealed: SealedCancelRequest,
   issuedAt: Date,
   signal: AbortSignal | undefined,
+  retryStore?: CancelRetryStore,
+  ticketId: string = globalThis.crypto.randomUUID(),
 ): Promise<Result<CancelOutcome, CancelError>> {
+  const record: CancelRetryRecord = {
+    ticketId,
+    paymentKey,
+    idempotencyKey,
+    issuedAt: issuedAt.toISOString(),
+    ...sealed,
+  };
+  let durable = false;
+  if (retryStore !== undefined) {
+    try {
+      // 요청보다 먼저 저장해야 "토스 처리 직후 프로세스 종료"에도 동일 요청을 복구할 수 있다.
+      await retryStore.save(record);
+      durable = true;
+    } catch (cause) {
+      // 영속 복구를 요구한 구성에서 저장 실패를 무시하고 취소부터 보내면 복구 불가능한 공백이 생긴다.
+      return err({ source: 'library', kind: 'retry-store-failure', operation: 'save', cause });
+    }
+  }
+
   const makeTicket = (): CancelRetryTicket => {
-    const ticket = { paymentKey, idempotencyKey, issuedAt };
+    const ticket = {
+      ticketId,
+      paymentKey,
+      idempotencyKey,
+      issuedAt: record.issuedAt,
+      durable,
+    };
     Object.defineProperty(ticket, retrySeal, { value: sealed, enumerable: false });
     // 봉인 완료 — 브랜드는 이 생성 경로로만 부여된다
     return ticket as CancelRetryTicket;
+  };
+
+  const deleteDurableRecord = async (): Promise<void> => {
+    if (!durable || retryStore === undefined) return;
+    try {
+      await retryStore.delete(ticketId);
+    } catch {
+      // 요청 결과는 이미 확정됐다. 같은 멱등키의 잔존 record는 재실행돼도 결과가 재생되고
+      // 저장소 TTL로 제거되므로 결제 결과를 저장소 정리 실패로 뒤집지 않는다.
+    }
   };
 
   const r = await http.request({
@@ -331,25 +509,42 @@ async function executeCancel(
   });
   if (!r.ok) {
     if (r.error.source === 'network') return err({ ...r.error, retry: makeTicket() });
+    await deleteDurableRecord();
     return err(r.error);
   }
 
-  const payment = parsePayment(r.value);
+  const parsed = parsePaymentChecked(r.value);
+  if (!parsed.ok) {
+    return err(invalidResponse(String(parsed.error.cause), makeTicket()));
+  }
+  const payment = parsed.value;
+  if (
+    (payment.status !== 'CANCELED' && payment.status !== 'PARTIAL_CANCELED') ||
+    payment.paymentKey !== paymentKey ||
+    payment.balanceAmount !== sealed.previousBalanceAmount - sealed.expectedCancelAmount
+  ) {
+    return err(
+      invalidResponse(
+        '취소 2xx 응답이 요청(paymentKey/status/balanceAmount)과 일치하지 않습니다.',
+        makeTicket(),
+      ),
+    );
+  }
   const cancels = payment.cancels ?? [];
   const cancel =
     cancels.find((c) => c.transactionKey === payment.lastTransactionKey) ??
     cancels[cancels.length - 1];
-  if (cancel === undefined) {
+  if (!isCancelTransaction(cancel) || cancel.cancelAmount !== sealed.expectedCancelAmount) {
     // 200인데 cancels가 비어 있음 — 응답 이상. 같은 멱등키 재실행(티켓)으로 회수 가능하게 남긴다.
     return err({
-      source: 'network',
-      code: 'NETWORK_ERROR',
-      retryable: true,
-      cause: new Error('취소 응답에 cancels 배열이 없습니다 — retry 티켓으로 재확인하세요.'),
-      retry: makeTicket(),
+      ...invalidResponse(
+        '취소 응답에 요청 금액과 일치하는 유효한 cancel 항목이 없습니다.',
+        makeTicket(),
+      ),
     });
   }
 
+  await deleteDurableRecord();
   return ok({
     // 취소 성공 응답의 status는 CANCELED|PARTIAL_CANCELED (문서/실측) — 응답 협착 단언
     payment: payment as CancelOutcome['payment'],
@@ -365,11 +560,14 @@ function sealRequest(
   target: CancelablePayment,
   body: Record<string, unknown>,
   testCode: string | undefined,
+  expectedCancelAmount: number,
 ): SealedCancelRequest {
   return {
     path: `/v1/payments/${encodeURIComponent(target.payment.paymentKey)}/cancel`,
     bodyJson: JSON.stringify(body),
     testCode,
+    expectedCancelAmount,
+    previousBalanceAmount: target.balanceAmount,
   };
 }
 
@@ -415,6 +613,7 @@ function buildBody(target: CancelablePayment, request: CancelRequestImpl): Recor
 export function createCancels<E extends Env>(
   http: TossHttp,
   emit?: InternalTossEmit<TossEventMap> | null,
+  retryStore?: CancelRetryStore,
 ): TossCancels<E> {
   /** Result 확정 후 §3.3 이벤트 발화 — 성공 executed / 실패 failed(paymentKey + error). */
   const finish = async (
@@ -435,7 +634,10 @@ export function createCancels<E extends Env>(
     options: CallOptions<E> | undefined,
   ): Promise<Result<CancelOutcome, CancelError>> => {
     const idempotencyKey = options?.idempotencyKey ?? generateIdempotencyKey();
-    const sealed = sealRequest(target, body, options?.testCode);
+    const bodyCancelAmount = body['cancelAmount'];
+    const expectedCancelAmount =
+      typeof bodyCancelAmount === 'number' ? bodyCancelAmount : target.balanceAmount;
+    const sealed = sealRequest(target, body, options?.testCode, expectedCancelAmount);
     return executeCancel(
       http,
       target.payment.paymentKey,
@@ -443,6 +645,7 @@ export function createCancels<E extends Env>(
       sealed,
       new Date(),
       options?.signal,
+      retryStore,
     );
   };
 
@@ -469,8 +672,15 @@ export function createCancels<E extends Env>(
       options?: CallOptions<E>,
     ) {
       return finish(target.payment.paymentKey, async () => {
+        if (!target.partialAllowed) {
+          return err({
+            source: 'library',
+            kind: 'partial-cancel-not-allowed',
+            paymentKey: target.payment.paymentKey,
+          });
+        }
         const amount = request.amount ?? Number.NaN;
-        if (!(amount > 0)) {
+        if (!Number.isSafeInteger(amount) || amount <= 0) {
           return err({
             source: 'library',
             kind: 'invalid-input',
@@ -492,15 +702,54 @@ export function createCancels<E extends Env>(
 
     retry(ticket, options) {
       return finish(ticket.paymentKey, async () => {
+        const parsedPaymentKey = parsePaymentKey(ticket.paymentKey);
+        const parsedIdempotencyKey = parseIdempotencyKey(ticket.idempotencyKey);
+        if (!parsedPaymentKey.ok || !parsedIdempotencyKey.ok || ticket.ticketId.length === 0) {
+          return err({
+            source: 'library',
+            kind: 'invalid-input',
+            field: 'ticket',
+            reason: '티켓 ID/paymentKey/idempotencyKey 형식이 올바르지 않습니다.',
+          });
+        }
+        const issuedAtMs = Date.parse(ticket.issuedAt);
+        if (
+          !Number.isFinite(issuedAtMs) ||
+          Date.now() - issuedAtMs >= CANCEL_RETRY_TTL_MS ||
+          issuedAtMs > Date.now() + 60_000
+        ) {
+          return err({
+            source: 'library',
+            kind: 'retry-ticket-expired',
+            issuedAt: ticket.issuedAt,
+          });
+        }
         // 비공개 봉인 심볼 조회 — 공개 타입에 없는 필드라 단언이 불가피
-        const sealed = (ticket as { readonly [retrySeal]?: SealedCancelRequest })[retrySeal];
+        let sealed = (ticket as { readonly [retrySeal]?: SealedCancelRequest })[retrySeal];
+        if (sealed === undefined && retryStore !== undefined) {
+          let record: CancelRetryRecord | null;
+          try {
+            record = await retryStore.load(ticket.ticketId);
+          } catch (cause) {
+            return err({ source: 'library', kind: 'retry-store-failure', operation: 'load', cause });
+          }
+          if (
+            record !== null &&
+            record.ticketId === ticket.ticketId &&
+            record.paymentKey === ticket.paymentKey &&
+            record.idempotencyKey === ticket.idempotencyKey &&
+            record.issuedAt === ticket.issuedAt
+          ) {
+            sealed = restoreSealedRecord(record) ?? undefined;
+          }
+        }
         if (sealed === undefined) {
           return err({
             source: 'library',
             kind: 'invalid-input',
             field: 'ticket',
             reason:
-              '봉인이 소실된 티켓입니다 — 스프레드/직렬화 복제본은 재실행할 수 없습니다. 원본 티켓을 사용하세요.',
+              '봉인 또는 영속 재시도 record가 없습니다. durable=true 티켓을 저장했는지 확인하세요.',
           });
         }
         return executeCancel(
@@ -508,8 +757,70 @@ export function createCancels<E extends Env>(
           ticket.paymentKey,
           ticket.idempotencyKey,
           sealed,
-          ticket.issuedAt,
+          new Date(ticket.issuedAt),
           options?.signal,
+          retryStore,
+          ticket.ticketId,
+        );
+      });
+    },
+
+    async retryById(ticketId, options) {
+      if (retryStore === undefined) {
+        return err({
+          source: 'library',
+          kind: 'invalid-input',
+          field: 'ticketId',
+          reason: 'CancelRetryStore가 배선되지 않았습니다.',
+        });
+      }
+      let record: CancelRetryRecord | null;
+      try {
+        record = await retryStore.load(ticketId);
+      } catch (cause) {
+        return err({ source: 'library', kind: 'retry-store-failure', operation: 'load', cause });
+      }
+      if (record === null) {
+        return err({
+          source: 'library',
+          kind: 'invalid-input',
+          field: 'ticketId',
+          reason: '재시도 record를 찾을 수 없습니다.',
+        });
+      }
+      if (record.ticketId !== ticketId) {
+        return err({
+          source: 'library',
+          kind: 'invalid-input',
+          field: 'retryRecord',
+          reason: '저장소가 요청한 ticketId와 다른 record를 반환했습니다.',
+        });
+      }
+      const paymentKey = parsePaymentKey(record.paymentKey);
+      const idempotencyKey = parseIdempotencyKey(record.idempotencyKey);
+      const issuedAtMs = Date.parse(record.issuedAt);
+      if (!Number.isFinite(issuedAtMs) || Date.now() - issuedAtMs >= CANCEL_RETRY_TTL_MS || issuedAtMs > Date.now() + 60_000) {
+        return err({ source: 'library', kind: 'retry-ticket-expired', issuedAt: record.issuedAt });
+      }
+      const sealed = restoreSealedRecord(record);
+      if (!paymentKey.ok || !idempotencyKey.ok || sealed === null) {
+        return err({
+          source: 'library',
+          kind: 'invalid-input',
+          field: 'retryRecord',
+          reason: '영속 재시도 record가 취소 요청 불변식을 만족하지 않습니다.',
+        });
+      }
+      return finish(paymentKey.value, async () => {
+        return executeCancel(
+          http,
+          paymentKey.value,
+          idempotencyKey.value,
+          sealed,
+          new Date(record.issuedAt),
+          options?.signal,
+          retryStore,
+          ticketId,
         );
       });
     },

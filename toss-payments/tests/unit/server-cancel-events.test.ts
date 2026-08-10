@@ -32,9 +32,11 @@ import {
 const secretKey = () => orThrow(parseApiSecretKey('test_sk_abcdef'));
 const reason = () => orThrow(cancelReason('고객 요청 환불'));
 
-function settledTarget(): SettledCancelable {
+function settledTarget(): Extract<SettledCancelable, { readonly partialAllowed: true }> {
   const checked = orThrow(asCancelable(asPaymentFixture(rawPayment())));
-  if (checked.kind !== 'settled') throw new Error('settled 픽스처여야 한다');
+  if (checked.kind !== 'settled' || !checked.partialAllowed) {
+    throw new Error('부분취소 가능 settled 픽스처여야 한다');
+  }
   return checked;
 }
 

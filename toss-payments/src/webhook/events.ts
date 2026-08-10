@@ -178,12 +178,14 @@ export type UnverifiedWebhookEvent =
 
 /** 모든 웹훅 공통 HTTP 헤더에서 추출한 메타데이터. */
 export interface WebhookMeta {
-  /** tosspayments-webhook-transmission-id — dedupe 키. */
+  /** tosspayments-webhook-transmission-id — 전송 시도 식별자. */
   readonly transmissionId: string;
   /** tosspayments-webhook-transmission-time — 서명 대상에 포함되는 전송 시각. */
   readonly transmissionTime: string;
   /** tosspayments-webhook-transmission-retried-count — 누락/비정상이면 0. */
   readonly retriedCount: number;
+  /** 재전송 시도가 바뀌어도 같은 사업 이벤트를 찾는 안정 dedupe 키. */
+  readonly dedupeKey: string;
 }
 
 /** payout.changed / seller.changed — HMAC-SHA256 서명 검증 통과. */
@@ -237,10 +239,8 @@ export interface Unverified {
   refetch(client: PaymentLookup): Promise<Result<Payment, LookupError | NoPaymentReference>>;
   /**
    * §3.5 autoRefetch 설정 + 어댑터(fetchHandler/nodeHandler) 경유 시에만 채워짐 —
-   * undefined = 옵션 꺼짐 또는 수동 verify 경로, **또는 waitUntil 없는 fetchHandler의
-   * sync-complete 모드**(조회가 200 응답 '전'에 실행되어 10초 규약을 잠식하므로 건너뛴다 —
-   * 그 경우 refetch()를 직접 호출하라). Err여도 이벤트는 버려지지 않고 핸들러에
-   * 도달한다(판단은 핸들러 몫 — 웹훅 자체가 최대 7회 재전송되므로 다음 전송이 자연 재시도).
+   * undefined = 옵션 꺼짐 또는 수동 verify 경로. Err여도 이벤트는 핸들러에 도달하며,
+   * 핸들러가 실패를 던지면 어댑터는 claim을 해제하고 5xx로 재전송을 유도한다.
    *
    * ⚠ trust는 여전히 'unverified'다 — 조회 성공은 웹훅 발신자 진위를 증명하지 않는다
    * (위조 웹훅이 실존 orderId를 찍으면 조회는 성공한다, §7-2). payload가 아닌 이 조회
@@ -264,6 +264,12 @@ export type WebhookRejection =
   | { readonly kind: 'unknown-order'; readonly orderId: string }
   | { readonly kind: 'missing-config'; readonly needed: 'securityKeys' | 'depositSecrets' }
   | { readonly kind: 'untrusted-source-ip'; readonly ip: string }
+  /** 서명·secret이 없는 이벤트에서 출처 IP 미제공 — 기본 fail-closed. */
+  | { readonly kind: 'missing-source-ip' }
+  | { readonly kind: 'invalid-transmission-time'; readonly value: string }
+  | { readonly kind: 'stale-transmission-time'; readonly value: string }
+  /** 동일 이벤트가 아직 처리 중 — 어댑터는 503으로 재전송을 유도한다. */
+  | { readonly kind: 'processing'; readonly dedupeKey: string }
   | { readonly kind: 'parse-failed'; readonly detail: string }
   | { readonly kind: 'store-failure'; readonly cause: unknown };
 

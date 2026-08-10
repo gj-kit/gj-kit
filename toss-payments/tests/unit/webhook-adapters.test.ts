@@ -10,12 +10,21 @@ import type {
 const TIME = '2026-08-09T12:00:00+09:00';
 
 function memoryDedupe(): WebhookDedupeStore {
-  const seen = new Set<string>();
+  const states = new Map<string, 'processing' | 'completed'>();
   return {
     claim: (id) => {
-      if (seen.has(id)) return Promise.resolve(false);
-      seen.add(id);
-      return Promise.resolve(true);
+      const state = states.get(id);
+      if (state !== undefined) return Promise.resolve(state);
+      states.set(id, 'processing');
+      return Promise.resolve('claimed');
+    },
+    complete: (id) => {
+      states.set(id, 'completed');
+      return Promise.resolve();
+    },
+    release: (id) => {
+      states.delete(id);
+      return Promise.resolve();
     },
   };
 }
@@ -51,9 +60,8 @@ describe('fetchHandler — Request → rawBody → 검증 → 디스패치 → 2
     });
   }
 
-  it('정상 이벤트 → 200 + 해당 핸들러 호출 (기본 sync-complete 폴백 + 경고 1회)', async () => {
-    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
-    const verifier = createWebhookVerifier({ dedupe: memoryDedupe() });
+  it('정상 이벤트 → 핸들러 완료 + claim complete 후 200', async () => {
+    const verifier = createWebhookVerifier({ dedupe: memoryDedupe(), allowedSourceIps: false });
     const received: string[] = [];
     const handler = verifier.fetchHandler({
       onPaymentStatusChanged: (w) => {
@@ -67,12 +75,11 @@ describe('fetchHandler — Request → rawBody → 검증 → 디스패치 → 2
     expect(received).toEqual(['order-abc1:DONE']);
 
     await handler(makeRequest(LEGACY_BODY, headersFor()));
-    expect(warn).toHaveBeenCalledTimes(1); // waitUntil 미주입 경고는 1회만
   });
 
   it('검증 거부 → 400, 핸들러 미호출', async () => {
     vi.spyOn(console, 'warn').mockImplementation(() => {});
-    const verifier = createWebhookVerifier({ dedupe: memoryDedupe() });
+    const verifier = createWebhookVerifier({ dedupe: memoryDedupe(), allowedSourceIps: false });
     const onPaymentStatusChanged = vi.fn();
     const handler = verifier.fetchHandler({ onPaymentStatusChanged });
 
@@ -83,7 +90,7 @@ describe('fetchHandler — Request → rawBody → 검증 → 디스패치 → 2
 
   it('duplicate → 200 ack(재전송 중단) + 핸들러는 1회만', async () => {
     vi.spyOn(console, 'warn').mockImplementation(() => {});
-    const verifier = createWebhookVerifier({ dedupe: memoryDedupe() });
+    const verifier = createWebhookVerifier({ dedupe: memoryDedupe(), allowedSourceIps: false });
     const onPaymentStatusChanged = vi.fn();
     const handler = verifier.fetchHandler({ onPaymentStatusChanged });
 
@@ -95,40 +102,33 @@ describe('fetchHandler — Request → rawBody → 검증 → 디스패치 → 2
     expect(onPaymentStatusChanged).toHaveBeenCalledTimes(1);
   });
 
-  it('waitUntil 주입 시 — 즉시 200, 핸들러 실행은 waitUntil로 회수', async () => {
-    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
-    const verifier = createWebhookVerifier({ dedupe: memoryDedupe() });
-    const captured: Promise<unknown>[] = [];
+  it('비동기 핸들러 완료 후에만 200을 응답한다', async () => {
+    const verifier = createWebhookVerifier({ dedupe: memoryDedupe(), allowedSourceIps: false });
     let handled = false;
-    const handler = verifier.fetchHandler(
-      {
-        onPaymentStatusChanged: async () => {
-          await new Promise((resolve) => setTimeout(resolve, 5));
-          handled = true;
-        },
-      },
-      { waitUntil: (p) => captured.push(p) },
-    );
-
-    const res = await handler(makeRequest(LEGACY_BODY, headersFor()));
-    expect(res.status).toBe(200);
-    expect(captured).toHaveLength(1);
-    await captured[0];
-    expect(handled).toBe(true);
-    expect(warn).not.toHaveBeenCalled();
-  });
-
-  it('핸들러 예외는 삼키고 200 유지(재전송은 duplicate로 스킵되므로 500이 무의미)', async () => {
-    vi.spyOn(console, 'warn').mockImplementation(() => {});
-    const error = vi.spyOn(console, 'error').mockImplementation(() => {});
-    const verifier = createWebhookVerifier({ dedupe: memoryDedupe() });
     const handler = verifier.fetchHandler({
-      onPaymentStatusChanged: () => {
-        throw new Error('handler boom');
+      onPaymentStatusChanged: async () => {
+        await new Promise((resolve) => setTimeout(resolve, 5));
+        handled = true;
       },
     });
+
     const res = await handler(makeRequest(LEGACY_BODY, headersFor()));
     expect(res.status).toBe(200);
+    expect(handled).toBe(true);
+  });
+
+  it('핸들러 예외 → claim release + 500, 같은 이벤트 재전송이 다시 처리된다', async () => {
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const verifier = createWebhookVerifier({ dedupe: memoryDedupe(), allowedSourceIps: false });
+    let attempts = 0;
+    const handler = verifier.fetchHandler({ onPaymentStatusChanged: () => {
+      attempts += 1;
+      if (attempts === 1) throw new Error('handler boom');
+    } });
+    const headers = headersFor();
+    expect((await handler(makeRequest(LEGACY_BODY, headers))).status).toBe(500);
+    expect((await handler(makeRequest(LEGACY_BODY, headers))).status).toBe(200);
+    expect(attempts).toBe(2);
     expect(error).toHaveBeenCalled();
   });
 });
@@ -164,7 +164,7 @@ function streamReq(body: string, headers: Record<string, string>): NodeIncomingM
 
 describe('nodeHandler — IncomingMessage 스트림/express.raw 수용', () => {
   it('스트림 수집 → 200 + 핸들러 호출', async () => {
-    const verifier = createWebhookVerifier({ dedupe: memoryDedupe() });
+    const verifier = createWebhookVerifier({ dedupe: memoryDedupe(), allowedSourceIps: false });
     const received: string[] = [];
     const handler = verifier.nodeHandler({
       onPaymentStatusChanged: (w) => {
@@ -179,7 +179,7 @@ describe('nodeHandler — IncomingMessage 스트림/express.raw 수용', () => {
   });
 
   it('req.body가 이미 Buffer(express.raw)면 그것을 사용한다', async () => {
-    const verifier = createWebhookVerifier({ dedupe: memoryDedupe() });
+    const verifier = createWebhookVerifier({ dedupe: memoryDedupe(), allowedSourceIps: false });
     const onPaymentStatusChanged = vi.fn();
     const handler = verifier.nodeHandler({ onPaymentStatusChanged });
     const req: NodeIncomingMessageLike = {
@@ -197,7 +197,7 @@ describe('nodeHandler — IncomingMessage 스트림/express.raw 수용', () => {
 
   it('req.body가 파싱된 객체(express.json)면 명확한 에러 로그와 400', async () => {
     const error = vi.spyOn(console, 'error').mockImplementation(() => {});
-    const verifier = createWebhookVerifier({ dedupe: memoryDedupe() });
+    const verifier = createWebhookVerifier({ dedupe: memoryDedupe(), allowedSourceIps: false });
     const onPaymentStatusChanged = vi.fn();
     const handler = verifier.nodeHandler({ onPaymentStatusChanged });
     const req: NodeIncomingMessageLike = {
@@ -215,7 +215,7 @@ describe('nodeHandler — IncomingMessage 스트림/express.raw 수용', () => {
   });
 
   it('검증 거부 → 400 / duplicate → 200 + 핸들러 1회', async () => {
-    const verifier = createWebhookVerifier({ dedupe: memoryDedupe() });
+    const verifier = createWebhookVerifier({ dedupe: memoryDedupe(), allowedSourceIps: false });
     const onPaymentStatusChanged = vi.fn();
     const handler = verifier.nodeHandler({ onPaymentStatusChanged });
 

@@ -29,6 +29,7 @@ import type {
 } from '../webhook/verifier';
 import { createBillingFlow } from './billing';
 import type { BillingCapabilities, BillingFlow } from './billing';
+import type { CancelRetryStore } from './cancel';
 import { createTossClient } from './client';
 import type { KeyKind, RetryOptions, TossClientOptions, TossServerClient } from './client';
 import { createConfirmFlow } from './confirm';
@@ -59,6 +60,10 @@ export interface TossPaymentsBaseConfig<E extends Env> {
     readonly dedupe: WebhookDedupeStore;
     readonly securityKeys?: readonly SecurityKey[];
     readonly allowedSourceIps?: readonly string[] | false;
+    /** 서명 이벤트 전송 시각의 과거/미래 허용 폭. 기본 5분. */
+    readonly transmissionTimeToleranceMs?: number | false;
+    /** 테스트 또는 통제된 런타임의 시계 주입용. */
+    readonly clock?: () => Date;
     /** true → 파사드 내부 client를 PaymentLookup으로 자동 결속 (§3.5 배선 1비트). */
     readonly autoRefetch?: true;
   };
@@ -69,8 +74,13 @@ export interface TossPaymentsBaseConfig<E extends Env> {
   readonly events?: TossEvents;
   readonly audit?: AuditOptions;
   readonly retry?: RetryOptions;
+  /** 취소 transport 실패 재시도 티켓의 영속 저장소. */
+  readonly cancelRetries?: CancelRetryStore;
   /** fetch/baseUrl/timeoutMs — audit/retry/events는 파사드가 위 필드에서 병합 주입한다. */
-  readonly client?: Pick<TossClientOptions, 'fetch' | 'baseUrl' | 'timeoutMs'>;
+  readonly client?: Pick<
+    TossClientOptions,
+    'fetch' | 'baseUrl' | 'timeoutMs' | 'dangerouslyAllowCustomLiveBaseUrl'
+  >;
   readonly confirm?: Pick<ConfirmFlowOptions, 'approvalWindowMs' | 'clock'>;
 }
 
@@ -166,6 +176,10 @@ export function createTossPayments(
     ...(config.client?.timeoutMs !== undefined ? { timeoutMs: config.client.timeoutMs } : {}),
     ...(config.audit !== undefined ? { audit: config.audit } : {}),
     ...(config.retry !== undefined ? { retry: config.retry } : {}),
+    ...(config.cancelRetries !== undefined ? { cancelRetries: config.cancelRetries } : {}),
+    ...(config.client?.dangerouslyAllowCustomLiveBaseUrl !== undefined
+      ? { dangerouslyAllowCustomLiveBaseUrl: config.client.dangerouslyAllowCustomLiveBaseUrl }
+      : {}),
     ...(events !== undefined ? { events } : {}),
   };
   // 오버로드 합집합 호출 — 키 종류(api/widget)의 런타임 판별은 createTossClient가 접두사로
@@ -222,6 +236,10 @@ export function createTossPayments(
           ...(webhookInput.allowedSourceIps !== undefined
             ? { allowedSourceIps: webhookInput.allowedSourceIps }
             : {}),
+          ...(webhookInput.transmissionTimeToleranceMs !== undefined
+            ? { transmissionTimeToleranceMs: webhookInput.transmissionTimeToleranceMs }
+            : {}),
+          ...(webhookInput.clock !== undefined ? { clock: webhookInput.clock } : {}),
           // §3.1 — confirm측 자동 저장과 같은 store의 getSecret이 웹훅 대조에 쓰인다(1회 배선)
           ...(config.depositSecrets !== undefined ? { depositSecrets: config.depositSecrets } : {}),
           ...(events !== undefined ? { events } : {}),

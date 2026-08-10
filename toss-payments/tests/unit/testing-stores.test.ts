@@ -92,11 +92,13 @@ describe('memoryBillingKeyStore', () => {
 // ── memoryDedupeStore ──────────────────────────────────────────────────────
 
 describe('memoryDedupeStore', () => {
-  it('처음 본 id는 true, 재점유는 false', async () => {
+  it('processing → completed 수명주기를 구분한다', async () => {
     const store = memoryDedupeStore();
-    expect(await store.claim('tx-1')).toBe(true);
-    expect(await store.claim('tx-1')).toBe(false);
-    expect(await store.claim('tx-2')).toBe(true);
+    expect(await store.claim('tx-1')).toBe('claimed');
+    expect(await store.claim('tx-1')).toBe('processing');
+    await store.complete('tx-1');
+    expect(await store.claim('tx-1')).toBe('completed');
+    expect(await store.claim('tx-2')).toBe('claimed');
   });
 
   it('동시 다발 claim에서도 정확히 하나만 점유한다 (원자성)', async () => {
@@ -104,13 +106,21 @@ describe('memoryDedupeStore', () => {
     const results = await Promise.all(
       Array.from({ length: 20 }, () => store.claim('same-id')),
     );
-    expect(results.filter(Boolean)).toHaveLength(1);
+    expect(results.filter((state) => state === 'claimed')).toHaveLength(1);
+    expect(results.filter((state) => state === 'processing')).toHaveLength(19);
   });
 
   it('인스턴스 간 상태가 격리된다', async () => {
     const a = memoryDedupeStore();
     const b = memoryDedupeStore();
-    expect(await a.claim('tx-1')).toBe(true);
-    expect(await b.claim('tx-1')).toBe(true);
+    expect(await a.claim('tx-1')).toBe('claimed');
+    expect(await b.claim('tx-1')).toBe('claimed');
+  });
+
+  it('release 후 다음 재전송이 재점유한다', async () => {
+    const store = memoryDedupeStore();
+    expect(await store.claim('tx-retry')).toBe('claimed');
+    await store.release('tx-retry');
+    expect(await store.claim('tx-retry')).toBe('claimed');
   });
 });

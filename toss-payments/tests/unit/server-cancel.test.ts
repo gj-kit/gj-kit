@@ -7,6 +7,7 @@ import {
   parseApiSecretKey,
   refundAccount,
   type CancelRetryTicket,
+  type CancelRetryStore,
   type DepositedVaCancelable,
   type SettledCancelable,
 } from '../../src/server';
@@ -18,22 +19,32 @@ import {
   rawCancelTransaction,
   rawPayment,
 } from './helpers';
+import { memoryCancelRetryStore } from '../../src/testing';
 
-function testClient(fetchImpl: typeof fetch) {
+function testClient(fetchImpl: typeof fetch, cancelRetries?: CancelRetryStore) {
   const parsed = orThrow(parseApiSecretKey('test_sk_abcdef'));
   if (!isTestKey(parsed)) throw new Error('test 키여야 한다');
-  return createTossClient(parsed, { fetch: fetchImpl });
+  return createTossClient(parsed, {
+    fetch: fetchImpl,
+    ...(cancelRetries ? { cancelRetries } : {}),
+  });
 }
 
 const reason = () => orThrow(cancelReason('고객 요청 환불'));
 
-function settledTarget(overrides: Record<string, unknown> = {}): SettledCancelable {
+function settledTarget(
+  overrides: Record<string, unknown> = {},
+): Extract<SettledCancelable, { readonly partialAllowed: true }> {
   const checked = orThrow(asCancelable(asPaymentFixture(rawPayment(overrides))));
-  if (checked.kind !== 'settled') throw new Error('settled 픽스처여야 한다');
+  if (checked.kind !== 'settled' || !checked.partialAllowed) {
+    throw new Error('부분취소 가능 settled 픽스처여야 한다');
+  }
   return checked;
 }
 
-function vaTarget(overrides: Record<string, unknown> = {}): DepositedVaCancelable {
+function vaTarget(
+  overrides: Record<string, unknown> = {},
+): Extract<DepositedVaCancelable, { readonly partialAllowed: true }> {
   const checked = orThrow(
     asCancelable(
       asPaymentFixture(
@@ -47,7 +58,9 @@ function vaTarget(overrides: Record<string, unknown> = {}): DepositedVaCancelabl
       ),
     ),
   );
-  if (checked.kind !== 'deposited-virtual-account') throw new Error('VA 픽스처여야 한다');
+  if (checked.kind !== 'deposited-virtual-account' || !checked.partialAllowed) {
+    throw new Error('부분취소 가능 VA 픽스처여야 한다');
+  }
   return checked;
 }
 
@@ -136,6 +149,22 @@ describe('cancels — 사전검증(preflight)은 API 호출 전에 실패한다'
       expect.unreachable('amount-exceeds-balance여야 한다');
     }
     expect(pair.calls.length).toBe(0);
+  });
+
+  it('isPartialCancelable=false는 부분취소를 요청 전 차단한다', async () => {
+    const pair = forbiddenFetch();
+    const client = testClient(pair.fetch);
+    const target = orThrow(
+      asCancelable(asPaymentFixture(rawPayment({ isPartialCancelable: false }))),
+    );
+    if (target.kind !== 'settled') return expect.unreachable('settled여야 한다');
+    const r = await client.cancels.cancelPartially(target as never, {
+      reason: reason(),
+      amount: 100,
+    });
+    expect(isErr(r)).toBe(true);
+    if (isErr(r) && 'kind' in r.error) expect(r.error.kind).toBe('partial-cancel-not-allowed');
+    expect(pair.calls).toHaveLength(0);
   });
 });
 
@@ -315,6 +344,64 @@ describe('cancels — 결과 해석', () => {
 });
 
 describe('cancels — transport 실패 봉인 티켓 재시도', () => {
+  it('영속 store는 요청 전에 저장하고 확정 성공 뒤 record를 제거한다', async () => {
+    const operations: string[] = [];
+    const retryStore: CancelRetryStore = {
+      save: () => {
+        operations.push('save');
+        return Promise.resolve();
+      },
+      load: () => Promise.resolve(null),
+      delete: () => {
+        operations.push('delete');
+        return Promise.resolve();
+      },
+    };
+    const pair = mockFetch(() => {
+      operations.push('fetch');
+      return {
+        status: 200,
+        body: rawPayment({
+          status: 'CANCELED',
+          balanceAmount: 0,
+          lastTransactionKey: 'txn-cancel-1',
+          cancels: [rawCancelTransaction()],
+        }),
+      };
+    });
+
+    const result = await testClient(pair.fetch, retryStore).cancels.cancelFully(settledTarget(), {
+      reason: reason(),
+      expectedAmount: 1000,
+    });
+
+    expect(isOk(result)).toBe(true);
+    expect(operations).toEqual(['save', 'fetch', 'delete']);
+  });
+
+  it('영속 store 저장 실패는 fail-closed — Toss 요청을 보내지 않는다', async () => {
+    const retryStore: CancelRetryStore = {
+      save: () => Promise.reject(new Error('database unavailable')),
+      load: () => Promise.resolve(null),
+      delete: () => Promise.resolve(),
+    };
+    const pair = forbiddenFetch();
+
+    const result = await testClient(pair.fetch, retryStore).cancels.cancelFully(settledTarget(), {
+      reason: reason(),
+      expectedAmount: 1000,
+    });
+
+    expect(isErr(result)).toBe(true);
+    if (isErr(result) && result.error.source === 'library') {
+      expect(result.error.kind).toBe('retry-store-failure');
+      if (result.error.kind === 'retry-store-failure') expect(result.error.operation).toBe('save');
+    } else {
+      expect.unreachable('retry-store-failure여야 한다');
+    }
+    expect(pair.calls).toHaveLength(0);
+  });
+
   it('전송 실패 → retry 티켓 동봉, retry는 같은 멱등키 + 바이트 동일 body를 재전송한다', async () => {
     let failFirst = true;
     const pair = mockFetch(() => {
@@ -456,5 +543,87 @@ describe('cancels — transport 실패 봉인 티켓 재시도', () => {
     if (isErr(r) && 'kind' in r.error && r.error.kind === 'invalid-input')
       expect(r.error.field).toBe('ticket');
     else expect.unreachable('invalid-input(ticket)이어야 한다');
+  });
+
+  it('영속 store + opaque ticketId로 프로세스 재시작 후에도 동일 body·멱등키를 재실행한다', async () => {
+    const retryStore = memoryCancelRetryStore();
+    let attempt = 0;
+    const pair = mockFetch(() => {
+      attempt += 1;
+      if (attempt === 1) throw new Error('connection reset');
+      return {
+        status: 200,
+        body: rawPayment({
+          status: 'CANCELED',
+          balanceAmount: 0,
+          lastTransactionKey: 'txn-cancel-1',
+          cancels: [rawCancelTransaction()],
+        }),
+      };
+    });
+    const firstClient = testClient(pair.fetch, retryStore);
+    const failed = await firstClient.cancels.cancelFully(settledTarget(), {
+      reason: reason(),
+      expectedAmount: 1000,
+    });
+    if (!isErr(failed) || !('retry' in failed.error)) {
+      return expect.unreachable('retry 티켓이 필요하다');
+    }
+    expect(failed.error.retry.durable).toBe(true);
+    const ticketId = failed.error.retry.ticketId;
+
+    // 새 클라이언트 = 프로세스 재시작 시뮬레이션. 인메모리 봉인은 전달하지 않는다.
+    const restartedClient = testClient(pair.fetch, retryStore);
+    const retried = await restartedClient.cancels.retryById(ticketId);
+    expect(isOk(retried)).toBe(true);
+    expect(pair.calls[1]?.body).toBe(pair.calls[0]?.body);
+    expect(pair.calls[1]?.headers['idempotency-key']).toBe(
+      pair.calls[0]?.headers['idempotency-key'],
+    );
+    expect(await retryStore.load(ticketId)).toBeNull();
+  });
+
+  it('영속 record의 path/body/금액 불변식이 깨졌으면 API 호출 전에 거부한다', async () => {
+    const retryStore: CancelRetryStore = {
+      save: () => Promise.resolve(),
+      load: () =>
+        Promise.resolve({
+          ticketId: 'tampered-ticket',
+          paymentKey: 'tviva20260809abcdef',
+          idempotencyKey: 'retry-corrupt-idem',
+          issuedAt: new Date().toISOString(),
+          path: '/v1/billing/should-never-be-called',
+          bodyJson: JSON.stringify({ cancelReason: '고객 요청 환불' }),
+          testCode: undefined,
+          expectedCancelAmount: 1000,
+          previousBalanceAmount: 1000,
+        }),
+      delete: () => Promise.resolve(),
+    };
+    const { fetch, calls } = forbiddenFetch();
+    const r = await testClient(fetch, retryStore).cancels.retryById('tampered-ticket');
+    expect(isErr(r)).toBe(true);
+    if (isErr(r) && r.error.source === 'library') {
+      expect(r.error.kind).toBe('invalid-input');
+    }
+    expect(calls).toHaveLength(0);
+  });
+
+  it('15일이 지난 retry 티켓은 API 호출 전 거부한다', async () => {
+    const { fetch, calls } = failingFetch(new Error('down'));
+    const client = testClient(fetch);
+    const failed = await client.cancels.cancelFully(settledTarget(), {
+      reason: reason(),
+      expectedAmount: 1000,
+    });
+    if (!isErr(failed) || !('retry' in failed.error)) return expect.unreachable('retry 티켓 필요');
+    const expired = {
+      ...failed.error.retry,
+      issuedAt: new Date(Date.now() - 16 * 24 * 60 * 60 * 1000).toISOString(),
+    } as CancelRetryTicket;
+    const r = await client.cancels.retry(expired);
+    expect(isErr(r)).toBe(true);
+    if (isErr(r) && 'kind' in r.error) expect(r.error.kind).toBe('retry-ticket-expired');
+    expect(calls).toHaveLength(1);
   });
 });

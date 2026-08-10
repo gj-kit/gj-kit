@@ -33,6 +33,7 @@ export type {
   DepositSecretSource,
   IncomingHeaders,
   SecurityKey,
+  WebhookClaimState,
   WebhookDedupeStore,
   WebhookVerifier,
   WebhookVerifierConfig,
@@ -40,5 +41,6 @@ export type {
 export type {
   FetchHandlerOptions,
   NodeIncomingMessageLike,
+  NodeHandlerOptions,
   NodeServerResponseLike,
 } from './adapters';

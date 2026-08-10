@@ -387,7 +387,7 @@ function Hero({
               ]}
             >
               <View style={[styles.releaseDot, { backgroundColor: '#9FF5D1' }]} />
-              <RNText style={[styles.releaseText, { color: theme.colors.textMuted }]}>npm v{publishedPackageVersion} · v0.2 source preview</RNText>
+              <RNText style={[styles.releaseText, { color: theme.colors.textMuted }]}>npm v{publishedPackageVersion} · 31 components stable</RNText>
               <RNText style={[styles.releaseArrow, { color: theme.colors.primary }]}>↗</RNText>
             </View>
 

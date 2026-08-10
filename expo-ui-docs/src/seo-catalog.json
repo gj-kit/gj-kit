@@ -1,5 +1,5 @@
 {
-  "publishedVersion": "0.1.0",
+  "publishedVersion": "0.3.0",
   "components": [
     {
       "slug": "text",
@@ -157,7 +157,7 @@
     {
       "slug": "checkbox",
       "name": "Checkbox",
-      "since": "0.2.0",
+      "since": "0.3.0",
       "category": "입력",
       "headline": "boolean과 mixed 상태를 지원하는 controlled Checkbox",
       "description": "보이는 라벨 또는 접근성 라벨을 필수로 요구하고 mixed 상태와 웹 Space 입력을 지원하는 크로스플랫폼 Checkbox입니다.",
@@ -174,7 +174,7 @@
     {
       "slug": "switch",
       "name": "Switch",
-      "since": "0.2.0",
+      "since": "0.3.0",
       "category": "입력",
       "headline": "플랫폼 네이티브 동작을 유지하는 controlled Switch",
       "description": "React Native 기본 Switch를 토큰 테마와 필수 라벨 계약으로 감싼 iOS·Android·Web 설정 토글입니다.",
@@ -191,7 +191,7 @@
     {
       "slug": "radio-group",
       "name": "RadioGroup",
-      "since": "0.2.0",
+      "since": "0.3.0",
       "category": "입력",
       "headline": "문자열 리터럴 값을 보존하는 accessible RadioGroup",
       "description": "단일 선택 값을 타입으로 제한하고 방향키·Home·End 키보드 탐색을 제공하는 Expo·React Native RadioGroup입니다.",
@@ -344,7 +344,7 @@
     {
       "slug": "badge",
       "name": "Badge",
-      "since": "0.2.0",
+      "since": "0.3.0",
       "category": "상태",
       "headline": "짧은 상태를 텍스트와 색으로 구분하는 Badge",
       "description": "neutral, info, success, warning, error 상태와 sm·md 크기를 제공하는 Expo·React Native Badge 컴포넌트입니다.",
@@ -361,7 +361,7 @@
     {
       "slug": "alert",
       "name": "Alert",
-      "since": "0.2.0",
+      "since": "0.3.0",
       "category": "상태",
       "headline": "액션과 live 정책을 선택하는 인라인 Alert",
       "description": "info, success, warning, error 안내에 제목·본문·액션·닫기를 조합하고 live region을 명시적으로 제어하는 Alert입니다.",
@@ -378,7 +378,7 @@
     {
       "slug": "spinner",
       "name": "Spinner",
-      "since": "0.2.0",
+      "since": "0.3.0",
       "category": "진행",
       "headline": "대기 중임을 의미론까지 전달하는 Spinner",
       "description": "테마 아이콘 크기와 color role을 사용하고 기본 로딩 접근성 라벨을 제공하는 Expo·React Native Spinner입니다.",
@@ -395,7 +395,7 @@
     {
       "slug": "progress-bar",
       "name": "ProgressBar",
-      "since": "0.2.0",
+      "since": "0.3.0",
       "category": "진행",
       "headline": "수치형과 indeterminate 작업을 모두 표현하는 ProgressBar",
       "description": "value와 max 기반 진행률, 알 수 없는 진행 상태, 모션 감소와 접근성 값을 지원하는 React Native ProgressBar입니다.",
@@ -412,7 +412,7 @@
     {
       "slug": "avatar",
       "name": "Avatar",
-      "since": "0.2.0",
+      "since": "0.3.0",
       "category": "표시",
       "headline": "이미지 실패에도 초성으로 폴백하는 Avatar",
       "description": "프로필 이미지, 유니코드 초성 폴백, sm·md·lg 크기와 명시적 장식 여부를 제공하는 Expo·React Native Avatar입니다.",
@@ -429,7 +429,7 @@
     {
       "slug": "divider",
       "name": "Divider",
-      "since": "0.2.0",
+      "since": "0.3.0",
       "category": "레이아웃",
       "headline": "방향과 의미를 선택할 수 있는 Divider",
       "description": "가로·세로 선, 테마 색상, 두께, inset과 spacing을 제공하고 separator 의미를 선택적으로 노출하는 Divider입니다.",
@@ -446,7 +446,7 @@
     {
       "slug": "list-item",
       "name": "ListItem",
-      "since": "0.2.0",
+      "since": "0.3.0",
       "category": "표시",
       "headline": "정적 정보와 클릭 가능한 행을 구분하는 ListItem",
       "description": "title, description, leading, trailing과 세 가지 크기를 조합하고 정적·인터랙티브 계약을 타입으로 나누는 ListItem입니다.",
@@ -463,7 +463,7 @@
     {
       "slug": "accordion",
       "name": "Accordion",
-      "since": "0.2.0",
+      "since": "0.3.0",
       "category": "탐색",
       "headline": "단일·복수 펼침을 타입으로 분리한 Accordion",
       "description": "controlled single·multiple 모드와 헤더·패널 ARIA 관계, 키보드 상호작용을 제공하는 Expo·React Native Accordion입니다.",

@@ -7,6 +7,9 @@ const projectDir = path.resolve(scriptDir, '..');
 const distDir = path.join(projectDir, 'dist');
 const siteUrl = 'https://gj-kit-expo-ui.expo.app';
 const catalog = JSON.parse(await readFile(path.join(projectDir, 'src/seo-catalog.json'), 'utf8'));
+const libraryPackage = JSON.parse(
+  await readFile(path.resolve(projectDir, '../expo-ui/package.json'), 'utf8'),
+);
 
 function compareVersions(first, second) {
   const left = first.split('.').map(Number);
@@ -40,6 +43,12 @@ function routeFile(route) {
 
 function fail(message) {
   throw new Error(`SEO check failed: ${message}`);
+}
+
+if (catalog.publishedVersion !== libraryPackage.version) {
+  fail(
+    `catalog publishedVersion ${catalog.publishedVersion} does not match package version ${libraryPackage.version}`,
+  );
 }
 
 function matchContent(html, pattern, label, route) {
@@ -161,6 +170,18 @@ const expectedItemList = catalog.components.map((entry, index) => ({
 }));
 if (JSON.stringify(itemList.itemListElement) !== JSON.stringify(expectedItemList)) {
   fail('component ItemList entries do not match catalog names, URLs, and order');
+}
+
+const homeHtml = await readFile(routeFile('/'), 'utf8');
+const homeSchemas = [
+  ...homeHtml.matchAll(
+    /<script[^>]+type="application\/ld\+json"[^>]*>([\s\S]*?)<\/script>/gi,
+  ),
+].map((match) => JSON.parse(match[1]));
+const softwareSourceCode = homeSchemas.find((schema) => schema['@type'] === 'SoftwareSourceCode');
+if (!softwareSourceCode) fail('home page has no SoftwareSourceCode JSON-LD');
+if (softwareSourceCode.version !== libraryPackage.version) {
+  fail('home SoftwareSourceCode version does not match package version');
 }
 
 const notFound = await readFile(path.join(distDir, '+not-found.html'), 'utf8');

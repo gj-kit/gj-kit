@@ -2,7 +2,7 @@
   "expo": {
     "name": "gj-kit expo-ui",
     "slug": "gj-kit-expo-ui",
-    "version": "0.1.0",
+    "version": "0.3.0",
     "orientation": "portrait",
     "userInterfaceStyle": "automatic",
     "scheme": "gj-kit-expo-ui",

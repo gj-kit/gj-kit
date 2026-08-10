@@ -18,6 +18,9 @@
   <url><loc>https://gj-kit-expo-ui.expo.app/docs/components/selection-indicator</loc></url>
   <url><loc>https://gj-kit-expo-ui.expo.app/docs/components/selectable-row</loc></url>
   <url><loc>https://gj-kit-expo-ui.expo.app/docs/components/select-all-row</loc></url>
+  <url><loc>https://gj-kit-expo-ui.expo.app/docs/components/checkbox</loc></url>
+  <url><loc>https://gj-kit-expo-ui.expo.app/docs/components/switch</loc></url>
+  <url><loc>https://gj-kit-expo-ui.expo.app/docs/components/radio-group</loc></url>
   <url><loc>https://gj-kit-expo-ui.expo.app/docs/components/surface</loc></url>
   <url><loc>https://gj-kit-expo-ui.expo.app/docs/components/content-frame</loc></url>
   <url><loc>https://gj-kit-expo-ui.expo.app/docs/components/section</loc></url>
@@ -26,6 +29,14 @@
   <url><loc>https://gj-kit-expo-ui.expo.app/docs/components/empty-state</loc></url>
   <url><loc>https://gj-kit-expo-ui.expo.app/docs/components/error-state</loc></url>
   <url><loc>https://gj-kit-expo-ui.expo.app/docs/components/toast</loc></url>
+  <url><loc>https://gj-kit-expo-ui.expo.app/docs/components/badge</loc></url>
+  <url><loc>https://gj-kit-expo-ui.expo.app/docs/components/alert</loc></url>
+  <url><loc>https://gj-kit-expo-ui.expo.app/docs/components/spinner</loc></url>
+  <url><loc>https://gj-kit-expo-ui.expo.app/docs/components/progress-bar</loc></url>
+  <url><loc>https://gj-kit-expo-ui.expo.app/docs/components/avatar</loc></url>
+  <url><loc>https://gj-kit-expo-ui.expo.app/docs/components/divider</loc></url>
+  <url><loc>https://gj-kit-expo-ui.expo.app/docs/components/list-item</loc></url>
+  <url><loc>https://gj-kit-expo-ui.expo.app/docs/components/accordion</loc></url>
   <url><loc>https://gj-kit-expo-ui.expo.app/docs/components/dialog</loc></url>
   <url><loc>https://gj-kit-expo-ui.expo.app/docs/components/dialog-panel</loc></url>
   <url><loc>https://gj-kit-expo-ui.expo.app/docs/components/confirm-action-row</loc></url>

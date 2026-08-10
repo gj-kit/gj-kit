@@ -1,5 +1,16 @@
 # @gj-kit/expo-ui
 
+## 0.3.0
+
+### Minor Changes
+
+- 31개 컴포넌트로 확장하고 접근성·타입 계약을 강화했습니다.
+  - `Badge`, `Alert`, `Avatar`, `Divider`, `ListItem`, `Spinner`, `ProgressBar`, `Checkbox`, `Switch`, `RadioGroup`, `Accordion` 추가
+  - 상태별 soft·strong·on-color를 포함한 semantic color role 31종 제공
+  - Checkbox·RadioGroup·Accordion의 웹 키보드 동작과 ARIA 관계, Switch의 네이티브 의미론 지원
+  - determinate·indeterminate 진행 상태와 reduced motion 대응
+  - npm 검색 메타데이터와 31개 컴포넌트별 정적 문서·SEO 페이지 추가
+
 ## 0.1.0
 
 ### Minor Changes

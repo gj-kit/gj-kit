@@ -769,7 +769,7 @@ function Sidebar({
         <Surface padding="lg" style={styles.sidebarCard}>
           <Text role="label">npm v{publishedPackageVersion}</Text>
           <Text role="caption" color="textMuted" style={styles.sidebarCardCopy}>
-            v0.2 source preview{`\n`}ESM + CJS · MIT
+            31 components{`\n`}ESM + CJS · MIT
           </Text>
           <Link href="https://www.npmjs.com/package/@gj-kit/expo-ui" target="_blank" asChild>
             <Pressable style={({ pressed }) => [styles.sidebarNpmLink, pressed ? styles.pressed : null]}>
@@ -801,7 +801,7 @@ function Hero({ wide, onCopy }: { wide: boolean; onCopy: () => void }) {
       <View style={styles.heroContent}>
         <View style={styles.heroBadgeRow}>
           <View style={[styles.heroBadge, { backgroundColor: theme.colors.primarySoft }]}>
-            <RNText style={[styles.heroBadgeText, { color: theme.colors.primary }]}>DOCS · npm v{publishedPackageVersion} · v0.2 preview</RNText>
+            <RNText style={[styles.heroBadgeText, { color: theme.colors.primary }]}>DOCS · npm v{publishedPackageVersion} · 31 components</RNText>
           </View>
           <RNText style={[styles.heroLicense, { color: theme.colors.textMuted }]}>MIT · React Native</RNText>
         </View>
@@ -814,7 +814,7 @@ function Hero({ wide, onCopy }: { wide: boolean; onCopy: () => void }) {
           Expo UI 컴포넌트,{`\n`}빠르게 시작하고 안전하게 확장하세요.
         </Text>
         <Text role="body" color="textMuted" style={styles.heroCopy}>
-          npm v{publishedPackageVersion}의 안정 API와 v0.2 소스 미리보기를 함께 문서화합니다.
+          npm v{publishedPackageVersion}에 공개된 31개 컴포넌트와 안정 API를 문서화합니다.
           토큰 기반 light·dark 테마, 문구·아이콘 주입과 device edge 유틸을 하나의 타입 안전한 API로 제공합니다.
         </Text>
         <View style={styles.heroActions}>

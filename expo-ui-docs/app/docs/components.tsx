@@ -132,7 +132,6 @@ export default function ComponentsIndexPage(): ReactElement {
               eyebrow="COMPONENT LIBRARY"
               title="Expo·React Native UI 컴포넌트 31종"
               description="하나의 타입 시스템과 테마 토큰으로 iOS, Android, Web UI를 조립하세요. 각 문서에서 최소 예제, 접근성 동작과 릴리스 상태를 바로 확인할 수 있습니다."
-              preview={`npm v${publishedPackageVersion} · source preview`}
             />
             <ProofGrid />
             <View style={styles.installRow}>
@@ -193,9 +192,9 @@ export default function ComponentsIndexPage(): ReactElement {
 
 function ProofGrid(): ReactElement {
   const proof = [
-    { value: String(componentSeoEntries.length), label: 'source components' },
-    { value: String(releasedCount), label: 'npm stable' },
-    { value: String(previewCount), label: 'source preview' },
+    { value: String(componentSeoEntries.length), label: 'npm components' },
+    { value: '31', label: 'semantic colors' },
+    { value: '4', label: 'entry points' },
     { value: '0', label: 'direct deps' },
   ];
   return (
@@ -314,9 +313,15 @@ function CategoryRail({
           );
         })}
       </CssLayout>
-      <View style={[styles.railNote, { backgroundColor: theme.colors.warningSoft }]}>
-        <RNText style={[styles.railNoteTitle, { color: theme.colors.warning }]}>Preview {previewCount}</RNText>
-        <RNText style={[styles.railNoteCopy, { color: theme.colors.textMuted }]}>v0.2 항목은 npm 공개 전까지 상세 페이지가 검색에서 제외됩니다.</RNText>
+      <View style={[styles.railNote, { backgroundColor: previewCount > 0 ? theme.colors.warningSoft : theme.colors.successSoft }]}>
+        <RNText style={[styles.railNoteTitle, { color: previewCount > 0 ? theme.colors.warning : theme.colors.success }]}>
+          {previewCount > 0 ? `Preview ${previewCount}` : `npm v${publishedPackageVersion}`}
+        </RNText>
+        <RNText style={[styles.railNoteCopy, { color: theme.colors.textMuted }]}>
+          {previewCount > 0
+            ? '미리보기 항목은 npm 공개 전까지 상세 페이지가 검색에서 제외됩니다.'
+            : '31개 컴포넌트가 모두 공개되어 설치와 검색 색인이 가능합니다.'}
+        </RNText>
       </View>
     </Surface>
   );
@@ -377,38 +382,40 @@ function CatalogToolbar({
         </View>
       </View>
 
-      <View style={styles.filterGroup} accessibilityLabel="릴리스 상태 필터">
-        <RNText style={[styles.controlLabel, { color: theme.colors.text }]}>릴리스 상태</RNText>
-        <View style={styles.filterRow}>
-          {filters.map((filter) => {
-            const selected = filter.value === releaseFilter;
-            return (
-              <Pressable
-                key={filter.value}
-                accessibilityRole="button"
-                accessibilityState={{ selected }}
-                aria-pressed={selected}
-                onPress={() => onReleaseFilterChange(filter.value)}
-                style={({ pressed }) => [
-                  styles.filterButton,
-                  {
-                    backgroundColor: selected ? theme.colors.text : theme.colors.background,
-                    borderColor: selected ? theme.colors.text : theme.colors.line,
-                  },
-                  pressed ? styles.pressed : null,
-                ]}
-              >
-                <RNText style={[styles.filterLabel, { color: selected ? theme.colors.surface : theme.colors.textMuted }]}>
-                  {filter.label}
-                </RNText>
-                <RNText style={[styles.filterCount, { color: selected ? theme.colors.surface : theme.colors.textMuted }]}>
-                  {filter.count}
-                </RNText>
-              </Pressable>
-            );
-          })}
+      {previewCount > 0 ? (
+        <View style={styles.filterGroup} accessibilityLabel="릴리스 상태 필터">
+          <RNText style={[styles.controlLabel, { color: theme.colors.text }]}>릴리스 상태</RNText>
+          <View style={styles.filterRow}>
+            {filters.map((filter) => {
+              const selected = filter.value === releaseFilter;
+              return (
+                <Pressable
+                  key={filter.value}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected }}
+                  aria-pressed={selected}
+                  onPress={() => onReleaseFilterChange(filter.value)}
+                  style={({ pressed }) => [
+                    styles.filterButton,
+                    {
+                      backgroundColor: selected ? theme.colors.text : theme.colors.background,
+                      borderColor: selected ? theme.colors.text : theme.colors.line,
+                    },
+                    pressed ? styles.pressed : null,
+                  ]}
+                >
+                  <RNText style={[styles.filterLabel, { color: selected ? theme.colors.surface : theme.colors.textMuted }]}>
+                    {filter.label}
+                  </RNText>
+                  <RNText style={[styles.filterCount, { color: selected ? theme.colors.surface : theme.colors.textMuted }]}>
+                    {filter.count}
+                  </RNText>
+                </Pressable>
+              );
+            })}
+          </View>
         </View>
-      </View>
+      ) : null}
 
       <RNText
         accessibilityLiveRegion="polite"

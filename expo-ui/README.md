@@ -110,7 +110,7 @@ import {
 } from '@gj-kit/expo-ui';
 ```
 
-총 31종이다. v0.2에서 상태(Badge/Alert), identity·구조(Avatar/Divider/ListItem), 진행률(Spinner/ProgressBar), 폼 제어(Checkbox/Switch/RadioGroup), disclosure(Accordion)를 추가했다. 새 컴포넌트도 `style`·`className`·`testID` 공통 꼬리, 테마 토큰, 라이트/다크, Provider 아이콘·문구 규칙을 그대로 따른다.
+총 31종이다. v0.3에서 상태(Badge/Alert), identity·구조(Avatar/Divider/ListItem), 진행률(Spinner/ProgressBar), 폼 제어(Checkbox/Switch/RadioGroup), disclosure(Accordion)를 추가했다. 새 컴포넌트도 `style`·`className`·`testID` 공통 꼬리, 테마 토큰, 라이트/다크, Provider 아이콘·문구 규칙을 그대로 따른다.
 
 ### Text — 서체는 role로
 

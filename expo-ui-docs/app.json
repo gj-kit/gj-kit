@@ -1,0 +1,23 @@
+{
+  "expo": {
+    "name": "gj-kit expo-ui",
+    "slug": "gj-kit-expo-ui",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "automatic",
+    "scheme": "gj-kit-expo-ui",
+    "plugins": [
+      "expo-router"
+    ],
+    "web": {
+      "output": "static"
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "1a83427e-f59d-4e98-9390-6a659ce217d5"
+      }
+    },
+    "owner": "apeltop"
+  }
+}

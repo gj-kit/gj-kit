@@ -77,13 +77,13 @@
   },
   "devDependencies": {
     "@testing-library/react": "^16.1.0",
-    "@types/react": "^19.0.0",
+    "@types/react": "~19.1.0",
     "jsdom": "^25.0.1",
-    "react": "^19.0.0",
-    "react-dom": "^19.0.0",
-    "react-native": "^0.81.0",
+    "react": "19.1.0",
+    "react-dom": "19.1.0",
+    "react-native": "0.81.5",
     "react-native-safe-area-context": "^5.0.0",
-    "react-native-web": "^0.21.0",
+    "react-native-web": "~0.21.0",
     "tsup": "^8",
     "typescript": "^5",
     "vitest": "^3"

@@ -86,7 +86,7 @@ type SectionId = 'start' | 'theme' | 'components' | 'insets' | 'tailwind' | 'con
 const NAV_ITEMS: ReadonlyArray<{ id: SectionId; label: string; meta?: string }> = [
   { id: 'start', label: '시작하기' },
   { id: 'theme', label: 'Theme & Provider' },
-  { id: 'components', label: 'Components', meta: '20' },
+  { id: 'components', label: 'Components', meta: '31' },
   { id: 'insets', label: 'Insets & Keyboard' },
   { id: 'tailwind', label: 'Tailwind' },
   { id: 'contracts', label: 'Type contracts' },
@@ -127,6 +127,15 @@ const COMPONENT_GROUPS = [
     ],
   },
   {
+    title: 'Controls',
+    description: '의미론과 키보드 동작까지 갖춘 controlled form primitives.',
+    items: [
+      { name: 'Checkbox', detail: 'boolean · mixed · Space activation' },
+      { name: 'Switch', detail: 'native behavior · required label' },
+      { name: 'RadioGroup', detail: 'typed value · roving focus · arrow keys' },
+    ],
+  },
+  {
     title: 'Layout',
     description: '페이지 폭, 섹션, 표면과 하단 액션을 위한 기본 구조.',
     items: [
@@ -144,6 +153,26 @@ const COMPONENT_GROUPS = [
       { name: 'EmptyState', detail: 'paired action contract' },
       { name: 'ErrorState', detail: 'optional retry action' },
       { name: 'Toast', detail: '4 variants · controller hook' },
+    ],
+  },
+  {
+    title: 'Status & Progress',
+    description: '지속형 상태 메시지와 결정·불확정 진행률을 정확히 전달합니다.',
+    items: [
+      { name: 'Badge', detail: '5 semantic variants · 2 sizes' },
+      { name: 'Alert', detail: 'action · dismiss · live-region opt-in' },
+      { name: 'Spinner', detail: 'localized accessible loading' },
+      { name: 'ProgressBar', detail: 'determinate · null indeterminate' },
+    ],
+  },
+  {
+    title: 'Display & Disclosure',
+    description: '정체성, 구분선, 목록 행과 펼침 구조를 조합합니다.',
+    items: [
+      { name: 'Avatar', detail: 'alt/decorative union · initials fallback' },
+      { name: 'Divider', detail: 'horizontal · vertical · semantic opt-in' },
+      { name: 'ListItem', detail: 'static or interactive contract' },
+      { name: 'Accordion', detail: 'single · multiple · ARIA relationships' },
     ],
   },
   {
@@ -192,6 +221,28 @@ export function SaveButton() {
       label="저장"
       onPress={() => console.log('saved')}
     />
+  );
+}`;
+
+const COMPONENTS_V02_CODE = `import { useState } from 'react';
+import { Alert, Checkbox, ProgressBar } from '@gj-kit/expo-ui';
+
+export function UploadState() {
+  const [agreed, setAgreed] = useState(false);
+
+  return (
+    <>
+      <Checkbox
+        checked={agreed}
+        onCheckedChange={setAgreed}
+        label="업로드 약관에 동의"
+      />
+      <ProgressBar
+        value={agreed ? 72 : null}
+        accessibilityLabel="업로드 진행률"
+      />
+      <Alert title="자동 저장됨" variant="success" live="polite" />
+    </>
   );
 }`;
 
@@ -249,7 +300,7 @@ export default function DocsPage() {
         <title>Docs — @gj-kit/expo-ui</title>
         <meta
           name="description"
-          content="@gj-kit/expo-ui 설치, 테마, 20개 컴포넌트, safe-area·키보드 유틸과 타입 계약을 확인하세요."
+          content="@gj-kit/expo-ui 설치, 테마, 31개 컴포넌트, safe-area·키보드 유틸과 타입 계약을 확인하세요."
         />
         <link rel="canonical" href="https://gj-kit-expo-ui.expo.app/docs" />
       </Head>
@@ -401,12 +452,12 @@ function DocsLayout({
               <View onLayout={(event) => rememberSection('components', event)}>
                 <DocSection
                   eyebrow="03 · COMPONENTS"
-                  title="20개의 작은 조각, 일관된 하나의 시스템."
+                  title="31개의 작은 조각, 일관된 하나의 시스템."
                   description="컴포넌트는 앱 구조를 대신 소유하지 않습니다. 토큰과 명확한 prop 계약을 제공하고, 화면 흐름과 도메인 조립은 앱에 남겨 둡니다."
                 >
                   <View style={styles.componentCountRow}>
                     <View style={[styles.countPill, { backgroundColor: theme.colors.primarySoft }]}>
-                      <RNText style={[styles.countPillNumber, { color: theme.colors.primary }]}>20</RNText>
+                      <RNText style={[styles.countPillNumber, { color: theme.colors.primary }]}>31</RNText>
                       <RNText style={[styles.countPillLabel, { color: theme.colors.textMuted }]}>public components</RNText>
                     </View>
                     <Text role="caption" color="textMuted" style={styles.componentCountCopy}>
@@ -419,6 +470,12 @@ function DocsLayout({
                       <ComponentGroupCard key={group.title} group={group} wide={wide} />
                     ))}
                   </View>
+
+                  <CodeBlock
+                    label="ControlledStatus.tsx"
+                    code={COMPONENTS_V02_CODE}
+                    onCopy={copyCode}
+                  />
 
                   <Callout tone="neutral" title="Dialog의 의도된 경계">
                     Dialog는 React Native Modal과 패널·확인 액션 조각을 제공합니다. 포털,
@@ -489,8 +546,8 @@ function DocsLayout({
                   <CodeBlock label="Contracts.tsx" code={CONTRACT_CODE} onCopy={copyCode} />
                   <ContractGrid wide={wide} />
                   <Callout tone="success" title="현재 소스에서 직접 검증했습니다">
-                    unit 테스트 125개와 type-contract 테스트 27개가 통과하며, README의
-                    TypeScript/TSX 예제 12개도 배포 타입 선언을 기준으로 컴파일됩니다.
+                    unit 테스트 173개와 type-contract 테스트 36개가 통과하며, README의
+                    TypeScript/TSX 예제 17개도 배포 타입 선언을 기준으로 컴파일됩니다.
                   </Callout>
                 </DocSection>
               </View>
@@ -736,7 +793,7 @@ function Hero({ wide, onCopy }: { wide: boolean; onCopy: () => void }) {
           빠르게 시작하고,{`\n`}안전하게 확장하세요.
         </Text>
         <Text role="body" color="textMuted" style={styles.heroCopy}>
-          토큰 기반 light·dark 테마, 20개 컴포넌트, 문구·아이콘 주입과 device edge
+          토큰 기반 light·dark 테마, 31개 컴포넌트, 문구·아이콘 주입과 device edge
           유틸을 하나의 타입 안전한 API로 제공합니다.
         </Text>
         <View style={styles.heroActions}>
@@ -818,7 +875,7 @@ function CodeBlock({
 
 function StatGrid({ wide }: { wide: boolean }) {
   const stats = [
-    ['24', 'semantic color roles'],
+    ['31', 'semantic color roles'],
     ['7', 'typography roles'],
     ['2', 'built-in schemes'],
     ['0', 'direct dependencies'],
@@ -911,9 +968,9 @@ function ApiList({ items }: { items: ReadonlyArray<readonly [string, string]> })
 function ProofStrip({ wide }: { wide: boolean }) {
   const theme = useTheme();
   const items = [
-    ['125', 'unit tests'],
-    ['27', 'type tests'],
-    ['12', 'compiled examples'],
+    ['173', 'unit tests'],
+    ['36', 'type tests'],
+    ['17', 'compiled examples'],
   ] as const;
   return (
     <View
@@ -946,6 +1003,8 @@ function ContractGrid({ wide }: { wide: boolean }) {
     ['Explicit field style', 'TextField는 containerStyle과 inputStyle을 구분합니다.'],
     ['Live actions only', 'EmptyState action은 label과 onPress를 함께 요구합니다.'],
     ['Semantic text color', 'Text color는 토큰 키만 받고 raw 색은 명시적인 style로만 허용합니다.'],
+    ['Labeled controls', 'Checkbox와 Switch는 보이는 label 또는 accessibilityLabel을 요구합니다.'],
+    ['Progress modes', 'ProgressBar는 number와 null 상태를 분리하고 접근성 라벨을 필수로 받습니다.'],
   ] as const;
   return (
     <View style={styles.contractGrid}>

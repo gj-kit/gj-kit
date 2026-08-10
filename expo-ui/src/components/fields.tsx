@@ -124,7 +124,7 @@ export function TextField({
           {
             color: theme.colors.text,
             fontSize: theme.typography.body.fontSize,
-            borderColor: error ? theme.colors.dangerStrong : theme.colors.line,
+            borderColor: error ? theme.colors.danger : theme.colors.line,
             backgroundColor: theme.colors.surface,
             ...(theme.typography.fontFamily !== undefined
               ? { fontFamily: theme.typography.fontFamily }
@@ -144,7 +144,7 @@ export function TextField({
           className={helperClassName}
           style={[
             roleTextStyle(theme, 'caption'),
-            { color: error ? theme.colors.dangerStrong : theme.colors.textMuted },
+            { color: error ? theme.colors.danger : theme.colors.textMuted },
             helperStyle,
           ]}
         >

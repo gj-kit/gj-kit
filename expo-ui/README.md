@@ -4,8 +4,9 @@
 
 이 라이브러리는 "parse, don't validate" 철학을 UI에 적용한다: 반쪽 테마 객체, 접근성 라벨 없는 아이콘 버튼, 핸들러 없는 액션 버튼, 토큰 키 오타 — 이런 것들은 런타임에서 조용히 깨지는 대신 타입 검사에서 거부된다.
 
-- **런타임 의존성 0** — peer는 `react`, `react-native`뿐. 아이콘·문구는 주입받는다.
+- **런타임 의존성 0** — 필수 peer는 `react`, `react-native`뿐. 아이콘·문구는 주입받는다.
 - **라이트/다크 내장** — `createThemes` 한 번으로 양 스킴 브랜드 테마 쌍을 만들고, Provider가 시스템 다크를 추종한다.
+- **31개 컴포넌트·31개 색상 role** — 폼 제어, 상태 피드백, 진행률, identity, disclosure까지 같은 토큰·타입 규칙으로 제공한다.
 - **NativeWind 무의존, 그러나 우호적** — `className` 패스스루와 테마 파생 tailwind preset(`./tailwind`)을 제공한다.
 - **키보드·safe-area 유틸 내장**(`./insets`) — Android 엣지투엣지 Modal의 키보드 워크어라운드 포함. `react-native-safe-area-context`는 이 서브패스를 쓸 때만 필요한 optional peer다.
 
@@ -46,6 +47,9 @@ export default function RootLayout() {
       strings={koStrings}
       icons={{
         check: ({ color, size }) => <Feather name="check" size={size} color={color} />,
+        minus: ({ color, size }) => <Feather name="minus" size={size} color={color} />,
+        chevronDown: ({ color, size }) => <Feather name="chevron-down" size={size} color={color} />,
+        close: ({ color, size }) => <Feather name="x" size={size} color={color} />,
         search: ({ color, size }) => <Feather name="search" size={size} color={color} />,
         empty: ({ color, size }) => <Feather name="inbox" size={size} color={color} />,
         error: ({ color, size }) => <Feather name="alert-circle" size={size} color={color} />,
@@ -89,7 +93,7 @@ function Root({ children }: { children: ReactNode }) {
 
 ### 토큰이 실제로 관통되는가
 
-전부 그렇다 — 이 패키지의 존재 이유다. `radius.sm`을 10으로 바꾸면 Button·TextField·Surface·Skeleton의 라운드가 전부 바뀌고, `metrics.control.md`를 48로 바꾸면 기본 버튼 높이가 바뀌며, `typography.title`을 교체하면 Section·Dialog·EmptyState 제목이 함께 바뀐다. 컴포넌트 소스에 색·서체 리터럴이 없음을 정적 가드 테스트(`tests/unit/token-guard.test.ts`)가 강제한다.
+전부 그렇다 — 이 패키지의 존재 이유다. `radius.sm`을 10으로 바꾸면 Button·TextField·Surface·Skeleton의 라운드가 전부 바뀌고, `metrics.control.md`를 48로 바꾸면 기본 버튼 높이가 바뀌며, `typography.title`을 교체하면 Section·Dialog·EmptyState 제목이 함께 바뀐다. 상태 색은 **31개 color role**에서 온다. 예를 들면 `success`는 soft 배경 위 전경색, `successStrong`은 채운 배경, `successSoft`는 약한 배경, `onSuccess`는 strong 배경 위 전경색이다. 컴포넌트 소스에 색·서체 리터럴이 없음을 정적 가드 테스트(`tests/unit/token-guard.test.ts`)가 강제한다.
 
 ## 2. 컴포넌트
 
@@ -100,8 +104,13 @@ import {
   Skeleton, EmptyState, ErrorState, Toast, useToastController,
   Dialog, DialogPanel, ConfirmActionRow,
   SelectionIndicator, SelectableRow, SelectAllRow,
+  Badge, Alert, Avatar, Divider, ListItem,
+  Spinner, ProgressBar,
+  Checkbox, Switch, RadioGroup, Accordion,
 } from '@gj-kit/expo-ui';
 ```
+
+총 31종이다. v0.2에서 상태(Badge/Alert), identity·구조(Avatar/Divider/ListItem), 진행률(Spinner/ProgressBar), 폼 제어(Checkbox/Switch/RadioGroup), disclosure(Accordion)를 추가했다. 새 컴포넌트도 `style`·`className`·`testID` 공통 꼬리, 테마 토큰, 라이트/다크, Provider 아이콘·문구 규칙을 그대로 따른다.
 
 ### Text — 서체는 role로
 
@@ -141,6 +150,157 @@ import {
 `SearchField`의 플레이스홀더와 돋보기 아이콘은 Provider의 `strings.searchPlaceholder`·`icons.search`에서 온다 — 앱마다 래퍼를 만들 필요가 없다.
 
 `TextField`에 `style`을 주면 **컴파일 에러**다. 전신에서 `style`은 "입력 스타일"이었는데 새 버전은 컨테이너 개념이 생겼으므로, 의미가 바뀐 채 조용히 이관되는 사고를 타입으로 차단했다 — `containerStyle`(묶음)과 `inputStyle`(입력)로 명시한다.
+
+### Badge / Alert — 상태를 색이 아니라 의미로
+
+```tsx
+import { Alert, Badge } from '@gj-kit/expo-ui';
+
+export function SyncStatus() {
+  return (
+    <>
+      <Badge label="동기화 완료" variant="success" size="sm" />
+      <Alert
+        title="오프라인 상태"
+        variant="warning"
+        action={{ label: '다시 연결', onPress: () => {} }}
+        onDismiss={() => {}}
+      >
+        연결되면 변경 사항을 자동으로 업로드합니다.
+      </Alert>
+    </>
+  );
+}
+```
+
+`Badge`는 `neutral | info | success | warning | error`, `Alert`는 알림 의도가 분명한 `info | success | warning | error`만 받는다. `Alert`는 `title` 또는 `null`·`undefined`가 아닌 `children`이 반드시 필요하고, 액션은 `{ label, onPress }` 한 덩어리라 죽은 버튼을 만들 수 없다. 정적 안내의 기본 `live="off"`를 유지하고, 비동기 결과를 새로 삽입할 때만 `live="polite"` 또는 `"assertive"`를 선택한다.
+
+### Avatar / Divider / ListItem — identity와 정보 구조
+
+```tsx
+import { Avatar, Badge, Divider, ListItem } from '@gj-kit/expo-ui';
+
+export function AccountRow() {
+  return (
+    <>
+      <ListItem
+        title="김가람"
+        description="garam@example.com"
+        leading={<Avatar name="김가람" decorative size="sm" />}
+        trailing={<Badge label="관리자" size="sm" />}
+        onPress={() => {}}
+        accessibilityHint="계정 상세 화면을 엽니다"
+      />
+      <Divider decorative={false} />
+    </>
+  );
+}
+```
+
+`Avatar`는 의미가 있으면 `alt`, 장식이면 `decorative`를 타입으로 강제한다. 이미지가 없거나 로드에 실패하면 `name`에서 유니코드 안전한 초성을 만든다. `ListItem`은 `onPress` 유무로 정적 행과 버튼 행을 구분한다. 따라서 정적 행에 `disabled`나 `accessibilityHint`를 잘못 붙일 수 없다. `Divider`는 기본이 장식이며, `decorative={false}`일 때만 separator 의미론을 노출한다.
+
+### Spinner / ProgressBar — 알 수 있는 진행률과 알 수 없는 진행률
+
+```tsx
+import { ProgressBar, Spinner } from '@gj-kit/expo-ui';
+
+export function UploadProgress() {
+  return (
+    <>
+      <Spinner accessibilityLabel="파일 목록을 불러오는 중" />
+      <ProgressBar
+        accessibilityLabel="사진 업로드"
+        accessibilityValueText="10장 중 7장"
+        value={7}
+        max={10}
+        variant="success"
+      />
+      <ProgressBar
+        accessibilityLabel="서버와 동기화"
+        accessibilityValueText="동기화 중"
+        value={null}
+      />
+    </>
+  );
+}
+```
+
+숫자 `value`는 `0...max`로 정규화하고, `value={null}`은 현재 양을 알 수 없는 indeterminate 애니메이션이다. 운영체제에서 모션 감소를 켜면 이동을 중단하고 정적 진행 표시로 유지한다. `null`일 때 `max`를 함께 넘기는 상태는 타입이 거부한다. `ProgressBar`의 대상 라벨은 필수이며, `Spinner`는 라벨을 생략하면 Provider의 `strings.loading`을 사용한다.
+
+### Checkbox / Switch / RadioGroup — controlled form controls
+
+```tsx
+import { useState } from 'react';
+import { Checkbox, RadioGroup, Switch } from '@gj-kit/expo-ui';
+
+const densityItems = [
+  { label: '편안하게', value: 'comfortable' },
+  { label: '조밀하게', value: 'compact', description: '한 화면에 더 많이 표시합니다.' },
+] as const;
+
+export function Preferences() {
+  const [analytics, setAnalytics] = useState(false);
+  const [notifications, setNotifications] = useState(true);
+  const [density, setDensity] = useState<'comfortable' | 'compact'>('comfortable');
+
+  return (
+    <>
+      <Checkbox
+        checked={analytics}
+        label="익명 사용 통계 공유"
+        onCheckedChange={setAnalytics}
+      />
+      <Switch
+        value={notifications}
+        label="알림 받기"
+        onValueChange={setNotifications}
+      />
+      <RadioGroup
+        accessibilityLabel="목록 밀도"
+        items={densityItems}
+        value={density}
+        onValueChange={setDensity}
+      />
+    </>
+  );
+}
+```
+
+세 컴포넌트는 모두 상태를 앱이 소유한다. `Checkbox`는 select-all용 `'mixed'`도 표현하지만 사용자 입력 콜백은 항상 `boolean`을 돌려준다. `Checkbox`와 `Switch`는 보이는 `label` 또는 `accessibilityLabel` 중 하나가 반드시 필요하고, `RadioGroup`은 그룹 라벨이 필수다. 웹 Checkbox는 Space로 토글하고, RadioGroup은 Space·방향키·Home·End와 disabled 항목 건너뛰기·순환 이동을 구현한다. Switch는 플랫폼의 네이티브 Switch 동작을 보존한다.
+
+### Accordion — 단일/복수 controlled disclosure
+
+```tsx
+import { useState } from 'react';
+import { Accordion, Text } from '@gj-kit/expo-ui';
+
+const faqItems = [
+  {
+    value: 'theme',
+    title: '다크 모드는 어떻게 켜나요?',
+    content: <Text>UiProvider에 ThemePair를 전달하면 시스템 설정을 추종합니다.</Text>,
+  },
+  {
+    value: 'deps',
+    title: '아이콘 패키지가 필요한가요?',
+    content: <Text>아니요. 앱의 아이콘을 Provider 슬롯에 주입합니다.</Text>,
+  },
+] as const;
+
+export function FrequentlyAskedQuestions() {
+  const [open, setOpen] = useState<'theme' | 'deps' | null>(null);
+
+  return <Accordion items={faqItems} value={open} onValueChange={setOpen} />;
+}
+```
+
+기본 `type="single"`은 `value: T | null`, `type="multiple"`은 `value: readonly T[]` 계약으로 분리된다. `collapsible={false}`는 열린 단일 항목을 잠그며 multiple 모드에서는 사용할 수 없다. 웹은 heading/button/panel 관계, `aria-expanded`, Enter·Space를 제공하고 네이티브는 같은 펼침·disabled 상태를 접근성 API로 전달한다.
+
+### 접근성과 상태 소유 원칙
+
+새 컴포넌트는 시각 스타일보다 먼저 의미론을 고정한다. Avatar의 `alt | decorative`, Checkbox/Switch의 `label | accessibilityLabel`, ProgressBar·RadioGroup의 필수 라벨처럼 누락하면 조용히 접근성이 깨지는 선택을 타입 유니언으로 차단한다. Alert live region은 명시적으로 opt-in하고, 폼 제어와 Accordion은 uncontrolled `defaultValue`를 제공하지 않는다. 서버 상태·폼 상태·URL 상태 중 무엇이 정본인지는 앱만 알기 때문에 라이브러리는 `value`와 변경 콜백으로 렌더링만 담당한다.
+
+이 규칙은 플랫폼별로도 같다. 네이티브에서는 RN의 role/state API를, 웹에서는 대응 ARIA 속성과 필요한 키보드 상호작용을 함께 발행한다. 모든 색·간격·치수는 활성 라이트/다크 테마에서 오고, 기본 로딩·닫기 문구는 `UiProvider strings`를 사용하며, 아이콘은 Provider 슬롯을 우선한다. 추가 런타임 패키지는 없다.
 
 ### 상태 뷰 — 문구·아이콘은 Provider에서
 
@@ -245,6 +405,12 @@ preset 입력도 브랜드 `Theme`이다 — 손조립 토큰으로 preset을 �
 | `TextField`에 `style` | 컴파일 에러 — `containerStyle`/`inputStyle`로 명시 |
 | `EmptyState action`에 `onPress` 누락 | 컴파일 에러 — 죽은 버튼 차단 |
 | `Text color`에 raw 색 문자열 | 컴파일 에러 — 토큰 키만, raw는 `style`로 |
+| `Avatar`에 `alt`도 `decorative`도 누락 | 컴파일 에러 — 이미지 의미를 명시 |
+| `Checkbox`/`Switch`에 보이는 label과 접근성 label 모두 누락 | 컴파일 에러 |
+| `ProgressBar`에 `accessibilityLabel` 누락 | 컴파일 에러 |
+| indeterminate `ProgressBar value={null}`에 `max` 지정 | 컴파일 에러 — 서로 배타적인 모드 |
+| `RadioGroup value`에 items에 없는 오타 | 컴파일 에러 (`NoInfer`) |
+| multiple `Accordion`에 `collapsible` 지정 | 컴파일 에러 — single 전용 prop |
 
 ## 6. @memorylog/ui에서 이관
 
@@ -268,7 +434,7 @@ preset 입력도 브랜드 `Theme`이다 — 손조립 토큰으로 preset을 �
 ## 7. FAQ
 
 **Q. Expo 전용인가?**
-아니다. peer는 react/react-native뿐이라 bare RN에서도 동작한다. 이름은 주 사용처(Expo 앱 패밀리)를 따랐다.
+아니다. 필수 peer는 react/react-native뿐이라 bare RN에서도 동작한다. 이름은 주 사용처(Expo 앱 패밀리)를 따랐다.
 
 **Q. 웹(react-native-web)에서 동작하나?**
 동작한다. Toast(`position: fixed`)·StickyActionBar(`position: sticky`)는 웹 분기가 내장돼 있다. 단 호버 스타일은 NativeWind 호스트의 `dark:`/`hover:` 클래스 소관이다.

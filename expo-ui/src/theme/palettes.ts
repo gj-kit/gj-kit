@@ -1,7 +1,7 @@
 /**
  * 내장 팔레트 데이터 — 설계 문서 §3.6.
  *
- * 라이트는 전신 tokens.json 값 계승(+shadow 신설). 다크는 설계 문서 제안값.
+ * 라이트는 전신 tokens.json 값 계승(+상태 팔레트·shadow 확장). 다크는 설계 문서 제안값.
  * 색 이외 토큰(spacing/radius/typography/elevation/metrics/breakpoints)은
  * 스킴 공유가 기본이다 — 전신과 동일한 모델.
  */
@@ -29,15 +29,22 @@ export const lightColors: ThemeColors = {
   primaryStrong: '#227AED',
   primarySoft: '#EAF4FF',
   onPrimary: '#FFFFFF',
-  danger: '#FF5C8A',
-  dangerStrong: '#FF4242',
+  danger: '#B4232C',
+  dangerStrong: '#B4232C',
   dangerSoft: '#FFF0F3',
   onDanger: '#FFFFFF',
-  warning: '#FFE45C',
-  warningStrong: '#D97706',
-  onWarning: '#1D2733',
-  success: '#4F96F4',
-  info: '#1D2733',
+  warning: '#92400E',
+  warningStrong: '#92400E',
+  warningSoft: '#FFF8D6',
+  onWarning: '#FFFFFF',
+  success: '#0E765D',
+  successStrong: '#0E765D',
+  successSoft: '#E8F7F2',
+  onSuccess: '#FFFFFF',
+  info: '#1E63B0',
+  infoStrong: '#1E63B0',
+  infoSoft: '#EAF4FF',
+  onInfo: '#FFFFFF',
   overlay: 'rgba(15, 23, 42, 0.40)',
   shadow: '#0F172A',
 };
@@ -56,15 +63,22 @@ export const darkColors: ThemeColors = {
   primaryStrong: '#3D8BF0',
   primarySoft: '#16283D',
   onPrimary: '#FFFFFF',
-  danger: '#FF6E96',
-  dangerStrong: '#FF5252',
+  danger: '#FF8FAF',
+  dangerStrong: '#B4232C',
   dangerSoft: '#3A1E27',
   onDanger: '#FFFFFF',
-  warning: '#D9B83C',
-  warningStrong: '#F59E0B',
-  onWarning: '#111418',
-  success: '#5C9EEA',
-  info: '#E8ECF1',
+  warning: '#F6C453',
+  warningStrong: '#92400E',
+  warningSoft: '#3B331B',
+  onWarning: '#FFFFFF',
+  success: '#54C7A3',
+  successStrong: '#0E765D',
+  successSoft: '#15382F',
+  onSuccess: '#FFFFFF',
+  info: '#72A8E7',
+  infoStrong: '#1E63B0',
+  infoSoft: '#172B43',
+  onInfo: '#FFFFFF',
   overlay: 'rgba(0, 0, 0, 0.55)',
   shadow: '#000000',
 };

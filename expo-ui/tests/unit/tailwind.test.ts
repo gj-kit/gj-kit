@@ -30,13 +30,21 @@ function extendOf(preset: TailwindPreset): PresetExtend {
 describe('§8 createTailwindPreset — 기본 preset', () => {
   const extend = extendOf(createTailwindPreset());
 
-  it('colors는 prefix 아래 중첩되고 테마 24롤이 전부 방출된다 (bg-ui-primary …)', () => {
+  it('colors는 prefix 아래 중첩되고 테마 31롤이 전부 방출된다 (bg-ui-primary …)', () => {
     const ui = extend.colors['ui'];
     expect(ui).toBeDefined();
+    expect(Object.keys(ui ?? {})).toHaveLength(31);
     expect(Object.keys(ui ?? {}).sort()).toEqual(Object.keys(lightTheme.colors).sort());
     expect(ui?.['primary']).toBe(lightTheme.colors.primary);
     expect(ui?.['surface']).toBe('#FFFFFF');
     expect(ui?.['shadow']).toBe('#0F172A');
+    expect(ui?.['successStrong']).toBe(lightTheme.colors.successStrong);
+    expect(ui?.['successSoft']).toBe(lightTheme.colors.successSoft);
+    expect(ui?.['onSuccess']).toBe(lightTheme.colors.onSuccess);
+    expect(ui?.['infoStrong']).toBe(lightTheme.colors.infoStrong);
+    expect(ui?.['infoSoft']).toBe(lightTheme.colors.infoSoft);
+    expect(ui?.['onInfo']).toBe(lightTheme.colors.onInfo);
+    expect(ui?.['warningSoft']).toBe(lightTheme.colors.warningSoft);
   });
 
   it("spacing['ui-lg']는 '16px' — px 단위 문자열 방출", () => {

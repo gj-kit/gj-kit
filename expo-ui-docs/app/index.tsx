@@ -15,19 +15,30 @@ import {
 } from 'react-native';
 import type { ColorScheme, IconRenderProps, Theme } from '@gj-kit/expo-ui';
 import {
+  Accordion,
+  Alert,
+  Avatar,
+  Badge,
   Button,
+  Checkbox,
   ConfirmActionRow,
   ContentFrame,
   Dialog,
   DialogPanel,
+  Divider,
   EmptyState,
   ErrorState,
   IconButton,
+  ListItem,
+  ProgressBar,
+  RadioGroup,
   SearchField,
   SelectableRow,
   SelectionIndicator,
   Skeleton,
+  Spinner,
   Surface,
+  Switch,
   Tabs,
   Text,
   TextField,
@@ -52,16 +63,22 @@ import {
 type DemoCategory =
   | 'actions'
   | 'forms'
+  | 'controls'
   | 'selection'
   | 'layout'
+  | 'status'
+  | 'display'
   | 'feedback'
   | 'dialog';
 
 const DEMO_CATEGORIES: readonly { label: string; value: DemoCategory }[] = [
   { label: 'Actions', value: 'actions' },
   { label: 'Forms', value: 'forms' },
+  { label: 'Controls', value: 'controls' },
   { label: 'Selection', value: 'selection' },
   { label: 'Layout', value: 'layout' },
+  { label: 'Status', value: 'status' },
+  { label: 'Display', value: 'display' },
   { label: 'Feedback', value: 'feedback' },
   { label: 'Dialog', value: 'dialog' },
 ];
@@ -72,7 +89,10 @@ const COMPONENT_GROUPS = [
   { label: 'Inputs', items: ['TextField', 'SearchField'] },
   { label: 'Navigation', items: ['Tabs'] },
   { label: 'Selection', items: ['SelectionIndicator', 'SelectableRow', 'SelectAllRow'] },
+  { label: 'Controls', items: ['Checkbox', 'Switch', 'RadioGroup'] },
   { label: 'Layout', items: ['Surface', 'ContentFrame', 'Section', 'StickyActionBar'] },
+  { label: 'Status', items: ['Badge', 'Alert', 'Spinner', 'ProgressBar'] },
+  { label: 'Display', items: ['Avatar', 'Divider', 'ListItem', 'Accordion'] },
   { label: 'Feedback', items: ['Skeleton', 'EmptyState', 'ErrorState', 'Toast'] },
   { label: 'Overlay', items: ['Dialog', 'DialogPanel', 'ConfirmActionRow'] },
 ] as const;
@@ -80,8 +100,11 @@ const COMPONENT_GROUPS = [
 const DEMO_SNIPPETS: Record<DemoCategory, string> = {
   actions: `<Button label="저장" onPress={save} />\n<Button variant="secondary" label="미리보기" />\n<IconButton accessibilityLabel="설정 열기" icon={Settings} />`,
   forms: `<SearchField value={query} onChangeText={setQuery} />\n<TextField\n  label="프로젝트 이름"\n  counter={\`\${name.length}/30\`}\n/>`,
+  controls: `<Checkbox\n  checked={agreed}\n  onCheckedChange={setAgreed}\n  label="이용 약관에 동의합니다"\n/>\n<Switch value={enabled} onValueChange={setEnabled} label="알림" />\n<RadioGroup items={channels} value={channel} onValueChange={setChannel} accessibilityLabel="알림 채널" />`,
   selection: `<SelectableRow\n  selected={selected}\n  onPress={() => setSelected(!selected)}\n>\n  <Text>주간 회고 알림</Text>\n</SelectableRow>`,
   layout: `<Surface padding="xl" radius="lg" elevation="sm">\n  <Text role="title">토큰으로 조립하세요.</Text>\n  <Text color="textMuted">간격, 라운드, 그림자까지.</Text>\n</Surface>`,
+  status: `<Badge label="New" variant="success" />\n<Alert title="저장했습니다" variant="success" live="polite" />\n<ProgressBar value={72} accessibilityLabel="업로드 진행률" />\n<ProgressBar value={null} accessibilityLabel="동기화 진행률" />\n<Spinner accessibilityLabel="불러오는 중" />`,
+  display: `<ListItem\n  title="Ada Lovelace"\n  description="Core contributor"\n  leading={<Avatar name="Ada Lovelace" decorative />}\n  onPress={openProfile}\n/>\n<Divider />\n<Accordion items={sections} value={open} onValueChange={setOpen} />`,
   feedback: `<EmptyState\n  body="첫 번째 프로젝트를 만들어보세요."\n  action={{ label: '프로젝트 만들기', onPress: create }}\n/>`,
   dialog: `<Dialog visible={open} onDismiss={close}>\n  <DialogPanel title="프로젝트를 삭제할까요?">\n    <ConfirmActionRow destructive onCancel={close} onConfirm={remove} />\n  </DialogPanel>\n</Dialog>`,
 };
@@ -97,7 +120,7 @@ export default function Home(): ReactElement {
         <title>@gj-kit/expo-ui — 타입으로 지키는 Expo UI Kit</title>
         <meta
           name="description"
-          content="타입 안전한 API, 토큰 기반 라이트·다크 테마, 20개의 Expo·React Native 컴포넌트를 만나보세요."
+          content="타입 안전한 API, 토큰 기반 라이트·다크 테마, 31개의 Expo·React Native 컴포넌트를 만나보세요."
         />
         <link rel="canonical" href="https://gj-kit-expo-ui.expo.app/" />
       </Head>
@@ -489,7 +512,7 @@ function HeroPreview({
           <SelectableRow selected={selected} onPress={() => onSelectedChange(!selected)}>
             <View style={styles.rowCopy}>
               <Text role="label">컴포넌트 API 검토</Text>
-              <Text role="caption" color="textMuted">타입 계약 27개 통과</Text>
+              <Text role="caption" color="textMuted">타입 계약 36개 통과</Text>
             </View>
           </SelectableRow>
           <SelectableRow selected={false} onPress={() => onSelectedChange(true)}>
@@ -519,10 +542,10 @@ function HeroPreview({
 function ProofStrip(): ReactElement {
   const theme = useTheme();
   const proofs = [
-    { value: '20', label: 'Components' },
-    { value: '24', label: 'Color roles' },
+    { value: '31', label: 'Components' },
+    { value: '31', label: 'Color roles' },
     { value: '0', label: 'Direct runtime deps' },
-    { value: '152', label: 'Tests passing' },
+    { value: '209', label: 'Tests passing' },
   ];
   return (
     <ContentFrame maxWidth={1180} center padding={20} style={styles.proofFrame}>
@@ -769,7 +792,7 @@ function ComponentsSection({
         </View>
 
         <View style={styles.componentIndex}>
-          <RNText style={[styles.componentIndexTitle, { color: theme.colors.text }]}>20개의 작은 조각, 하나의 설계 언어</RNText>
+          <RNText style={[styles.componentIndexTitle, { color: theme.colors.text }]}>31개의 작은 조각, 하나의 설계 언어</RNText>
           <View style={styles.componentGroups}>
             {COMPONENT_GROUPS.map((group) => (
               <View
@@ -836,6 +859,10 @@ function ComponentDemo({
 }): ReactElement {
   const theme = useTheme();
   const [demoTab, setDemoTab] = useState<'preview' | 'code'>('preview');
+  const [checked, setChecked] = useState<boolean | 'mixed'>('mixed');
+  const [switchEnabled, setSwitchEnabled] = useState(true);
+  const [channel, setChannel] = useState<'push' | 'email' | 'sms'>('push');
+  const [openSection, setOpenSection] = useState<'overview' | 'accessibility' | null>('overview');
   const icon = (props: IconRenderProps) => <Glyph {...props}>✦</Glyph>;
 
   switch (category) {
@@ -874,6 +901,35 @@ function ComponentDemo({
             onChange={setDemoTab}
           />
         </View>
+      );
+    case 'controls':
+      return (
+        <Surface radius="lg" padding="xl" style={styles.selectionCard}>
+          <Text role="title">알림 환경설정</Text>
+          <Checkbox
+            checked={checked}
+            onCheckedChange={setChecked}
+            label="이용 약관에 동의합니다"
+            description="mixed 상태도 boolean 입력으로 안전하게 전환합니다."
+          />
+          <Switch
+            value={switchEnabled}
+            onValueChange={setSwitchEnabled}
+            label="새 소식 알림"
+            description="네이티브 Switch의 키보드·스크린리더 동작을 보존합니다."
+          />
+          <RadioGroup
+            items={[
+              { label: '푸시', value: 'push' },
+              { label: '이메일', value: 'email' },
+              { label: '문자', value: 'sms', disabled: true },
+            ] as const}
+            value={channel}
+            onValueChange={setChannel}
+            accessibilityLabel="알림 채널"
+            orientation="horizontal"
+          />
+        </Surface>
       );
     case 'selection':
       return (
@@ -924,6 +980,71 @@ function ComponentDemo({
               </View>
             ))}
           </View>
+        </View>
+      );
+    case 'status':
+      return (
+        <View style={styles.demoStack}>
+          <View style={styles.demoRow}>
+            <Badge label="Beta" />
+            <Badge label="New" variant="info" />
+            <Badge label="Saved" variant="success" />
+            <Badge label="Attention" variant="warning" />
+            <Badge label="Failed" variant="error" />
+          </View>
+          <Alert title="새 테마가 저장되었습니다" variant="success" live="polite">
+            모든 새 화면에 semantic token이 즉시 반영됩니다.
+          </Alert>
+          <View style={styles.demoStack}>
+            <ProgressBar value={72} variant="success" accessibilityLabel="문서 생성 진행률" />
+            <ProgressBar
+              value={null}
+              variant="info"
+              accessibilityLabel="컴포넌트 동기화 진행률"
+              accessibilityValueText="동기화 중"
+            />
+            <View style={styles.demoRow}>
+              <Spinner accessibilityLabel="컴포넌트 불러오는 중" />
+              <Text role="caption" color="textMuted">determinate · indeterminate · localized loading</Text>
+            </View>
+          </View>
+        </View>
+      );
+    case 'display':
+      return (
+        <View style={styles.demoStack}>
+          <Surface radius="lg" padding="sm">
+            <ListItem
+              title="Ada Lovelace"
+              description="Design systems contributor"
+              leading={<Avatar name="Ada Lovelace" decorative />}
+              trailing={<Badge label="Core" variant="info" size="sm" />}
+              onPress={() => onShowToast('프로필을 열었습니다.', 'info')}
+            />
+            <Divider inset="md" />
+            <ListItem
+              title="Grace Hopper"
+              description="Accessibility reviewer"
+              leading={<Avatar name="Grace Hopper" decorative />}
+              trailing={<Badge label="A11y" variant="success" size="sm" />}
+            />
+          </Surface>
+          <Accordion
+            items={[
+              {
+                value: 'overview',
+                title: '왜 controlled API인가요?',
+                content: <Text color="textMuted">앱 상태와 UI 상태가 언제나 한 방향으로 흐릅니다.</Text>,
+              },
+              {
+                value: 'accessibility',
+                title: '접근성은 어디까지 포함하나요?',
+                content: <Text color="textMuted">역할, 상태, 키보드 이동과 패널 관계를 기본 제공합니다.</Text>,
+              },
+            ] as const}
+            value={openSection}
+            onValueChange={setOpenSection}
+          />
         </View>
       );
     case 'feedback':
@@ -988,7 +1109,7 @@ function ThemeSection({
       <SectionEyebrow>THEME SYSTEM</SectionEyebrow>
       <SectionHeading
         title="한 번 정하면, 모든 화면이 함께 움직입니다."
-        description="색상 24롤, 서체 7롤, 간격·라운드·그림자·치수까지 하나의 완성된 테마로 관리합니다. 라이트와 다크를 쌍으로 만들고 시스템 설정을 따르세요."
+        description="색상 31롤, 서체 7롤, 간격·라운드·그림자·치수까지 하나의 완성된 테마로 관리합니다. 라이트와 다크를 쌍으로 만들고 시스템 설정을 따르세요."
       />
 
       <View style={[styles.themeGrid, desktop ? styles.twoColumns : null]}>

@@ -233,12 +233,12 @@ describe('§5.11 useToastController', () => {
 // ─── §5.11 Toast ───────────────────────────────────────────────────────────
 
 describe('§5.11 Toast', () => {
-  it('variant별 배경 팔레트 — error→danger, success→success, info→info, warning→warning', () => {
+  it('variant별 배경 팔레트 — 모든 상태가 전용 strong surface를 사용한다', () => {
     const cases = [
-      ['error', lightTheme.colors.danger],
-      ['success', lightTheme.colors.success],
-      ['info', lightTheme.colors.info],
-      ['warning', lightTheme.colors.warning],
+      ['error', lightTheme.colors.dangerStrong],
+      ['success', lightTheme.colors.successStrong],
+      ['info', lightTheme.colors.infoStrong],
+      ['warning', lightTheme.colors.warningStrong],
     ] as const;
     for (const [variant, expected] of cases) {
       const { unmount } = render(
@@ -251,14 +251,14 @@ describe('§5.11 Toast', () => {
     }
   });
 
-  it('variant 기본값은 error — danger 배경', () => {
+  it('variant 기본값은 error — dangerStrong 배경', () => {
     render(
       <UiProvider>
         <Toast message="알림" testID="toast" />
       </UiProvider>,
     );
     expect(screen.getByTestId('toast').style.backgroundColor).toBe(
-      hexToRgb(lightTheme.colors.danger),
+      hexToRgb(lightTheme.colors.dangerStrong),
     );
   });
 
@@ -296,9 +296,22 @@ describe('§5.11 Toast', () => {
       </UiProvider>,
     );
     expect(screen.getByTestId('provider-toast-icon')).toBeTruthy();
-    // success 팔레트의 텍스트 색(onPrimary)과 metrics.icon.md가 전달된다.
+    // success 팔레트의 전용 텍스트 색(onSuccess)과 metrics.icon.md가 전달된다.
     expect(renderIcon).toHaveBeenCalledWith({
-      color: lightTheme.colors.onPrimary,
+      color: lightTheme.colors.onSuccess,
+      size: lightTheme.metrics.icon.md,
+    });
+  });
+
+  it('info leading 아이콘은 전용 onInfo 텍스트 색을 받는다', () => {
+    const renderIcon = vi.fn((_props: IconRenderProps) => <View testID="provider-toast-icon" />);
+    render(
+      <UiProvider icons={{ toast: { info: renderIcon } }}>
+        <Toast message="안내" variant="info" testID="toast" />
+      </UiProvider>,
+    );
+    expect(renderIcon).toHaveBeenCalledWith({
+      color: lightTheme.colors.onInfo,
       size: lightTheme.metrics.icon.md,
     });
   });

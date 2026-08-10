@@ -16,13 +16,17 @@ export type ToastVariant = 'error' | 'success' | 'info' | 'warning';
 export interface UiIcons {
   /** SelectionIndicator/SelectAllRow 마크. 폴백: ✓ 텍스트 글리프. */
   readonly check?: RenderIcon | undefined;
+  /** Checkbox mixed 상태. 폴백: − 텍스트 글리프. */
+  readonly minus?: RenderIcon | undefined;
+  /** Accordion 펼침 어포던스. 폴백: 텍스트 글리프. */
+  readonly chevronDown?: RenderIcon | undefined;
   /** SearchField leading. 폴백: 미표시. */
   readonly search?: RenderIcon | undefined;
   /** EmptyState leading. 폴백: 미표시. */
   readonly empty?: RenderIcon | undefined;
   /** ErrorState leading. 폴백: 미표시. */
   readonly error?: RenderIcon | undefined;
-  /** 향후 Dialog 닫기 어포던스용 예약 — v1 미사용(§4.2). */
+  /** Alert 등 닫기 어포던스. */
   readonly close?: RenderIcon | undefined;
   /** Toast leading — variant별. 폴백: 미표시. 키 레벨도 | undefined — EOP 소비자의 조건부 조립 허용. */
   readonly toast?: { readonly [V in ToastVariant]?: RenderIcon | undefined } | undefined;

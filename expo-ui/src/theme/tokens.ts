@@ -8,7 +8,10 @@ import type { Brand } from './brand';
 
 export type ColorScheme = 'light' | 'dark';
 
-/** 색상 롤 — 전신(@memorylog/ui) 23롤 유지 + shadow 신설(24롤). */
+/**
+ * 색상 롤 — 기본 표면/브랜드에 상태별 strong·soft·on-color 쌍을 더한 31롤.
+ * 상태 컴포넌트가 raw 색이나 다른 의미의 토큰(onPrimary 등)을 빌리지 않게 한다.
+ */
 export interface ThemeColors {
   readonly background: string;
   readonly surface: string;
@@ -31,9 +34,16 @@ export interface ThemeColors {
   readonly onDanger: string;
   readonly warning: string;
   readonly warningStrong: string;
+  readonly warningSoft: string;
   readonly onWarning: string;
   readonly success: string;
+  readonly successStrong: string;
+  readonly successSoft: string;
+  readonly onSuccess: string;
   readonly info: string;
+  readonly infoStrong: string;
+  readonly infoSoft: string;
+  readonly onInfo: string;
   readonly overlay: string;
   /**
    * 모든 그림자의 색 — §0 채택 맵. 전신은 그림자색을 colors.text로 유용해

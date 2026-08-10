@@ -12,17 +12,64 @@ import {
   defaultThemes,
   lightTheme,
 } from '../../src/theme';
-import type { ColorKey, ThemeOverrides } from '../../src/theme';
+import type { ColorKey, ThemeColors, ThemeOverrides } from '../../src/theme';
+
+function relativeLuminance(hex: string): number {
+  const channels = [1, 3, 5].map((start) => Number.parseInt(hex.slice(start, start + 2), 16) / 255);
+  const [red = 0, green = 0, blue = 0] = channels.map((channel) =>
+    channel <= 0.03928 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4,
+  );
+  return red * 0.2126 + green * 0.7152 + blue * 0.0722;
+}
+
+function contrastRatio(first: string, second: string): number {
+  const lighter = Math.max(relativeLuminance(first), relativeLuminance(second));
+  const darker = Math.min(relativeLuminance(first), relativeLuminance(second));
+  return (lighter + 0.05) / (darker + 0.05);
+}
+
+function expectAccessibleStatusColors(colors: ThemeColors): void {
+  const softPairs = [
+    [colors.text, colors.surfaceSubtle],
+    [colors.danger, colors.dangerSoft],
+    [colors.warning, colors.warningSoft],
+    [colors.success, colors.successSoft],
+    [colors.info, colors.infoSoft],
+  ] as const;
+  const solidPairs = [
+    [colors.onDanger, colors.dangerStrong],
+    [colors.onWarning, colors.warningStrong],
+    [colors.onSuccess, colors.successStrong],
+    [colors.onInfo, colors.infoStrong],
+  ] as const;
+
+  for (const pair of [...softPairs, ...solidPairs]) {
+    expect(contrastRatio(...pair)).toBeGreaterThanOrEqual(4.5);
+  }
+
+  const controlAndProgressPairs = [
+    [colors.textSubtle, colors.surface],
+    [colors.primary, colors.surface],
+    [colors.primaryStrong, colors.primarySoft],
+    [colors.danger, colors.dangerSoft],
+    [colors.warning, colors.warningSoft],
+    [colors.success, colors.successSoft],
+    [colors.info, colors.infoSoft],
+  ] as const;
+  for (const pair of controlAndProgressPairs) {
+    expect(contrastRatio(...pair)).toBeGreaterThanOrEqual(3);
+  }
+}
 
 describe('§3.3 createTheme — 부분 오버라이드 2단 병합', () => {
-  it('colors.primary만 바꿔도 나머지 23롤이 유지된다', () => {
+  it('colors.primary만 바꿔도 나머지 30롤이 유지된다', () => {
     const theme = createTheme('light', { colors: { primary: '#123456' } });
     expect(theme.colors.primary).toBe('#123456');
 
     const rest = (Object.keys(lightTheme.colors) as readonly ColorKey[]).filter(
       (key) => key !== 'primary',
     );
-    expect(rest).toHaveLength(23); // 24롤 - primary
+    expect(rest).toHaveLength(30); // 31롤 - primary
     for (const key of rest) {
       expect(theme.colors[key]).toBe(lightTheme.colors[key]);
     }
@@ -165,7 +212,16 @@ describe('§3.6 내장 팔레트 스팟체크', () => {
     expect(lightTheme.colors.shadow).toBe('#0F172A');
     expect(lightTheme.colors.background).toBe('#FFFFFF');
     expect(lightTheme.colors.text).toBe('#1D2733');
-    expect(lightTheme.colors.onWarning).toBe('#1D2733');
+    expect(lightTheme.colors.danger).toBe('#B4232C');
+    expect(lightTheme.colors.warning).toBe('#92400E');
+    expect(lightTheme.colors.onWarning).toBe('#FFFFFF');
+    expect(lightTheme.colors.warningSoft).toBe('#FFF8D6');
+    expect(lightTheme.colors.successStrong).toBe('#0E765D');
+    expect(lightTheme.colors.successSoft).toBe('#E8F7F2');
+    expect(lightTheme.colors.onSuccess).toBe('#FFFFFF');
+    expect(lightTheme.colors.infoStrong).toBe('#1E63B0');
+    expect(lightTheme.colors.infoSoft).toBe('#EAF4FF');
+    expect(lightTheme.colors.onInfo).toBe('#FFFFFF');
     expect(lightTheme.colors.overlay).toBe('rgba(15, 23, 42, 0.40)');
   });
 
@@ -174,14 +230,25 @@ describe('§3.6 내장 팔레트 스팟체크', () => {
     expect(darkTheme.colors.surface).toBe('#1A1F26');
     expect(darkTheme.colors.primary).toBe('#5C9EEA');
     expect(darkTheme.colors.shadow).toBe('#000000');
-    expect(darkTheme.colors.onWarning).toBe('#111418');
+    expect(darkTheme.colors.danger).toBe('#FF8FAF');
+    expect(darkTheme.colors.warning).toBe('#F6C453');
+    expect(darkTheme.colors.onWarning).toBe('#FFFFFF');
+    expect(darkTheme.colors.warningSoft).toBe('#3B331B');
+    expect(darkTheme.colors.successStrong).toBe('#0E765D');
+    expect(darkTheme.colors.successSoft).toBe('#15382F');
+    expect(darkTheme.colors.onSuccess).toBe('#FFFFFF');
+    expect(darkTheme.colors.infoStrong).toBe('#1E63B0');
+    expect(darkTheme.colors.infoSoft).toBe('#172B43');
+    expect(darkTheme.colors.onInfo).toBe('#FFFFFF');
     expect(darkTheme.colors.overlay).toBe('rgba(0, 0, 0, 0.55)');
   });
 
-  it('색상 롤은 24개이고 양 스킴의 키 집합이 같다', () => {
+  it('색상 롤은 31개이고 양 스킴의 키 집합이 같다', () => {
     const lightKeys = Object.keys(lightTheme.colors);
-    expect(lightKeys).toHaveLength(24);
+    expect(lightKeys).toHaveLength(31);
     expect(Object.keys(darkTheme.colors).sort()).toEqual([...lightKeys].sort());
+    expectAccessibleStatusColors(lightTheme.colors);
+    expectAccessibleStatusColors(darkTheme.colors);
   });
 
   it('색 이외 토큰은 스킴 공유 — spacing/radius/typography/metrics/breakpoints', () => {

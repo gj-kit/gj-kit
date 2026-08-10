@@ -306,10 +306,10 @@ export function Toast({
   const icons = useIcons();
   const styles = getToastStyles(theme);
   const palette = {
-    error: { background: theme.colors.danger, text: theme.colors.onDanger },
-    success: { background: theme.colors.success, text: theme.colors.onPrimary },
-    info: { background: theme.colors.info, text: theme.colors.background },
-    warning: { background: theme.colors.warning, text: theme.colors.onWarning },
+    error: { background: theme.colors.dangerStrong, text: theme.colors.onDanger },
+    success: { background: theme.colors.successStrong, text: theme.colors.onSuccess },
+    info: { background: theme.colors.infoStrong, text: theme.colors.onInfo },
+    warning: { background: theme.colors.warningStrong, text: theme.colors.onWarning },
   }[variant];
   const resolvedLeading =
     leading ??

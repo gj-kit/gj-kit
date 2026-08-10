@@ -35,6 +35,11 @@ export interface FetchHandlerOptions {
    * waitUntil 미주입 시 동작. 기본 'sync-complete': 핸들러 동기 완료 후 200(이벤트 유실 방지).
    * 'warn-and-detach': 즉시 200 + 핸들러는 분리 실행 — 서버리스에서는 응답 후 실행이
    * 회수되지 않고 중단될 수 있다(경고 로그).
+   *
+   * ⚠ 'sync-complete'에서는 autoRefetch(§3.5)의 prefetch를 **건너뛴다**(prefetched는
+   * undefined) — 핸들러 완료가 200 응답의 전제라 조회 왕복이 응답 '전'에 실행되어
+   * "200 ack 이후 실행"이라는 §3.5 협상 불가 계약과 10초 규약을 잠식하기 때문이다.
+   * 조회가 필요하면 핸들러에서 `w.refetch(client)`를 직접 호출하거나 waitUntil을 주입하라.
    */
   readonly onMissingWaitUntil?: 'sync-complete' | 'warn-and-detach';
 }
@@ -126,22 +131,32 @@ export function createFetchHandler(
     // 200 ack은 이 시점에 이미 확정 — prefetch(§3.5)는 응답 판정에 관여하지 못하고
     // 핸들러 디스패치 직전에만 수행된다(dedupe 통과분 한정 — duplicate는 위에서 반환).
     const webhook = result.value.webhook;
+    const mode = options?.onMissingWaitUntil ?? 'sync-complete';
+    // §3.5 실행 시점 계약(협상 불가): 조회 왕복은 '200 응답 확정 후'에만 — waitUntil 미주입
+    // 기본(sync-complete)에서는 job 완료가 200 응답의 전제라 prefetch를 켜면 조회가 응답
+    // '전'에 실행되어 10초 규약을 잠식한다(getPayment 기본 timeout 30s + retry 결합 시 수십 초).
+    // → sync-complete에서는 prefetch를 건너뛴다. prefetched undefined는 문서화된 상태
+    // ('옵션 꺼짐 또는 수동 verify 경로'와 동일)이며, 필요하면 핸들러에서 w.refetch()를 쓰거나
+    // waitUntil을 주입하라(nodeHandler는 res.end() 후 prefetch라 영향 없음).
+    const syncComplete = options?.waitUntil === undefined && mode === 'sync-complete';
     const job = (async () => {
-      const prepared = prefetch === undefined ? webhook : await prefetch(webhook);
+      const prepared =
+        prefetch === undefined || syncComplete ? webhook : await prefetch(webhook);
       await dispatchWebhook(handlers, prepared);
     })().catch(logHandlerFailure);
     if (options?.waitUntil !== undefined) {
       options.waitUntil(job);
       return new Response(null, { status: 200 });
     }
-
-    const mode = options?.onMissingWaitUntil ?? 'sync-complete';
     if (!warned) {
       warned = true;
       if (options?.onMissingWaitUntil === undefined) {
         console.warn(
           '[@gj-kit/toss-payments] fetchHandler: waitUntil이 주입되지 않아 핸들러 동기 완료 후 200을 반환합니다(기본 폴백 — 이벤트 유실 방지). ' +
-            '서버리스에서는 fetchHandler(handlers, { waitUntil })로 런타임의 waitUntil을 주입하세요. 10초 안에 응답하지 못하면 재전송됩니다.',
+            '서버리스에서는 fetchHandler(handlers, { waitUntil })로 런타임의 waitUntil을 주입하세요. 10초 안에 응답하지 못하면 재전송됩니다.' +
+            (prefetch === undefined
+              ? ''
+              : ' autoRefetch의 prefetch는 이 모드에서 실행되지 않습니다(10초 규약 보존) — prefetched 대신 핸들러의 w.refetch()를 쓰거나 waitUntil을 주입하세요.'),
         );
       } else if (mode === 'warn-and-detach') {
         console.warn(

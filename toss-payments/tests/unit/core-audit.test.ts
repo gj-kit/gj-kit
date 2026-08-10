@@ -12,8 +12,8 @@ import { rawPayment } from './helpers';
 const redacted = '[REDACTED]';
 const asRecord = (v: unknown): Record<string, unknown> => v as Record<string, unknown>;
 
-describe('AUDIT_REDACTED_KEYS — 확정 표(§3.2) 그대로', () => {
-  it('denylist 8키 단일 상수 — 감사 가능(버전 관리 대상)', () => {
+describe('AUDIT_REDACTED_KEYS — 확정 표(§3.2) + v1.1 보강', () => {
+  it('denylist 9키 단일 상수 — 감사 가능(버전 관리 대상)', () => {
     expect(AUDIT_REDACTED_KEYS).toEqual([
       'cardNumber',
       'cardPassword',
@@ -23,6 +23,8 @@ describe('AUDIT_REDACTED_KEYS — 확정 표(§3.2) 그대로', () => {
       'billingKey',
       'authKey',
       'customerMobilePhone',
+      // v1.1 보강 — 퀵계좌이체 빌링 발급 응답 transfers[].bankAccountNumber (방어적 이중화)
+      'bankAccountNumber',
     ]);
   });
 
@@ -94,6 +96,33 @@ describe('redactForAudit — 실측 응답 픽스처 스냅샷', () => {
     const cb = asRecord(redactForAudit(authCallback));
     expect(cb['authKey']).toBe(redacted);
     expect(JSON.stringify([req, res, cb])).not.toMatch(/4330123456789012|bkey-raw-value|auth-raw-value|900101/);
+  });
+
+  it('퀵계좌이체 빌링 발급 응답 — transfers[].bankAccountNumber 치환(배열 요소 재귀 + denylist)', () => {
+    // 퀵계좌이체 발급 응답 형태(server/stores.ts BillingKeyRecord.transfers 근거) —
+    // 토스가 마스킹해 내려주는 필드지만 마스킹 정책은 토스 소유라 방어적 이중화 대상이다.
+    const transferIssueResponse = {
+      mId: 'tvivarepublica',
+      customerKey: 'cust-transfer-1',
+      authenticatedAt: '2026-08-10T12:00:00+09:00',
+      method: '계좌이체',
+      billingKey: 'bkey-transfer-raw',
+      card: null,
+      transfers: [
+        { bankName: '토스뱅크', bankAccountNumber: '100012345678' },
+        { bankName: '국민', bankAccountNumber: '9876543210987' },
+      ],
+    };
+
+    const res = asRecord(redactForAudit(transferIssueResponse));
+    expect(res['billingKey']).toBe(redacted);
+    const transfers = res['transfers'] as ReadonlyArray<Record<string, unknown>>;
+    expect(transfers[0]?.['bankAccountNumber']).toBe(redacted);
+    expect(transfers[1]?.['bankAccountNumber']).toBe(redacted);
+    // 비민감 필드는 원형 보존
+    expect(transfers[0]?.['bankName']).toBe('토스뱅크');
+    expect(res['method']).toBe('계좌이체');
+    expect(JSON.stringify(res)).not.toMatch(/100012345678|9876543210987|bkey-transfer-raw/);
   });
 
   it('가상계좌 취소 요청/응답 — accountNumber + refundAccount.number(컨텍스트) + customerMobilePhone 치환', () => {

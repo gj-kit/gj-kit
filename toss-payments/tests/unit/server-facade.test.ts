@@ -218,7 +218,6 @@ describe('§3.3 events — 버스 1개가 4곳(client/confirm/billing/webhook)�
 
 describe('§3.5 webhook.autoRefetch: true — 파사드 내부 client 자동 결속', () => {
   it('어댑터 경유 Unverified에 내부 client 조회 결과가 prefetched로 첨부된다', async () => {
-    vi.spyOn(console, 'warn').mockImplementation(() => {}); // waitUntil 미제공 경고 무음
     const { fetch, calls } = routedFetch(rawPayment());
     const kit = createTossPayments({
       secretKey: sk(),
@@ -227,14 +226,23 @@ describe('§3.5 webhook.autoRefetch: true — 파사드 내부 client 자동 결
     });
 
     const received: { trust: string; prefetchedStatus: string | null }[] = [];
-    const handler = kit.webhook.fetchHandler({
-      onPaymentStatusChanged: (w) => {
-        received.push({
-          trust: w.trust,
-          prefetchedStatus: w.prefetched?.ok === true ? w.prefetched.value.status : null,
-        });
+    // waitUntil 주입 — sync-complete 모드는 prefetch를 건너뛴다(§3.5 10초 규약 보존)
+    const jobs: Promise<unknown>[] = [];
+    const handler = kit.webhook.fetchHandler(
+      {
+        onPaymentStatusChanged: (w) => {
+          received.push({
+            trust: w.trust,
+            prefetchedStatus: w.prefetched?.ok === true ? w.prefetched.value.status : null,
+          });
+        },
       },
-    });
+      {
+        waitUntil: (p) => {
+          jobs.push(p);
+        },
+      },
+    );
 
     const { rawBody, headers } = webhookFixture.paymentStatusChanged({
       payment: { paymentKey: 'pay_123', orderId: OID, status: 'DONE' },
@@ -247,6 +255,7 @@ describe('§3.5 webhook.autoRefetch: true — 파사드 내부 client 자동 결
       }),
     );
     expect(res.status).toBe(200);
+    await Promise.all(jobs);
     // 내부 client가 결속된 증거 — 별도 client 주입 없이 조회가 수행됐다(trust 승격은 없음)
     expect(received).toEqual([{ trust: 'unverified', prefetchedStatus: 'DONE' }]);
     expect(calls.some((c) => c.url.includes('/v1/payments/pay_123'))).toBe(true);

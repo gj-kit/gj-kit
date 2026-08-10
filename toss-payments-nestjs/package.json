@@ -1,0 +1,45 @@
+{
+  "name": "@gj-kit/toss-payments-nestjs",
+  "version": "0.0.0",
+  "description": "@gj-kit/toss-payments의 NestJS 통합 — DI 토큰·DynamicModule·rawBody 웹훅 헬퍼 (설계 §4)",
+  "license": "MIT",
+  "type": "module",
+  "sideEffects": false,
+  "engines": {
+    "node": ">=20"
+  },
+  "files": [
+    "dist"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    }
+  },
+  "scripts": {
+    "build": "tsup",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run --project unit",
+    "test:types": "vitest run --project types"
+  },
+  "peerDependencies": {
+    "@gj-kit/toss-payments": "workspace:^",
+    "@nestjs/common": "^10 || ^11",
+    "reflect-metadata": "^0.1.13 || ^0.2",
+    "rxjs": "^7"
+  },
+  "devDependencies": {
+    "@gj-kit/toss-payments": "workspace:*",
+    "@nestjs/common": "^11",
+    "@nestjs/core": "^11",
+    "@nestjs/testing": "^11",
+    "@types/node": "^24",
+    "reflect-metadata": "^0.2",
+    "rxjs": "^7",
+    "tsup": "^8",
+    "typescript": "^5",
+    "vitest": "^3"
+  }
+}

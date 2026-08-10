@@ -4,6 +4,7 @@ import { createBillingFlow, recoverBillingKeyRecord } from '../../src/server';
 import type {
   AuthKeyReceived,
   BillingFlow,
+  BillingFlowBase,
   BillingKeyStore,
   BillingOrder,
   BillingProfile,
@@ -110,6 +111,24 @@ describe('§3.6 requireApproveIdempotencyKey — 켜면 approve options 자체�
     // @ts-expect-error 병행 선언에서도 approve 멱등키는 필수
     void bothFlow.approve(profile, order);
     void bothFlow.approve(profile, order, { idempotencyKey: forge<IdempotencyKey>() });
+  });
+
+  it('광의 대입(bivariance) 우회 차단 — capability 플로우를 넓혀 멱등키 강제를 풀 수 없다', () => {
+    const strict = forge<BillingFlow<'test', { requireApproveIdempotencyKey: true }>>();
+
+    // approve는 프로퍼티 함수 타입(contravariant) — 메서드였다면 bivariance로 아래 대입이
+    // 전부 통과해, 넓힌 참조로 멱등키 없는 approve가 컴파일됐다(G7 침묵 우회).
+
+    // @ts-expect-error BillingFlowBase로 넓힐 수 없다 — 멱등키 강제 해제 경로 차단
+    const base: BillingFlowBase<'test'> = strict;
+    void base;
+
+    // @ts-expect-error 기본 capability의 BillingFlow<'test'>로도 넓힐 수 없다
+    const widened: BillingFlow<'test'> = strict;
+    void widened;
+
+    // @ts-expect-error 광의 파라미터의 헬퍼에 전달하는 자연스러운 작성 형태도 차단된다
+    void ((b: BillingFlow<'test'>) => b.approve(profile, order))(strict);
   });
 
   it('createBillingFlow에 capability + events 옵션 동시 수용', () => {

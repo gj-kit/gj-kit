@@ -187,7 +187,7 @@ process.on('SIGTERM', () => { void auditSink.close(); });
 | 대상 | 처리 |
 |---|---|
 | `Authorization` 헤더 | **필드 자체가 없음** — `AuditEntry`에 헤더가 구조적으로 부재(마스킹이 아님) |
-| `cardNumber` `cardPassword` `customerIdentityNumber` `accountNumber` `secret` `billingKey` `authKey` `customerMobilePhone` | req/res body 재귀 순회, 대소문자 무시 매칭 → `'[REDACTED]'` 치환. 목록은 `AUDIT_REDACTED_KEYS` 상수로 export(감사·버전 관리 대상) |
+| `cardNumber` `cardPassword` `customerIdentityNumber` `accountNumber` `secret` `billingKey` `authKey` `customerMobilePhone` `bankAccountNumber` | req/res body 재귀 순회, 대소문자 무시 매칭 → `'[REDACTED]'` 치환. 목록은 `AUDIT_REDACTED_KEYS` 상수로 export(감사·버전 관리 대상) |
 | `card`/`refundAccount` 하위의 `number` | 컨텍스트 규칙으로 치환(마스킹 카드번호·환불 계좌번호) |
 | 인바운드 웹훅 rawBody | **audit 범위 밖** — DEPOSIT_CALLBACK 원문에 secret이 있어 기록하지 않습니다(§9 경고와 동일 근거). audit은 아웃바운드 API 전용 |
 

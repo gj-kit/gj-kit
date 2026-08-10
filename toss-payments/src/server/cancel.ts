@@ -6,6 +6,7 @@
  */
 import type { Brand } from '../core/brand';
 import type { CancelErrorCode, TossApiFailure, TransportFailure } from '../core/errors';
+import type { InternalTossEmit } from '../core/events';
 import {
   generateIdempotencyKey,
   type CancelReason,
@@ -25,6 +26,8 @@ import { err, ok, type Result } from '../core/result';
 // parsePayment는 값 import — client.ts와의 순환은 함수 선언만 서로 참조하므로 안전하다
 // (ESM 라이브 바인딩 + tsup 번들 시 단일 청크).
 import { parsePayment, type CallOptions, type TossHttp } from './client';
+// 타입 전용 import — events.ts도 이 모듈을 type-only로 참조하므로 런타임 순환이 없다
+import type { TossEventMap } from './events';
 
 /**
  * asCancelable을 통과해야만 얻는 3-변형 판별 유니언.
@@ -401,8 +404,31 @@ function buildBody(target: CancelablePayment, request: CancelRequestImpl): Recor
   return body;
 }
 
-/** (내부) client.ts가 cancels 네임스페이스를 조립할 때 사용 — index에서 재export하지 않는다. */
-export function createCancels<E extends Env>(http: TossHttp): TossCancels<E> {
+/**
+ * (내부) client.ts가 cancels 네임스페이스를 조립할 때 사용 — index에서 재export하지 않는다.
+ *
+ * emit은 §3.3 'cancel.executed'/'cancel.failed' 발행 계층 — createTossClient가
+ * getInternalEmit(options.events) 결과를 전달한다(미주입/모조 이미터면 null → 발행 no-op).
+ * 발화는 Result 확정 후 fire-and-forget — 발화가 반환값을 바꾸는 경로 없음(핸들러 격리는
+ * 이미터 소유). 사전검증 실패(preflight Err)도 CancelError이므로 동일하게 발화한다.
+ */
+export function createCancels<E extends Env>(
+  http: TossHttp,
+  emit?: InternalTossEmit<TossEventMap> | null,
+): TossCancels<E> {
+  /** Result 확정 후 §3.3 이벤트 발화 — 성공 executed / 실패 failed(paymentKey + error). */
+  const finish = async (
+    paymentKey: PaymentKey,
+    exec: () => Promise<Result<CancelOutcome, CancelError>>,
+  ): Promise<Result<CancelOutcome, CancelError>> => {
+    const r = await exec();
+    if (emit !== undefined && emit !== null) {
+      if (r.ok) emit.emit('cancel.executed', { outcome: r.value });
+      else emit.emit('cancel.failed', { paymentKey, error: r.error });
+    }
+    return r;
+  };
+
   const run = (
     target: CancelablePayment,
     body: Record<string, unknown>,
@@ -421,69 +447,71 @@ export function createCancels<E extends Env>(http: TossHttp): TossCancels<E> {
   };
 
   return {
-    async cancelFully(
-      target: CancelablePayment,
-      request: CancelRequestImpl,
-      options?: CallOptions<E>,
-    ) {
-      const expected = request.expectedAmount ?? Number.NaN;
-      if (expected !== target.balanceAmount) {
-        return err({
-          source: 'library',
-          kind: 'expected-amount-mismatch',
-          expected,
-          actual: target.balanceAmount,
-        });
-      }
-      // 전액 취소 — cancelAmount 미전송(생략 = 전액, 문서 규칙)
-      return run(target, buildBody(target, { ...request, amount: undefined }), options);
+    cancelFully(target: CancelablePayment, request: CancelRequestImpl, options?: CallOptions<E>) {
+      return finish(target.payment.paymentKey, async () => {
+        const expected = request.expectedAmount ?? Number.NaN;
+        if (expected !== target.balanceAmount) {
+          return err({
+            source: 'library',
+            kind: 'expected-amount-mismatch',
+            expected,
+            actual: target.balanceAmount,
+          });
+        }
+        // 전액 취소 — cancelAmount 미전송(생략 = 전액, 문서 규칙)
+        return run(target, buildBody(target, { ...request, amount: undefined }), options);
+      });
     },
 
-    async cancelPartially(
+    cancelPartially(
       target: SettledCancelable | DepositedVaCancelable,
       request: CancelRequestImpl,
       options?: CallOptions<E>,
     ) {
-      const amount = request.amount ?? Number.NaN;
-      if (!(amount > 0)) {
-        return err({
-          source: 'library',
-          kind: 'invalid-input',
-          field: 'amount',
-          reason: '취소 금액은 양수여야 합니다',
-        });
-      }
-      if (amount > target.balanceAmount) {
-        return err({
-          source: 'library',
-          kind: 'amount-exceeds-balance',
-          cancelAmount: amount,
-          balanceAmount: target.balanceAmount,
-        });
-      }
-      return run(target, buildBody(target, request), options);
+      return finish(target.payment.paymentKey, async () => {
+        const amount = request.amount ?? Number.NaN;
+        if (!(amount > 0)) {
+          return err({
+            source: 'library',
+            kind: 'invalid-input',
+            field: 'amount',
+            reason: '취소 금액은 양수여야 합니다',
+          });
+        }
+        if (amount > target.balanceAmount) {
+          return err({
+            source: 'library',
+            kind: 'amount-exceeds-balance',
+            cancelAmount: amount,
+            balanceAmount: target.balanceAmount,
+          });
+        }
+        return run(target, buildBody(target, request), options);
+      });
     },
 
-    async retry(ticket, options) {
-      // 비공개 봉인 심볼 조회 — 공개 타입에 없는 필드라 단언이 불가피
-      const sealed = (ticket as { readonly [retrySeal]?: SealedCancelRequest })[retrySeal];
-      if (sealed === undefined) {
-        return err({
-          source: 'library',
-          kind: 'invalid-input',
-          field: 'ticket',
-          reason:
-            '봉인이 소실된 티켓입니다 — 스프레드/직렬화 복제본은 재실행할 수 없습니다. 원본 티켓을 사용하세요.',
-        });
-      }
-      return executeCancel(
-        http,
-        ticket.paymentKey,
-        ticket.idempotencyKey,
-        sealed,
-        ticket.issuedAt,
-        options?.signal,
-      );
+    retry(ticket, options) {
+      return finish(ticket.paymentKey, async () => {
+        // 비공개 봉인 심볼 조회 — 공개 타입에 없는 필드라 단언이 불가피
+        const sealed = (ticket as { readonly [retrySeal]?: SealedCancelRequest })[retrySeal];
+        if (sealed === undefined) {
+          return err({
+            source: 'library',
+            kind: 'invalid-input',
+            field: 'ticket',
+            reason:
+              '봉인이 소실된 티켓입니다 — 스프레드/직렬화 복제본은 재실행할 수 없습니다. 원본 티켓을 사용하세요.',
+          });
+        }
+        return executeCancel(
+          http,
+          ticket.paymentKey,
+          ticket.idempotencyKey,
+          sealed,
+          ticket.issuedAt,
+          options?.signal,
+        );
+      });
     },
   };
 }

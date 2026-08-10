@@ -237,7 +237,9 @@ export interface Unverified {
   refetch(client: PaymentLookup): Promise<Result<Payment, LookupError | NoPaymentReference>>;
   /**
    * §3.5 autoRefetch 설정 + 어댑터(fetchHandler/nodeHandler) 경유 시에만 채워짐 —
-   * undefined = 옵션 꺼짐 또는 수동 verify 경로. Err여도 이벤트는 버려지지 않고 핸들러에
+   * undefined = 옵션 꺼짐 또는 수동 verify 경로, **또는 waitUntil 없는 fetchHandler의
+   * sync-complete 모드**(조회가 200 응답 '전'에 실행되어 10초 규약을 잠식하므로 건너뛴다 —
+   * 그 경우 refetch()를 직접 호출하라). Err여도 이벤트는 버려지지 않고 핸들러에
    * 도달한다(판단은 핸들러 몫 — 웹훅 자체가 최대 7회 재전송되므로 다음 전송이 자연 재시도).
    *
    * ⚠ trust는 여전히 'unverified'다 — 조회 성공은 웹훅 발신자 진위를 증명하지 않는다

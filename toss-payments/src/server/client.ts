@@ -116,6 +116,16 @@ export interface TossHttpInit {
   readonly method: 'GET' | 'POST' | 'DELETE';
   /** baseUrl 뒤에 붙는 경로 — 경로 세그먼트는 호출자가 encodeURIComponent 처리. */
   readonly path: string;
+  /**
+   * 관측 채널(AuditEntry.path · 'api.call' 이벤트 path · onRetry.path) 전용 경로 —
+   * path에 민감 세그먼트(빌링키 등)가 들어가는 호출자가 치환본을 전달한다
+   * (예: billing approve/revoke의 `/v1/billing/[REDACTED]`).
+   *
+   * §3.2 redaction은 body 키만 순회하므로 URL 경로의 billingKey는 통과한다 — 이 필드가
+   * 그 구멍을 막는다(billing.ts 봉인 원칙: billingKey는 어떤 관측 채널에도 노출 불가).
+   * 실제 전송 경로는 언제나 path다 — 이 필드는 fetch에 절대 쓰이지 않는다.
+   */
+  readonly auditPath?: string | undefined;
   readonly bodyJson?: string | undefined;
   readonly idempotencyKey?: string | undefined;
   readonly testCode?: string | undefined;
@@ -416,8 +426,10 @@ function createHttp(secretKey: string, env: Env, options: TossClientOptions): To
 
   return {
     async request(init) {
-      // AuditEntry.path / onRetry.path / 'api.call'.path — pathname만(쿼리 미포함)
-      const path = init.path.split('?')[0] ?? init.path;
+      // AuditEntry.path / onRetry.path / 'api.call'.path — pathname만(쿼리 미포함).
+      // auditPath가 있으면 그것만 쓴다 — 민감 세그먼트(빌링키) 치환본이며, 실제 전송
+      // 경로(attemptOnce의 init.path)에는 손대지 않는다.
+      const path = init.auditPath ?? init.path.split('?')[0] ?? init.path;
       const requestStartedAt = Date.now();
 
       // 요청 body는 시도 간 바이트 동일 — redaction 통과본을 1회만 계산해 재사용
@@ -540,7 +552,9 @@ export function createTossClient(
       lookup(`/v1/payments/${encodeURIComponent(paymentKey)}`, callOptions?.signal),
     getPaymentByOrderId: (orderId, callOptions) =>
       lookup(`/v1/payments/orders/${encodeURIComponent(orderId)}`, callOptions?.signal),
-    cancels: createCancels(http),
+    // §3.3 'cancel.executed'/'cancel.failed' 발행 배선 — createTossEvents 산출물이 아니면
+    // null(발행 no-op). 파사드는 events를 client 옵션으로 병합 주입하므로 자동 커버된다.
+    cancels: createCancels(http, getInternalEmit<TossEventMap>(options.events)),
   };
   Object.defineProperty(client, internalHttp, { value: http, enumerable: false });
   return client;

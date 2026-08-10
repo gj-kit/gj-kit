@@ -1,0 +1,12 @@
+{
+  "extends": "../tsconfig.base.json",
+  "compilerOptions": {
+    // Nest 데코레이터(@Module 등) 사용 — 레거시 데코레이터 트랜스폼.
+    "experimentalDecorators": true,
+    // 의도적 false (설계 §4.1) — esbuild(tsup/vitest)는 design:type 메타데이터를 생성하지
+    // 못한다. 이 제약을 설계로 흡수: 모든 주입은 명시적 @Inject(토큰)뿐이며, 이 패키지의
+    // 어떤 코드도 design:paramtypes를 읽지 않는다 → SWC/esbuild 빌드 무설정 호환.
+    "emitDecoratorMetadata": false
+  },
+  "include": ["src", "tests"]
+}

@@ -85,6 +85,10 @@ export const AUDIT_REDACTED_KEYS: readonly string[] = [
   'billingKey',
   'authKey',
   'customerMobilePhone',
+  // 퀵계좌이체 빌링 발급 응답의 transfers[].bankAccountNumber — 토스가 마스킹해 내려주지만
+  // (server/stores.ts BillingKeyRecord.transfers 참조) 마스킹 정책은 토스 소유라 변경될 수
+  // 있으므로 방어적 이중화로 denylist에 고정한다(v1.1 §3.2 잔존 리스크 완화 — 필드 감사 결과 추가).
+  'bankAccountNumber',
 ];
 
 const REDACTED = '[REDACTED]';

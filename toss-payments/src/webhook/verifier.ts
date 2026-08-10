@@ -118,6 +118,12 @@ export interface WebhookVerifierConfig {
    * 결제 참조가 있는 Unverified 이벤트를 자동 재조회해 `prefetched`로 첨부한다.
    * dedupe 통과분에만 수행(재전송 7회가 조회 7회가 되지 않음).
    *
+   * ⚠ waitUntil 없는 fetchHandler의 기본(sync-complete) 모드에서는 **prefetch가 실행되지
+   * 않는다**(prefetched undefined) — 그 모드는 핸들러 완료가 200 응답의 전제라 조회 왕복이
+   * 응답 '전'에 실행되어 "200 ack 이후"라는 본 계약과 10초 규약을 잠식하기 때문이다.
+   * waitUntil 주입 또는 핸들러의 refetch() 직접 호출로 대체하라(nodeHandler는 응답 후
+   * 실행이라 영향 없음).
+   *
    * 수동 verify() 경로는 불변 — verify에 네트워크 호출을 심지 않는다(순수성 + 10초 규약
    * 보존). trust 등급 승격도 없다('unverified' 불변 — 조회 성공은 발신자 진위를 증명하지
    * 않는다, §7-2).

@@ -36,6 +36,16 @@ import { toSearchParams, type CallbackQueryInput, type CallbackParseError } from
 import type { TossEventMap, TossEvents } from './events';
 import type { BillingKeyRecord, BillingKeyStore } from './stores';
 
+/**
+ * 관측 채널용 빌링 경로 치환본 — approve/revoke의 실제 경로는 `/v1/billing/{billingKey}`인데,
+ * 이를 무가공으로 AuditEntry.path·'api.call' 이벤트·onRetry.path에 실으면 §3.2 redaction
+ * (body 키만 순회)을 우회해 billingKey 평문이 유출되고, 같은 audit 엔트리의 requestBody에
+ * customerKey가 동거해 "빌링키+customerKey를 같은 로그에 남기지 말 것"(stores.ts, 토스 빌링
+ * 보안 모델)을 위반한다. TossHttpInit.auditPath로 이 치환본을 전달해 원천 차단한다 —
+ * 실제 전송 경로는 불변이다.
+ */
+const BILLING_AUDIT_PATH = '/v1/billing/[REDACTED]';
+
 // ─── 봉인 심볼 — 비열거·비공개. JSON.stringify/스프레드에 새지 않는다 ───────────
 const authKeySeal: unique symbol = Symbol('gj-kit/toss-payments#billing-auth-key');
 const billingKeySeal: unique symbol = Symbol('gj-kit/toss-payments#billing-key');
@@ -298,12 +308,19 @@ export interface BillingFlowBase<E extends Env> {
    * BillingOrder에는 customerKey 필드가 없다 — 봉인 쌍으로만 승인 →
    * NOT_MATCHES_CUSTOMER_KEY 구조적 방지. 봉인이 소실된 profile(스프레드 복제본 등)은
    * 런타임 Err('profile-detached') — billing.load로 재수화 안내.
+   *
+   * ⚠ 메서드 단축 구문이 아닌 **프로퍼티 함수 타입**이다 — 메서드는 파라미터가 bivariant로
+   * 검사되어 `BillingFlow<E, {requireApproveIdempotencyKey: true}>`가 이 광의 타입에
+   * 에러 없이 대입되고, 넓힌 참조로 멱등키 없는 approve가 컴파일된다(§3.6 컴파일 방어의
+   * 침묵 우회 — G7 "옵션 누락 = 금전 사고" 지점). strictFunctionTypes 하에서 프로퍼티
+   * 함수 타입은 contravariant 검사라 그 넓힘 대입이 명시적 컴파일 에러가 된다.
+   * 호출 구문은 메서드와 동일 — 소비 측 파괴 없음.
    */
-  approve(
+  readonly approve: (
     profile: BillingProfile,
     order: BillingOrder,
     options?: CallOptions<E>,
-  ): Promise<Result<BillingPayment, BillingApproveError>>;
+  ) => Promise<Result<BillingPayment, BillingApproveError>>;
 
   /**
    * DELETE /v1/billing/{billingKey} + store.delete.
@@ -323,12 +340,16 @@ export type BillingFlow<E extends Env, C extends BillingCapabilities = {}> =
         /**
          * capability로 멱등키가 타입 필수화된 approve — 키 없는 approve 중복 실행 =
          * 이중 과금을 컴파일에 차단한다. 키 지침은 {@link BillingCapabilities.requireApproveIdempotencyKey}.
+         *
+         * 프로퍼티 함수 타입인 이유는 {@link BillingFlowBase.approve} 참조 — 메서드
+         * bivariance로 광의 타입(`BillingFlow<E>`/`BillingFlowBase<E>`)에 대입해 멱등키
+         * 강제를 침묵 우회하는 경로를 contravariant 검사로 차단한다.
          */
-        approve(
+        readonly approve: (
           profile: BillingProfile,
           order: BillingOrder,
           options: CallOptions<E> & { readonly idempotencyKey: IdempotencyKey },
-        ): Promise<Result<BillingPayment, BillingApproveError>>;
+        ) => Promise<Result<BillingPayment, BillingApproveError>>;
       }
     : BillingFlowBase<E>) &
   (C extends { directCardIssue: true }
@@ -540,6 +561,8 @@ export function createBillingFlow<E extends Env, C extends BillingCapabilities =
     const r = await http.request({
       method: 'POST',
       path: `/v1/billing/${encodeURIComponent(billingKey)}`,
+      // 관측 채널(audit/events/onRetry)에는 치환본만 — billingKey 경로 유출 원천 차단
+      auditPath: BILLING_AUDIT_PATH,
       bodyJson: JSON.stringify(body),
       idempotencyKey: callOptions?.idempotencyKey,
       testCode: callOptions?.testCode,
@@ -565,6 +588,8 @@ export function createBillingFlow<E extends Env, C extends BillingCapabilities =
     const r = await http.request({
       method: 'DELETE',
       path: `/v1/billing/${encodeURIComponent(billingKey)}`,
+      // 관측 채널(audit/events/onRetry)에는 치환본만 — billingKey 경로 유출 원천 차단
+      auditPath: BILLING_AUDIT_PATH,
       testCode: callOptions?.testCode,
       signal: callOptions?.signal,
     });

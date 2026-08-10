@@ -1090,6 +1090,7 @@ integration-quick.md에서 requestBillingAuth의 method: "TRANSFER"가 명시적
 ## TossPayments-Test-Code — 빌링 승인 경로에서 동작 확인
 
 - POST /v1/billing/{billingKey}에 TossPayments-Test-Code: REJECT_CARD_PAYMENT 헤더 → 서버가 실제로 REJECT_CARD_PAYMENT 에러를 반환 (무시되지 않음). confirm 외 경로에서도 에러 시뮬레이션 유효.
+- **IDEMPOTENT_REQUEST_PROCESSING(409)도 시뮬 가능** (2026-08-10 실측, v1.1 통합 테스트): Test-Code 헤더 + Idempotency-Key 부착 시 서버가 실제 HTTP 409 + 해당 코드를 반환. 단 Test-Code는 시도마다 부착되므로 재시도 2회째도 동일 409가 재생된다 — retry 옵션 검증에 결정적(deterministic) 재현 수단으로 사용.
 
 ## 통합 테스트 현황
 

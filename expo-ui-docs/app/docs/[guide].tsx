@@ -2,9 +2,11 @@ import type { ReactElement } from 'react';
 import { useLocalSearchParams } from 'expo-router';
 import {
   componentDocsPath,
+  componentText,
   getComponentSeoEntryByReference,
   getGuideSeoEntry,
   guideDocsPath,
+  guideText,
   guideSeoEntries,
   isReleasedComponent,
 } from '../../src/seo-content';
@@ -23,6 +25,8 @@ import {
   SeoParagraph,
   SeoSection,
 } from '../../src/seo-page';
+import { useLocale } from '../../src/locale';
+import { siteStrings } from '../../src/site-strings';
 
 export function generateStaticParams(): readonly { guide: string }[] {
   return guideSeoEntries.map((entry) => ({ guide: entry.slug }));
@@ -32,20 +36,29 @@ export default function GuidePage(): ReactElement {
   const params = useLocalSearchParams<{ guide: string | string[] }>();
   const slug = Array.isArray(params.guide) ? params.guide[0] ?? '' : params.guide;
   const guide = getGuideSeoEntry(slug);
+  const { locale } = useLocale();
+  const t = siteStrings(locale);
 
   if (!guide) {
     return (
       <>
-        <SeoHead title="가이드를 찾을 수 없습니다 | GJ Kit Expo UI" description="요청한 GJ Kit Expo UI 가이드가 없습니다." path={`/docs/${slug}`} noindex />
-        <SeoPageShell breadcrumbs={[{ label: '홈', href: '/' }, { label: '문서', href: '/docs' }, { label: '가이드 없음' }]}>
-          <SeoPageHeading eyebrow="NOT FOUND" title="가이드를 찾을 수 없습니다" description="문서 홈에서 현재 공개된 설치·테마·접근성 가이드를 확인해 주세요." />
+        <SeoHead
+          title={t.guideNotFoundMetaTitle}
+          description={t.guideNotFoundMetaDescription}
+          path={`/docs/${slug}`}
+          locale={locale}
+          noindex
+        />
+        <SeoPageShell breadcrumbs={[{ label: t.home, href: '/' }, { label: t.docs, href: '/docs' }, { label: t.notFoundTitle }]}>
+          <SeoPageHeading eyebrow="NOT FOUND" title={t.notFoundTitle} description={t.notFoundDescription} />
         </SeoPageShell>
       </>
     );
   }
 
   const path = guideDocsPath(guide.slug);
-  const title = `${guide.title} | GJ Kit Expo UI`;
+  const text = guideText(guide, locale);
+  const title = `${text.title} | GJ Kit Expo UI`;
   const related = guide.relatedComponents
     .map((reference) => getComponentSeoEntryByReference(reference))
     .filter((entry) => entry !== undefined);
@@ -54,29 +67,30 @@ export default function GuidePage(): ReactElement {
     <>
       <SeoHead
         title={title}
-        description={guide.description}
+        description={text.description}
         path={path}
         type="article"
+        locale={locale}
         schemas={[
-          webPageSchema({ path, title, description: guide.description }),
-          techArticleSchema({ path, headline: guide.headline, description: guide.description, about: guide.title }),
+          webPageSchema({ path, title, description: text.description, locale }),
+          techArticleSchema({ path, headline: text.headline, description: text.description, about: text.title, locale }),
           breadcrumbSchema([
-            { name: '홈', path: '/' },
-            { name: '문서', path: '/docs' },
-            { name: guide.title, path },
+            { name: t.home, path: '/' },
+            { name: t.docs, path: '/docs' },
+            { name: text.title, path },
           ]),
         ]}
       />
       <SeoPageShell
         breadcrumbs={[
-          { label: '홈', href: '/' },
-          { label: '문서', href: '/docs' },
-          { label: guide.title },
+          { label: t.home, href: '/' },
+          { label: t.docs, href: '/docs' },
+          { label: text.title },
         ]}
       >
-        <SeoPageHeading eyebrow="GUIDE" title={guide.headline} description={guide.summary} />
+        <SeoPageHeading eyebrow="GUIDE" title={text.headline} description={text.summary} />
 
-        {guide.sections.map((section) => (
+        {text.sections.map((section) => (
           <SeoSection key={section.title} title={section.title}>
             <SeoParagraph>{section.body}</SeoParagraph>
             {section.bullets ? <BulletList items={section.bullets} /> : null}
@@ -85,13 +99,13 @@ export default function GuidePage(): ReactElement {
         ))}
 
         {related.length > 0 ? (
-          <SeoSection title="관련 컴포넌트 문서">
+          <SeoSection title={t.sectionRelated}>
             <SeoLinkGrid
               items={related.map((entry) => ({
                 href: componentDocsPath(entry.slug),
                 title: entry.name,
-                description: entry.description,
-                ...(!isReleasedComponent(entry) ? { badge: `v${entry.since} 예정` } : {}),
+                description: componentText(entry, locale).description,
+                ...(!isReleasedComponent(entry) ? { badge: `v${entry.since}` } : {}),
               }))}
             />
           </SeoSection>

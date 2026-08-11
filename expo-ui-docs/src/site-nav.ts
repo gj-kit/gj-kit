@@ -1,4 +1,4 @@
-import { NPM_URL } from './site-theme';
+import { NPM_URL, REPO_URL } from './site-theme';
 
 export type SiteNavLink = {
   readonly label: string;
@@ -16,5 +16,6 @@ export const SITE_NAV_LINKS: readonly SiteNavLink[] = [
   { label: 'Docs', href: '/docs' },
   { label: 'Components', href: '/docs/components' },
   { label: 'Getting started', href: '/docs/getting-started' },
+  { label: 'GitHub ↗', href: REPO_URL },
   { label: 'npm ↗', href: NPM_URL, emphasis: true },
 ];

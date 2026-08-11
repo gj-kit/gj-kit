@@ -6,10 +6,15 @@ import type { IconRenderProps, UiIcons } from '@gj-kit/expo-ui';
 
 export const SITE_URL = 'https://gj-kit-expo-ui.expo.app';
 export const NPM_URL = 'https://www.npmjs.com/package/@gj-kit/expo-ui';
-export const LICENSE_URL = 'https://opensource.org/license/mit';
+export const REPO_URL = 'https://github.com/gj-kit/gj-kit';
+export const ISSUES_URL = 'https://github.com/gj-kit/gj-kit/issues';
+export const CHANGELOG_URL = 'https://github.com/gj-kit/gj-kit/blob/main/expo-ui/CHANGELOG.md';
+export const LICENSE_URL = 'https://github.com/gj-kit/gj-kit/blob/main/expo-ui/LICENSE';
 export const INSTALL_COMMAND = 'pnpm add @gj-kit/expo-ui';
+// Pretendard는 어디서도 로드하지 않아 항상 시스템 폰트로 폴백됐다. 실제로
+// 렌더되는 것만 남겨 코드와 화면을 일치시킨다.
 export const FONT_FAMILY =
-  'Pretendard, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
+  '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Noto Sans KR", "Apple SD Gothic Neo", sans-serif';
 export const MONO_FAMILY =
   '"SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace';
 

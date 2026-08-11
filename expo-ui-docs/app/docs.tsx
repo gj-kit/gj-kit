@@ -19,6 +19,7 @@ import {
   Toast,
   UiProvider,
   createThemes,
+  enStrings,
   koStrings,
   useTheme,
   useToastController,
@@ -36,6 +37,10 @@ import { useHydratedWindowWidth } from '../src/responsive';
 import { LinkPressable } from '../src/site-link';
 import { SITE_NAV_LINKS } from '../src/site-nav';
 import { NPM_URL } from '../src/site-theme';
+import { useLocale } from '../src/locale';
+import { docsHubStrings } from '../src/docs-hub-strings';
+import type { DocsHubStrings } from '../src/docs-hub-strings';
+import { siteStrings } from '../src/site-strings';
 import { useDocumentChrome, useSiteColorScheme } from '../src/use-site-color-scheme';
 
 const docsThemes = createThemes({
@@ -106,26 +111,28 @@ const SOURCE_COMPONENT_COUNT = componentSeoEntries.length;
 const RELEASED_COMPONENT_COUNT = componentSeoEntries.filter(isReleasedComponent).length;
 const PREVIEW_COMPONENT_COUNT = SOURCE_COMPONENT_COUNT - RELEASED_COMPONENT_COUNT;
 
-const NAV_ITEMS: ReadonlyArray<{ id: SectionId; label: string; meta?: string }> = [
-  { id: 'start', label: '시작하기' },
-  { id: 'theme', label: 'Theme & Provider' },
-  { id: 'components', label: 'Components', meta: String(SOURCE_COMPONENT_COUNT) },
-  { id: 'insets', label: 'Insets & Keyboard' },
-  { id: 'tailwind', label: 'Tailwind' },
-  { id: 'contracts', label: 'Type contracts' },
-];
+function navItems(
+  t: DocsHubStrings,
+): ReadonlyArray<{ id: SectionId; label: string; meta?: string }> {
+  return [
+    { id: 'start', label: t.navStart },
+    { id: 'theme', label: t.navTheme },
+    { id: 'components', label: t.navComponents, meta: String(SOURCE_COMPONENT_COUNT) },
+    { id: 'insets', label: t.navInsets },
+    { id: 'tailwind', label: t.navTailwind },
+    { id: 'contracts', label: t.navContracts },
+  ];
+}
 
 const COMPONENT_GROUPS = [
   {
     title: 'Foundation',
-    description: '의미 기반 서체와 색 역할로 화면의 목소리를 맞춥니다.',
     items: [
       { name: 'Text', detail: '7 typography roles · token color' },
     ],
   },
   {
     title: 'Actions',
-    description: '의도를 드러내는 6개 variant와 명시적인 접근성 계약.',
     items: [
       { name: 'Button', detail: '6 variants · 3 sizes · loading' },
       { name: 'IconButton', detail: 'required accessibilityLabel' },
@@ -135,7 +142,6 @@ const COMPONENT_GROUPS = [
   },
   {
     title: 'Inputs & Navigation',
-    description: '입력 상태와 현재 위치를 일관된 토큰으로 표현합니다.',
     items: [
       { name: 'TextField', detail: 'label · helper · error · counter' },
       { name: 'SearchField', detail: 'localized placeholder · icon slot' },
@@ -148,7 +154,6 @@ const COMPONENT_GROUPS = [
   },
   {
     title: 'Selection',
-    description: '선택 마크부터 전체 선택 행까지 조합 가능한 프리미티브.',
     items: [
       { name: 'SelectionIndicator', detail: '16 · 18 · 20 · 24 sizes' },
       { name: 'SelectableRow', detail: 'selected and disabled states' },
@@ -158,7 +163,6 @@ const COMPONENT_GROUPS = [
   },
   {
     title: 'Controls',
-    description: '의미론과 키보드 동작까지 갖춘 controlled form primitives.',
     items: [
       { name: 'Checkbox', detail: 'boolean · mixed · Space activation' },
       { name: 'Switch', detail: 'native behavior · required label' },
@@ -169,7 +173,6 @@ const COMPONENT_GROUPS = [
   },
   {
     title: 'Layout',
-    description: '페이지 폭, 섹션, 표면과 하단 액션을 위한 기본 구조.',
     items: [
       { name: 'Surface', detail: 'padding · radius · elevation tokens' },
       { name: 'ContentFrame', detail: 'constrained content width' },
@@ -181,7 +184,6 @@ const COMPONENT_GROUPS = [
   },
   {
     title: 'Feedback',
-    description: '로딩, 비어 있음, 오류와 짧은 알림까지 같은 언어로.',
     items: [
       { name: 'Skeleton', detail: 'animated pulse · a11y label' },
       { name: 'EmptyState', detail: 'paired action contract' },
@@ -192,7 +194,6 @@ const COMPONENT_GROUPS = [
   },
   {
     title: 'Status & Progress',
-    description: '지속형 상태 메시지와 결정·불확정 진행률을 정확히 전달합니다.',
     items: [
       { name: 'Badge', detail: '5 semantic variants · 2 sizes' },
       { name: 'Alert', detail: 'action · dismiss · live-region opt-in' },
@@ -202,7 +203,6 @@ const COMPONENT_GROUPS = [
   },
   {
     title: 'Display & Disclosure',
-    description: '정체성, 구분선, 목록 행과 펼침 구조를 조합합니다.',
     items: [
       { name: 'Avatar', detail: 'alt/decorative union · initials fallback' },
       { name: 'Divider', detail: 'horizontal · vertical · semantic opt-in' },
@@ -212,14 +212,12 @@ const COMPONENT_GROUPS = [
   },
   {
     title: 'Data',
-    description: '행·열 데이터의 의미, 정렬 요청과 선택 상태를 플랫폼에 맞게 표현합니다.',
     items: [
       { name: 'DataTable', detail: 'semantic web table · native adaptive list' },
     ],
   },
   {
     title: 'Overlay',
-    description: '명명·포커스·dismiss 이유와 플랫폼별 의미를 갖춘 overlay.',
     items: [
       { name: 'Dialog', detail: 'named modal · dismiss reasons · focus refs' },
       { name: 'DialogPanel', detail: 'title · description · explicit close' },
@@ -233,115 +231,7 @@ const COMPONENT_GROUPS = [
   },
 ] as const;
 
-const THEME_CODE = `// src/theme.ts
-import { createThemes } from '@gj-kit/expo-ui/theme';
-
-export const themes = createThemes({
-  shared: { radius: { sm: 10 } },
-  light: {
-    colors: {
-      primary: '#1769C2',
-      primaryStrong: '#0E5CAD',
-    },
-  },
-  dark: {
-    colors: { primary: '#5C9EEA', primaryStrong: '#6BAAF0' },
-  },
-});`;
-
-const PROVIDER_CODE = `import { UiProvider, koStrings } from '@gj-kit/expo-ui';
-import { themes } from '../src/theme';
-
-export default function RootLayout() {
-  return (
-    <UiProvider theme={themes} strings={koStrings}>
-      {/* Menu·Select·Popover·Tooltip·Sheet의 overlay 환경도 자동으로 제공됩니다. */}
-    </UiProvider>
-  );
-}`;
-
-const QUICK_START_CODE = `import { Button } from '@gj-kit/expo-ui';
-
-export function SaveButton() {
-  return (
-    <Button
-      label="저장"
-      onPress={() => console.log('saved')}
-    />
-  );
-}`;
-
-const COMPONENTS_V04_CODE = `import { useState } from 'react';
-import { Select, Slider, ToggleGroup } from '@gj-kit/expo-ui';
-
-const densityItems = [
-  { label: '여유', value: 'spacious' },
-  { label: '기본', value: 'comfortable' },
-  { label: '압축', value: 'compact' },
-] as const;
-
-const channelItems = [
-  { label: 'Stable', value: 'stable' },
-  { label: 'Preview', value: 'preview' },
-] as const;
-
-export function ReadingControls() {
-  const [fontSize, setFontSize] = useState(16);
-  const [density, setDensity] = useState<'spacious' | 'comfortable' | 'compact'>('comfortable');
-  const [channel, setChannel] = useState<'stable' | 'preview' | null>('stable');
-  const [selectOpen, setSelectOpen] = useState(false);
-
-  return (
-    <>
-      <Slider
-        value={fontSize}
-        min={12}
-        max={24}
-        step={1}
-        accessibilityLabel="본문 글자 크기"
-        onValueChange={setFontSize}
-      />
-      <ToggleGroup
-        selectionMode="single"
-        value={density}
-        onValueChange={(next) => next && setDensity(next)}
-        accessibilityLabel="목록 밀도"
-        items={densityItems}
-        allowEmpty={false}
-      />
-      <Select
-        label="릴리스 채널"
-        placeholder="채널 선택"
-        items={channelItems}
-        value={channel}
-        onValueChange={setChannel}
-        open={selectOpen}
-        onOpenChange={(next) => setSelectOpen(next)}
-      />
-    </>
-  );
-}`;
-
-const INSETS_CODE = `import { Button, StickyActionBar } from '@gj-kit/expo-ui';
-import { useBottomInset } from '@gj-kit/expo-ui/insets';
-
-export function BottomBar() {
-  return (
-    <StickyActionBar bottomInset={useBottomInset()}>
-      <Button label="완료" onPress={() => {}} />
-    </StickyActionBar>
-  );
-}`;
-
-const KEYBOARD_CODE = `import {
-  computeKeyboardRevealOffset,
-  useBottomSheetPadding,
-  useModalKeyboardOverlap,
-} from '@gj-kit/expo-ui/insets';
-
-const keyboardOverlap = useModalKeyboardOverlap();
-const bottomPadding = useBottomSheetPadding(24);`;
-
+// 주석까지 전부 코드 토큰이라 로케일과 무관하다.
 const TAILWIND_CODE = `import { createTailwindPreset } from '@gj-kit/expo-ui/tailwind';
 import { themes } from './src/theme';
 
@@ -351,49 +241,38 @@ export const preset = createTailwindPreset(themes.light);
 // bg-ui-primary · p-ui-lg · rounded-ui-pill
 // text-ui-title · shadow-ui-sm · tablet: / desktop:`;
 
-const CONTRACT_CODE = `// TypeScript error: 접근성 라벨 누락
-<IconButton icon={gear} onPress={openSettings} />;
-
-// OK
-<IconButton
-  accessibilityLabel="설정 열기"
-  icon={gear}
-  onPress={openSettings}
-/>;
-
-// TypeScript error: 동작 없는 액션
-<EmptyState action={{ label: '추가' }} />;
-
-// OK
-<EmptyState action={{ label: '추가', onPress: create }} />;`;
-
 export default function DocsPage() {
   const { colorScheme, setColorScheme } = useSiteColorScheme();
+  const { locale } = useLocale();
+  const t = docsHubStrings(locale);
+  const nav = siteStrings(locale);
   useDocumentChrome(docsThemes[colorScheme].colors.background);
 
   return (
     <>
       <SeoHead
-        title="@gj-kit/expo-ui 문서 | 설치, 테마, 컴포넌트 API"
-        description="설치부터 createThemes, UiProvider, Expo·React Native 컴포넌트, safe-area·키보드와 Tailwind preset까지 실제 TypeScript 예제로 확인하세요."
+        title={t.metaTitle}
+        description={t.metaDescription}
         path="/docs"
+        locale={locale}
         schemas={[
           webPageSchema({
             path: '/docs',
-            title: '@gj-kit/expo-ui 문서',
-            description: '설치, 테마, 컴포넌트 API와 플랫폼 유틸 문서',
+            title: t.schemaTitle,
+            description: t.schemaDescription,
             type: 'CollectionPage',
+            locale,
           }),
           breadcrumbSchema([
-            { name: '홈', path: '/' },
-            { name: '문서', path: '/docs' },
+            { name: nav.home, path: '/' },
+            { name: nav.docs, path: '/docs' },
           ]),
         ]}
       />
       <UiProvider
         theme={docsThemes}
         colorScheme={colorScheme}
-        strings={koStrings}
+        strings={locale === 'ko' ? koStrings : enStrings}
         icons={docsIcons}
       >
         <DocsLayout colorScheme={colorScheme} onColorSchemeChange={setColorScheme} />
@@ -410,6 +289,7 @@ function DocsLayout({
   onColorSchemeChange: (scheme: ColorScheme) => void;
 }) {
   const theme = useTheme();
+  const t = docsHubStrings(useLocale().locale);
   const width = useHydratedWindowWidth();
   const desktop = width >= 980;
   const wide = width >= 720;
@@ -446,17 +326,17 @@ function DocsLayout({
     ).navigator?.clipboard;
 
     if (!clipboard) {
-      showToast({ message: '코드를 선택해 직접 복사해 주세요.', variant: 'warning' });
+      showToast({ message: t.copyUnavailable, variant: 'warning' });
       return;
     }
 
     try {
       await clipboard.writeText(value);
-      showToast({ message: '클립보드에 복사했습니다.', variant: 'success' });
+      showToast({ message: t.copySuccess, variant: 'success' });
     } catch {
-      showToast({ message: '복사하지 못했습니다. 코드를 직접 선택해 주세요.', variant: 'warning' });
+      showToast({ message: t.copyFailed, variant: 'warning' });
     }
-  }, [showToast]);
+  }, [showToast, t]);
 
   const toggleTheme = () => {
     onColorSchemeChange(colorScheme === 'light' ? 'dark' : 'light');
@@ -490,46 +370,45 @@ function DocsLayout({
                 <Hero wide={wide} onCopy={() => copyCode('pnpm add @gj-kit/expo-ui')} />
 
                 <DocSection
-                  eyebrow="01 · QUICK START"
-                  title="설치는 한 줄, 첫 컴포넌트는 몇 줄이면 충분합니다."
-                  description="기본 light theme와 영문 문구가 내장되어 있어 일반 컴포넌트와 단일 Sheet·Dialog는 Provider 없이도 시작할 수 있습니다. 앱 브랜드·한국어 문구, Menu·Select·Popover·Tooltip 또는 중첩 Sheet·Dialog 순서가 필요하면 루트 UiProvider를 두세요."
+                  eyebrow={t.quickStartEyebrow}
+                  title={t.quickStartTitle}
+                  description={t.quickStartDescription}
                 >
                   <CodeBlock
-                    label="Terminal"
+                    label={t.quickStartTerminalLabel}
                     code="pnpm add @gj-kit/expo-ui"
                     onCopy={copyCode}
                   />
                   <CodeBlock
                     label="SaveButton.tsx"
-                    code={QUICK_START_CODE}
+                    code={t.quickStartCode}
                     onCopy={copyCode}
                   />
-                  <Callout tone="info" title="지원 기준">
-                    React 18 이상 · React Native 0.79 이상 · Node.js 20 이상을 peer 및
-                    engine 기준으로 지원합니다. Expo 전용 native module은 없습니다.
+                  <Callout tone="info" title={t.quickStartCalloutTitle}>
+                    {t.quickStartCalloutBody}
                   </Callout>
                 </DocSection>
               </View>
 
               <View nativeID="theme" onLayout={(event) => rememberSection('theme', event)}>
                 <DocSection
-                  eyebrow="02 · FOUNDATION"
-                  title="Theme과 Provider가 하나의 설계 언어를 만듭니다."
-                  description="createThemes는 shared 오버라이드 뒤에 light와 dark 오버라이드를 적용해 완성된 ThemePair를 만듭니다. 루트 UiProvider는 스킴·문구·아이콘과 Menu·Select·Popover·Tooltip·Sheet의 overlay 환경을 함께 제공하고, 중첩 Provider는 바깥 stack과 tooltip coordinator를 재사용합니다."
+                  eyebrow={t.foundationEyebrow}
+                  title={t.foundationTitle}
+                  description={t.foundationDescription}
                 >
                   <StatGrid wide={wide} />
-                  <CodeBlock label="src/theme.ts" code={THEME_CODE} onCopy={copyCode} />
-                  <CodeBlock label="app/_layout.tsx" code={PROVIDER_CODE} onCopy={copyCode} />
+                  <CodeBlock label="src/theme.ts" code={t.themeCode} onCopy={copyCode} />
+                  <CodeBlock label="app/_layout.tsx" code={t.providerCode} onCopy={copyCode} />
                   <View style={[styles.twoColumn, wide ? styles.twoColumnWide : null]}>
                     <InfoCard
                       icon="◐"
-                      title="Light와 dark를 함께"
-                      body="ThemePair는 두 스킴을 항상 완성된 상태로 제공합니다. 단일 Theme을 넘기면 해당 스킴으로 고정됩니다."
+                      title={t.foundationCardOne.title}
+                      body={t.foundationCardOne.body}
                     />
                     <InfoCard
                       icon="Aa"
-                      title="문구와 아이콘은 앱 소유"
-                      body="koStrings·enStrings와 RenderIcon 슬롯을 Provider 한 곳에서 주입합니다. UiProvider가 없는 독립 overlay tree에서만 OverlayProvider를 직접 둡니다."
+                      title={t.foundationCardTwo.title}
+                      body={t.foundationCardTwo.body}
                     />
                   </View>
                 </DocSection>
@@ -537,17 +416,17 @@ function DocsLayout({
 
               <View nativeID="components" onLayout={(event) => rememberSection('components', event)}>
                 <DocSection
-                  eyebrow="03 · COMPONENTS"
-                  title={`${SOURCE_COMPONENT_COUNT}개의 작은 조각, 일관된 하나의 시스템.`}
-                  description="컴포넌트는 앱 구조를 대신 소유하지 않습니다. 토큰과 명확한 prop 계약을 제공하고, 화면 흐름과 도메인 조립은 앱에 남겨 둡니다."
+                  eyebrow={t.componentsEyebrow}
+                  title={t.componentsTitle(SOURCE_COMPONENT_COUNT)}
+                  description={t.componentsDescription}
                 >
                   <View style={styles.componentCountRow}>
                     <View style={[styles.countPill, { backgroundColor: theme.colors.primarySoft }]}>
                       <RNText style={[styles.countPillNumber, { color: theme.colors.primary }]}>{SOURCE_COMPONENT_COUNT}</RNText>
-                      <RNText style={[styles.countPillLabel, { color: theme.colors.textMuted }]}>source components</RNText>
+                      <RNText style={[styles.countPillLabel, { color: theme.colors.textMuted }]}>{t.componentsCountLabel}</RNText>
                     </View>
                     <Text role="caption" color="textMuted" style={styles.componentCountCopy}>
-                      아래 목록은 현재 루트 엔트리에서 실제 export되는 시각 컴포넌트 전체입니다.
+                      {t.componentsCountCopy}
                     </Text>
                   </View>
 
@@ -559,85 +438,69 @@ function DocsLayout({
 
                   <CodeBlock
                     label="ReadingControls.tsx"
-                    code={COMPONENTS_V04_CODE}
+                    code={t.componentsCode}
                     onCopy={copyCode}
                   />
 
-                  <Callout tone="neutral" title="플랫폼에 맞는 overlay 의미">
-                    Menu는 웹에서 menuitem·checkbox focus와 typeahead를, Select는 포커스를
-                    trigger에 유지하는 combobox·listbox를 제공합니다. Popover는 owned trigger에서
-                    웹 non-modal rich dialog와 네이티브 adaptive Dialog로, Tooltip은 owned icon action에서
-                    웹 시각 설명과 네이티브 accessibilityHint로 적응합니다. Sheet는 작은 화면의 bottom
-                    surface와 넓은 화면의 logical side panel을 같은 controlled 계약으로 연결합니다. public
-                    Portal·Host·asChild, submenu, 검색·다중 Select와 drag·snap BottomSheet adapter는
-                    아직 계약하지 않습니다.
+                  <Callout tone="neutral" title={t.componentsCalloutTitle}>
+                    {t.componentsCalloutBody}
                   </Callout>
                 </DocSection>
               </View>
 
               <View nativeID="insets" onLayout={(event) => rememberSection('insets', event)}>
                 <DocSection
-                  eyebrow="04 · DEVICE EDGES"
-                  title="Safe area와 키보드도 조합 가능한 유틸로."
-                  description="/insets 엔트리는 하단 safe-area와 Android edge-to-edge Modal의 키보드 겹침을 다룹니다. 훅을 사용할 때만 react-native-safe-area-context가 optional peer로 필요합니다."
+                  eyebrow={t.insetsEyebrow}
+                  title={t.insetsTitle}
+                  description={t.insetsDescription}
                 >
                   <CodeBlock
-                    label="Optional peer for Expo"
+                    label={t.insetsPeerLabel}
                     code="npx expo install react-native-safe-area-context"
                     onCopy={copyCode}
                   />
-                  <CodeBlock label="BottomBar.tsx" code={INSETS_CODE} onCopy={copyCode} />
-                  <CodeBlock label="Keyboard utilities" code={KEYBOARD_CODE} onCopy={copyCode} />
-                  <ApiList
-                    items={[
-                      ['useBottomInset', '웹에서는 0, native에서는 실측 하단 inset을 반환합니다.'],
-                      ['useBottomSheetPadding', '디자인 여백과 실제 inset을 더합니다.'],
-                      ['useModalKeyboardOverlap', '별도 Modal 윈도우의 실제 키보드 가림 높이를 계산합니다.'],
-                      ['computeKeyboardRevealOffset', '포커스 입력의 아래쪽을 드러낼 스크롤 위치를 계산합니다.'],
-                      ['nativeBottomInset / Padding', 'React 훅 없이 사용할 수 있는 순수 계산 함수입니다.'],
-                    ]}
-                  />
+                  <CodeBlock label="BottomBar.tsx" code={t.insetsCode} onCopy={copyCode} />
+                  <CodeBlock label={t.insetsKeyboardLabel} code={t.keyboardCode} onCopy={copyCode} />
+                  <ApiList items={t.insetsApi} />
                 </DocSection>
               </View>
 
               <View nativeID="tailwind" onLayout={(event) => rememberSection('tailwind', event)}>
                 <DocSection
-                  eyebrow="05 · NATIVEWIND"
-                  title="Tailwind는 선택하고, 토큰은 공유하세요."
-                  description="스타일링 가능한 프리미티브는 style과 className 확장 지점을 제공하며 NativeWind 자체에는 의존하지 않습니다. /tailwind 엔트리는 Theme에서 preset을 만들어 런타임 테마와 클래스 토큰의 출처를 맞춥니다."
+                  eyebrow={t.tailwindEyebrow}
+                  title={t.tailwindTitle}
+                  description={t.tailwindDescription}
                 >
                   <CodeBlock label="tailwind.preset.ts" code={TAILWIND_CODE} onCopy={copyCode} />
                   <View style={[styles.twoColumn, wide ? styles.twoColumnWide : null]}>
                     <InfoCard
                       icon="⌘"
-                      title="Node 컨텍스트에서 안전"
-                      body="/theme과 /tailwind 엔트리는 React와 React Native를 import하지 않아 설정 파일에서 바로 불러올 수 있습니다."
+                      title={t.tailwindCardOne.title}
+                      body={t.tailwindCardOne.body}
                     />
                     <InfoCard
                       icon="ui"
-                      title="기본 prefix는 ui"
-                      body="색, spacing, radius, 6개 일반 typography role, elevation과 breakpoint가 유틸리티로 파생됩니다."
+                      title={t.tailwindCardTwo.title}
+                      body={t.tailwindCardTwo.body}
                     />
                   </View>
-                  <Callout tone="warning" title="다크 클래스의 정본">
-                    preset은 전달한 단일 Theme에서 만들어집니다. 런타임 스킴 전환은 useTheme이
-                    담당하고, className의 dark: 전환은 NativeWind 설정에서 앱이 관리합니다.
+                  <Callout tone="warning" title={t.tailwindCalloutTitle}>
+                    {t.tailwindCalloutBody}
                   </Callout>
                 </DocSection>
               </View>
 
               <View nativeID="contracts" onLayout={(event) => rememberSection('contracts', event)}>
                 <DocSection
-                  eyebrow="06 · TYPE-SAFE BY DESIGN"
-                  title="동작하지 않는 UI를 만들기 어렵게."
-                  description="접근성 라벨 누락, 내용 없는 버튼, 오타 난 토큰 키, 핸들러 없는 액션을 런타임까지 보내지 않습니다. 공개 타입 테스트가 정상 사용과 잘못된 사용을 함께 고정합니다."
+                  eyebrow={t.contractsEyebrow}
+                  title={t.contractsTitle}
+                  description={t.contractsDescription}
                 >
                   <ProofStrip wide={wide} />
-                  <CodeBlock label="Contracts.tsx" code={CONTRACT_CODE} onCopy={copyCode} />
+                  <CodeBlock label="Contracts.tsx" code={t.contractsCode} onCopy={copyCode} />
                   <ContractGrid wide={wide} />
-                  <Callout tone="success" title="현재 소스에서 직접 검증했습니다">
-                    unit 테스트 534개와 type-contract 테스트 91개, 총 625개가 통과하며 README의
-                    TypeScript/TSX 예제도 배포 타입 선언을 기준으로 컴파일됩니다.
+                  <Callout tone="success" title={t.contractsCalloutTitle}>
+                    {t.contractsCalloutBody}
                   </Callout>
                 </DocSection>
               </View>
@@ -665,6 +528,9 @@ function TopBar({
   onToggleTheme: () => void;
 }) {
   const theme = useTheme();
+  const { locale, toggleLocale } = useLocale();
+  const t = docsHubStrings(locale);
+  const nav = siteStrings(locale);
 
   return (
     <View
@@ -677,14 +543,14 @@ function TopBar({
       ]}
     >
       <View style={styles.topBarInner}>
-        <LinkPressable href="/" accessibilityLabel="홈으로 이동" style={styles.brandLink}>
+        <LinkPressable href="/" accessibilityLabel={t.homeLabel} style={styles.brandLink}>
           <View style={[styles.brandMark, { backgroundColor: theme.colors.primary }]}>
             <RNText style={[styles.brandMarkText, { color: theme.colors.onPrimary }]}>g</RNText>
           </View>
           <View>
             <RNText style={[styles.brandName, { color: theme.colors.text }]}>@gj-kit/expo-ui</RNText>
             {!compact ? (
-              <RNText style={[styles.brandMeta, { color: theme.colors.textMuted }]}>Documentation</RNText>
+              <RNText style={[styles.brandMeta, { color: theme.colors.textMuted }]}>{t.brandMeta}</RNText>
             ) : null}
           </View>
         </LinkPressable>
@@ -703,7 +569,24 @@ function TopBar({
             : null}
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel={colorScheme === 'light' ? '다크 모드로 전환' : '라이트 모드로 전환'}
+            accessibilityLabel={locale === 'en' ? nav.toKorean : nav.toEnglish}
+            onPress={toggleLocale}
+            style={({ pressed }) => [
+              styles.themeButton,
+              {
+                backgroundColor: theme.colors.primarySoft,
+                borderColor: theme.colors.line,
+              },
+              pressed ? styles.pressed : null,
+            ]}
+          >
+            <RNText style={[styles.localeButtonText, { color: theme.colors.primary }]}>
+              {locale === 'en' ? '한' : 'EN'}
+            </RNText>
+          </Pressable>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={colorScheme === 'light' ? nav.toDark : nav.toLight}
             onPress={onToggleTheme}
             style={({ pressed }) => [
               styles.themeButton,
@@ -737,6 +620,7 @@ function MobileNav({
   onSelect: (id: SectionId) => void;
 }) {
   const theme = useTheme();
+  const t = docsHubStrings(useLocale().locale);
   return (
     <View
       style={[
@@ -749,7 +633,7 @@ function MobileNav({
         showsHorizontalScrollIndicator={false}
         contentContainerStyle={styles.mobileNavContent}
       >
-        {NAV_ITEMS.map((item) => {
+        {navItems(t).map((item) => {
           const active = item.id === activeSection;
           return (
             <LinkPressable
@@ -786,12 +670,13 @@ function Sidebar({
   onSelect: (id: SectionId) => void;
 }) {
   const theme = useTheme();
+  const t = docsHubStrings(useLocale().locale);
   return (
     <View style={styles.sidebarWrap}>
       <View style={styles.sidebarSticky}>
-        <RNText style={[styles.sidebarEyebrow, { color: theme.colors.textSubtle }]}>DOCUMENTATION</RNText>
+        <RNText style={[styles.sidebarEyebrow, { color: theme.colors.textSubtle }]}>{t.sidebarEyebrow}</RNText>
         <View style={styles.sidebarNav}>
-          {NAV_ITEMS.map((item, index) => {
+          {navItems(t).map((item, index) => {
             const active = item.id === activeSection;
             return (
               <LinkPressable
@@ -833,10 +718,10 @@ function Sidebar({
         <Surface padding="lg" style={styles.sidebarCard}>
           <Text role="label">npm v{publishedPackageVersion}</Text>
           <Text role="caption" color="textMuted" style={styles.sidebarCardCopy}>
-            {RELEASED_COMPONENT_COUNT} stable · {PREVIEW_COMPONENT_COUNT} preview{`\n`}ESM + CJS · MIT
+            {t.sidebarMeta(RELEASED_COMPONENT_COUNT, PREVIEW_COMPONENT_COUNT)}
           </Text>
           <LinkPressable href={NPM_URL} style={styles.sidebarNpmLink}>
-            <RNText style={[styles.sidebarNpmText, { color: theme.colors.primary }]}>npm에서 보기 ↗</RNText>
+            <RNText style={[styles.sidebarNpmText, { color: theme.colors.primary }]}>{t.sidebarNpmLink}</RNText>
           </LinkPressable>
         </Surface>
       </View>
@@ -846,6 +731,7 @@ function Sidebar({
 
 function Hero({ wide, onCopy }: { wide: boolean; onCopy: () => void }) {
   const theme = useTheme();
+  const t = docsHubStrings(useLocale().locale);
   return (
     <View
       style={[
@@ -865,9 +751,9 @@ function Hero({ wide, onCopy }: { wide: boolean; onCopy: () => void }) {
       <View style={styles.heroContent}>
         <View style={styles.heroBadgeRow}>
           <View style={[styles.heroBadge, { backgroundColor: theme.colors.primarySoft }]}>
-            <RNText style={[styles.heroBadgeText, { color: theme.colors.primary }]}>DOCS · npm v{publishedPackageVersion} · {SOURCE_COMPONENT_COUNT} source components</RNText>
+            <RNText style={[styles.heroBadgeText, { color: theme.colors.primary }]}>{t.heroBadge(publishedPackageVersion, SOURCE_COMPONENT_COUNT)}</RNText>
           </View>
-          <RNText style={[styles.heroLicense, { color: theme.colors.textMuted }]}>MIT · React Native</RNText>
+          <RNText style={[styles.heroLicense, { color: theme.colors.textMuted }]}>{t.heroLicense}</RNText>
         </View>
         <Text
           role="heading"
@@ -875,18 +761,17 @@ function Hero({ wide, onCopy }: { wide: boolean; onCopy: () => void }) {
           aria-level={1}
           style={[styles.heroTitle, !wide ? styles.heroTitleMobile : null]}
         >
-          Expo UI 컴포넌트,{`\n`}빠르게 시작하고 안전하게 확장하세요.
+          {t.heroTitleTop}{`\n`}{t.heroTitleBottom}
         </Text>
         <Text role="body" color="textMuted" style={styles.heroCopy}>
-          npm v{publishedPackageVersion}에 공개된 {RELEASED_COMPONENT_COUNT}개와 v0.4 소스 미리보기 {PREVIEW_COMPONENT_COUNT}개를 함께 문서화합니다.
-          미공개 상세 페이지는 검색에서 제외하며, 토큰 기반 light·dark 테마와 device edge 유틸을 같은 타입 안전 API로 제공합니다.
+          {t.heroCopy(publishedPackageVersion, RELEASED_COMPONENT_COUNT, PREVIEW_COMPONENT_COUNT)}
         </Text>
         <View style={styles.heroActions}>
-          <Button label="설치 명령 복사" size="lg" onPress={onCopy} />
+          <Button label={t.heroCopyCommand} size="lg" onPress={onCopy} />
           {[
-            { href: '/docs/components', label: `컴포넌트 ${SOURCE_COMPONENT_COUNT}종` },
-            { href: '/docs/getting-started', label: '시작 가이드' },
-            { href: NPM_URL, label: 'npm 패키지 ↗' },
+            { href: '/docs/components', label: t.heroComponentsLink(SOURCE_COMPONENT_COUNT) },
+            { href: '/docs/getting-started', label: t.heroGuideLink },
+            { href: NPM_URL, label: t.heroNpmLink },
           ].map((action) => (
             <LinkPressable
               key={action.href}
@@ -935,6 +820,7 @@ function CodeBlock({
   code: string;
   onCopy: (value: string) => void;
 }) {
+  const t = docsHubStrings(useLocale().locale);
   return (
     <View style={styles.codeBlock}>
       <View style={styles.codeHeader}>
@@ -946,11 +832,11 @@ function CodeBlock({
         <RNText style={styles.codeLabel}>{label}</RNText>
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel={`${label} 코드 복사`}
+          accessibilityLabel={t.copyCodeLabel(label)}
           onPress={() => onCopy(code)}
           style={({ pressed }) => [styles.copyButton, pressed ? styles.copyButtonPressed : null]}
         >
-          <RNText style={styles.copyButtonText}>복사</RNText>
+          <RNText style={styles.copyButtonText}>{t.copyButton}</RNText>
         </Pressable>
       </View>
       <ScrollView horizontal showsHorizontalScrollIndicator={false}>
@@ -961,12 +847,7 @@ function CodeBlock({
 }
 
 function StatGrid({ wide }: { wide: boolean }) {
-  const stats = [
-    ['31', 'semantic color roles'],
-    ['7', 'typography roles'],
-    ['2', 'built-in schemes'],
-    ['0', 'direct dependencies'],
-  ] as const;
+  const stats = docsHubStrings(useLocale().locale).foundationStats;
   return (
     <View style={styles.statGrid}>
       {stats.map(([value, label]) => (
@@ -1007,11 +888,12 @@ function ComponentGroupCard({
   wide: boolean;
 }) {
   const theme = useTheme();
+  const t = docsHubStrings(useLocale().locale);
   return (
     <Surface padding="xl" style={[styles.componentCard, wide ? styles.componentCardWide : null]}>
       <RNText style={[styles.componentGroupTitle, { color: theme.colors.primary }]}>{group.title}</RNText>
       <Text role="caption" color="textMuted" style={styles.componentGroupDescription}>
-        {group.description}
+        {t.componentGroupDescriptions[group.title]}
       </Text>
       <View style={styles.componentItems}>
         {group.items.map((item) => {
@@ -1061,11 +943,11 @@ function ApiList({ items }: { items: ReadonlyArray<readonly [string, string]> })
 
 function ProofStrip({ wide }: { wide: boolean }) {
   const theme = useTheme();
+  const t = docsHubStrings(useLocale().locale);
   const items = [
-    ['534', 'unit tests'],
-    ['91', 'type tests'],
-    [String(SOURCE_COMPONENT_COUNT), 'source components'],
-  ] as const;
+    ...t.contractsProof,
+    [String(SOURCE_COMPONENT_COUNT), t.componentsCountLabel] as const,
+  ];
   return (
     <View
       style={[
@@ -1086,20 +968,7 @@ function ProofStrip({ wide }: { wide: boolean }) {
 
 function ContractGrid({ wide }: { wide: boolean }) {
   const theme = useTheme();
-  const contracts = [
-    ['Theme brand', 'createTheme/createThemes를 거치지 않은 손조립 테마를 거부합니다.'],
-    ['Accessible icon', 'IconButton의 accessibilityLabel은 필수입니다.'],
-    ['Button content', 'label과 children이 모두 없는 Button은 컴파일되지 않습니다.'],
-    ['Typed tabs', 'items에 없는 Tabs value 오타를 NoInfer로 차단합니다.'],
-    ['Complete strings', '부분 번들 대신 완성된 UiStrings를 요구합니다.'],
-    ['Token keys', '존재하지 않는 spacing·color 키를 사용 지점에서 거부합니다.'],
-    ['No legacy escape', '이관 중 남은 unstyled prop은 스프레드 경유까지 거부합니다.'],
-    ['Explicit field style', 'TextField는 containerStyle과 inputStyle을 구분합니다.'],
-    ['Live actions only', 'EmptyState action은 label과 onPress를 함께 요구합니다.'],
-    ['Semantic text color', 'Text color는 토큰 키만 받고 raw 색은 명시적인 style로만 허용합니다.'],
-    ['Labeled controls', 'Checkbox와 Switch는 보이는 label 또는 accessibilityLabel을 요구합니다.'],
-    ['Progress modes', 'ProgressBar는 number와 null 상태를 분리하고 접근성 라벨을 필수로 받습니다.'],
-  ] as const;
+  const contracts = docsHubStrings(useLocale().locale).contractItems;
   return (
     <View style={styles.contractGrid}>
       {contracts.map(([title, body], index) => (
@@ -1163,20 +1032,21 @@ function Callout({
 
 function Footer() {
   const theme = useTheme();
+  const t = docsHubStrings(useLocale().locale);
   return (
     <View style={[styles.footer, { borderTopColor: theme.colors.line }]}>
       <View>
         <Text role="label">@gj-kit/expo-ui</Text>
         <Text role="caption" color="textMuted" style={styles.footerCopy}>
-          Type-safe primitives for Expo, React Native and React Native Web.
+          {t.footerTagline}
         </Text>
       </View>
       <View style={styles.footerLinks}>
         <LinkPressable href="/" style={styles.footerLinkHit}>
-          <RNText style={[styles.footerLink, { color: theme.colors.textMuted }]}>홈</RNText>
+          <RNText style={[styles.footerLink, { color: theme.colors.textMuted }]}>{t.footerHome}</RNText>
         </LinkPressable>
         <LinkPressable href="/docs/components" style={styles.footerLinkHit}>
-          <RNText style={[styles.footerLink, { color: theme.colors.textMuted }]}>컴포넌트</RNText>
+          <RNText style={[styles.footerLink, { color: theme.colors.textMuted }]}>{t.footerComponents}</RNText>
         </LinkPressable>
         <LinkPressable href={NPM_URL} style={styles.footerLinkHit}>
           <RNText style={[styles.footerLink, { color: theme.colors.primary }]}>npm ↗</RNText>
@@ -1243,6 +1113,7 @@ const styles = StyleSheet.create({
   },
   themeButtonIcon: { fontSize: 17, fontWeight: '700' },
   themeButtonText: { fontSize: 12, fontWeight: '700', marginLeft: 4 },
+  localeButtonText: { fontSize: 12, fontWeight: '800' },
   pressed: { opacity: 0.7 },
   mobileNavShell: { borderBottomWidth: 1, minHeight: 48, zIndex: 40 },
   mobileNavContent: { alignItems: 'center', gap: 6, paddingHorizontal: 12, paddingVertical: 8 },

@@ -9,7 +9,8 @@ const globalStyles = `
   html {
     scroll-behavior: smooth;
     -webkit-text-size-adjust: 100%;
-    font-family: Pretendard, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+    /* Pretendard는 로드하지 않으므로 스택에서 뺐다. src/site-theme.tsx의 FONT_FAMILY와 동일해야 한다. */
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
       "Noto Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
   }
 

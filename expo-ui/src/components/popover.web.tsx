@@ -662,6 +662,8 @@ export function Popover(props: PopoverProps): ReactElement {
               <RNText
                 nativeID={titleId}
                 accessibilityRole="header"
+                // Dialog와 같은 이유로 h2. aria-level이 없으면 RNW가 <h1>을 만든다.
+                aria-level={2}
                 maxFontSizeMultiplier={theme.metrics.maxFontScale}
                 style={[
                   roleTextStyle(theme, 'title'),

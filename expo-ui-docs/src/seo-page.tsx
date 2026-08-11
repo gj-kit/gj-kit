@@ -10,13 +10,15 @@ import {
   Text as RNText,
   View,
 } from 'react-native';
-import { ContentFrame, Surface, Text, UiProvider, koStrings, useTheme } from '@gj-kit/expo-ui';
+import { ContentFrame, Surface, Text, UiProvider, enStrings, koStrings, useTheme } from '@gj-kit/expo-ui';
 import type { ColorScheme } from '@gj-kit/expo-ui';
-import { BrandMark, LICENSE_URL, siteIcons, siteThemes } from './site-theme';
+import { BrandMark, CHANGELOG_URL, ISSUES_URL, LICENSE_URL, REPO_URL, siteIcons, siteThemes } from './site-theme';
 import { useHydratedWindowWidth } from './responsive';
 import { componentSeoEntries } from './seo-content';
 import { SITE_NAV_LINKS } from './site-nav';
 import { useDocumentChrome, useSiteColorScheme } from './use-site-color-scheme';
+import { useLocale } from './locale';
+import { siteStrings } from './site-strings';
 
 type BreadcrumbItem = {
   readonly label: string;
@@ -99,10 +101,17 @@ export function SeoPageShell({
 }): ReactElement {
   // 랜딩·문서 허브와 같은 훅을 써서 페이지를 옮겨도 선택한 테마가 유지된다.
   const { colorScheme, toggleColorScheme } = useSiteColorScheme();
+  const { locale } = useLocale();
   useDocumentChrome(siteThemes[colorScheme].colors.background);
 
   return (
-    <UiProvider theme={siteThemes} colorScheme={colorScheme} strings={koStrings} icons={siteIcons}>
+    // 라이브러리 내장 문구(Pagination의 이전/다음 등)도 화면 언어를 따라야 한다.
+    <UiProvider
+      theme={siteThemes}
+      colorScheme={colorScheme}
+      strings={locale === 'ko' ? koStrings : enStrings}
+      icons={siteIcons}
+    >
       <SeoPageFrame
         breadcrumbs={breadcrumbs}
         wide={wide}
@@ -132,6 +141,8 @@ function SeoPageFrame({
   const width = useHydratedWindowWidth();
   const compactHeader = width < 760;
   const pathname = usePathname();
+  const { locale, toggleLocale } = useLocale();
+  const t = siteStrings(locale);
   const mainContentId = `main-content-${useId().replace(/[^a-zA-Z0-9_-]/g, '')}`;
 
   useEffect(() => {
@@ -156,16 +167,19 @@ function SeoPageFrame({
             <View style={[styles.footer, { borderTopColor: theme.colors.line }]}>
               <View style={styles.footerIdentity}>
                 <RNText style={[styles.footerBrand, { color: theme.colors.text }]}>@gj-kit/expo-ui</RNText>
-                <RNText style={[styles.footerCopy, { color: theme.colors.textMuted }]}>Type-safe primitives for Expo and React Native.</RNText>
+                <RNText style={[styles.footerCopy, { color: theme.colors.textMuted }]}>{t.tagline}</RNText>
               </View>
               <View style={styles.footerLinks}>
-                <TextLink href="/docs/components" subtle>컴포넌트 {componentSeoEntries.length}종</TextLink>
-                <TextLink href="/docs/accessibility" subtle>접근성</TextLink>
-                <TextLink href="/docs/theming" subtle>테마</TextLink>
-                <TextLink href="/docs/tailwind" subtle>Tailwind</TextLink>
-                <TextLink href="/docs/insets-keyboard" subtle>Safe area</TextLink>
-                <TextLink href="/docs/type-safety" subtle>타입 안전</TextLink>
-                <TextLink href={LICENSE_URL} subtle>MIT 라이선스 ↗</TextLink>
+                <TextLink href="/docs/components" subtle>{t.componentsCount(componentSeoEntries.length)}</TextLink>
+                <TextLink href="/docs/accessibility" subtle>{t.accessibility}</TextLink>
+                <TextLink href="/docs/theming" subtle>{t.theming}</TextLink>
+                <TextLink href="/docs/tailwind" subtle>{t.tailwind}</TextLink>
+                <TextLink href="/docs/insets-keyboard" subtle>{t.safeArea}</TextLink>
+                <TextLink href="/docs/type-safety" subtle>{t.typeSafety}</TextLink>
+                <TextLink href={REPO_URL} subtle>{t.github}</TextLink>
+                <TextLink href={CHANGELOG_URL} subtle>{t.changelog}</TextLink>
+                <TextLink href={ISSUES_URL} subtle>{t.issues}</TextLink>
+                <TextLink href={LICENSE_URL} subtle>{t.license}</TextLink>
               </View>
             </View>
           </ContentFrame>
@@ -183,7 +197,7 @@ function SeoPageFrame({
       ]}
     >
       {Platform.OS === 'web'
-        ? createElement('a', { className: 'seo-skip-link', href: `#${mainContentId}` }, '본문으로 건너뛰기')
+        ? createElement('a', { className: 'seo-skip-link', href: `#${mainContentId}` }, t.skipToContent)
         : null}
       <Semantic as="header" className="seo-sticky-header">
         <View
@@ -196,7 +210,7 @@ function SeoPageFrame({
             <Link href="/" asChild>
               <Pressable
                 accessibilityRole="link"
-                accessibilityLabel="GJ Kit Expo UI 홈"
+                accessibilityLabel={t.homeLabel}
                 style={styles.brand}
               >
                 <BrandMark size={38} />
@@ -209,11 +223,13 @@ function SeoPageFrame({
               </Pressable>
             </Link>
 
-            <Semantic as="nav" label="주요 문서">
+            <Semantic as="nav" label={t.primaryNavLabel}>
               <View style={styles.headerNav}>
                 {SITE_NAV_LINKS.map((item) => {
-                  // 좁은 헤더에서는 Getting started를 접는다. 링크는 히어로와 푸터에 남는다.
-                  if (compactHeader && item.href === '/docs/getting-started') return null;
+                  // 좁은 헤더에서는 보조 항목을 접는다. 링크는 히어로와 푸터에 남는다.
+                  if (compactHeader && (item.href === '/docs/getting-started' || item.href === REPO_URL)) {
+                    return null;
+                  }
                   // 실제 경로로 판정한다. 전에는 "컴포넌트 페이지가 아니면 Docs"라서
                   // 가이드·404·_sitemap에서도 Docs에 aria-current="page"가 붙었다.
                   const active =
@@ -233,7 +249,21 @@ function SeoPageFrame({
                 })}
                 <Pressable
                   accessibilityRole="button"
-                  accessibilityLabel={colorScheme === 'light' ? '다크 모드로 전환' : '라이트 모드로 전환'}
+                  accessibilityLabel={locale === 'en' ? t.toKorean : t.toEnglish}
+                  onPress={toggleLocale}
+                  style={StyleSheet.flatten([
+                    styles.headerNavLink,
+                    styles.themeToggle,
+                    { borderColor: theme.colors.line },
+                  ])}
+                >
+                  <RNText style={[styles.localeToggleLabel, { color: theme.colors.text }]}>
+                    {locale === 'en' ? '한' : 'EN'}
+                  </RNText>
+                </Pressable>
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={colorScheme === 'light' ? t.toDark : t.toLight}
                   onPress={onToggleColorScheme}
                   style={StyleSheet.flatten([
                     styles.headerNavLink,
@@ -318,8 +348,9 @@ function HeaderNavLink({
 
 function Breadcrumbs({ items }: { readonly items: readonly BreadcrumbItem[] }): ReactElement {
   const theme = useTheme();
+  const t = siteStrings(useLocale().locale);
   return (
-    <Semantic as="nav" label="현재 문서 경로">
+    <Semantic as="nav" label={t.breadcrumbNavLabel}>
       <View style={styles.breadcrumbs}>
         {items.map((item, index) => (
           <View key={`${item.label}-${index}`} style={styles.breadcrumbItem}>
@@ -436,12 +467,13 @@ export function PreviewPanel({
   readonly note?: string | undefined;
 }): ReactElement {
   const theme = useTheme();
+  const t = siteStrings(useLocale().locale);
   return (
     <View style={[styles.previewPanel, { backgroundColor: theme.colors.surface, borderColor: theme.colors.line }]}>
       <View style={styles.previewTopline}>
-        <RNText style={[styles.previewEyebrow, { color: theme.colors.primaryStrong }]}>LIVE PREVIEW</RNText>
+        <RNText style={[styles.previewEyebrow, { color: theme.colors.primaryStrong }]}>{t.livePreview}</RNText>
         <RNText style={[styles.previewHint, { color: theme.colors.textMuted }]}>
-          문서용 목업이 아니라 설치되는 패키지의 실제 컴포넌트입니다.
+          {t.livePreviewHint}
         </RNText>
       </View>
       <View style={[styles.previewCanvas, { backgroundColor: theme.colors.background, borderColor: theme.colors.line }]}>
@@ -476,11 +508,15 @@ export function PropsTable({
   readonly inheritsPlatformProps?: boolean | undefined;
 }): ReactElement {
   const theme = useTheme();
+  const t = siteStrings(useLocale().locale);
 
   const conditionalCount = rows.filter((row) => row.conditional).length;
-  const caption =
-    `${typeName} — ${rows.length}개 prop · 필수 ${rows.filter((row) => row.required).length}개` +
-    (conditionalCount > 0 ? ` · 조건부 ${conditionalCount}개` : '');
+  const caption = t.propsCaption(
+    typeName,
+    rows.length,
+    rows.filter((row) => row.required).length,
+    conditionalCount,
+  );
 
   if (Platform.OS === 'web') {
     const cell = (content: ReactNode, extra?: Record<string, unknown>) =>
@@ -529,7 +565,7 @@ export function PropsTable({
           createElement(
             'tr',
             { style: { color: theme.colors.textMuted } },
-            ...['Prop', 'Type', '필수', '설명'].map((heading) =>
+            ...[t.propsHeaderProp, t.propsHeaderType, t.propsHeaderRequired, t.propsHeaderDescription].map((heading) =>
               createElement(
                 'th',
                 {
@@ -580,18 +616,18 @@ export function PropsTable({
                   ? createElement(
                       'span',
                       { style: { color: theme.colors.danger, fontSize: 11, fontWeight: 800 } },
-                      '필수',
+                      t.required,
                     )
                   : row.conditional
                     ? createElement(
                         'span',
                         {
                           style: { color: theme.colors.warning, fontSize: 11, fontWeight: 800 },
-                          title: '판별 유니언의 특정 갈래에서만 필요합니다.',
+                          title: t.conditionalHint,
                         },
-                        '조건부',
+                        t.conditional,
                       )
-                    : createElement('span', { style: { color: theme.colors.textSubtle, fontSize: 11 } }, '—'),
+                    : createElement('span', { style: { color: theme.colors.textSubtle, fontSize: 11 } }, t.none),
                 { whiteSpace: 'nowrap' },
               ),
               cell(
@@ -609,7 +645,7 @@ export function PropsTable({
         ? createElement(
             'p',
             { style: { color: theme.colors.textMuted, fontSize: 12, marginTop: 12 } },
-            'React Native의 기본 props도 그대로 전달됩니다. 위 표는 이 라이브러리가 추가한 계약만 보여줍니다.',
+            t.inheritsPlatformProps,
           )
         : null,
     );
@@ -622,7 +658,7 @@ export function PropsTable({
         <View key={row.name} style={[styles.propsRow, { borderTopColor: theme.colors.line }]}>
           <RNText style={[styles.propName, { color: theme.colors.text }]}>
             {row.name}
-            {row.required ? ' (필수)' : row.conditional ? ' (조건부)' : ''}
+            {row.required ? ` (${t.required})` : row.conditional ? ` (${t.conditional})` : ''}
           </RNText>
           <RNText style={[styles.propType, { color: theme.colors.primaryStrong }]}>{row.type}</RNText>
           {row.description ? (
@@ -651,6 +687,7 @@ function useCopy(text: string): { readonly copied: boolean; readonly copy: () =>
 /** 설치 명령처럼 그대로 붙여넣어야 하는 한 줄. 선택 대신 버튼으로 복사한다. */
 export function CommandBlock({ command }: { readonly command: string }): ReactElement {
   const theme = useTheme();
+  const t = siteStrings(useLocale().locale);
   const { copied, copy } = useCopy(command);
   return (
     <View style={styles.commandBlock}>
@@ -658,11 +695,11 @@ export function CommandBlock({ command }: { readonly command: string }): ReactEl
       <RNText selectable style={styles.commandText}>{command}</RNText>
       <Pressable
         accessibilityRole="button"
-        accessibilityLabel={`${command} 복사`}
+        accessibilityLabel={t.copyCommand(command)}
         onPress={copy}
         style={[styles.copyButton, { backgroundColor: theme.colors.primary }]}
       >
-        <RNText style={[styles.copyLabel, { color: theme.colors.onPrimary }]}>{copied ? 'COPIED' : 'COPY'}</RNText>
+        <RNText style={[styles.copyLabel, { color: theme.colors.onPrimary }]}>{copied ? t.copied : t.copy}</RNText>
       </Pressable>
     </View>
   );
@@ -670,6 +707,7 @@ export function CommandBlock({ command }: { readonly command: string }): ReactEl
 
 export function CodePanel({ code, label = 'TypeScript' }: { readonly code: string; readonly label?: string | undefined }): ReactElement {
   const theme = useTheme();
+  const t = siteStrings(useLocale().locale);
   const { copied, copy } = useCopy(code);
   return (
     <View style={[styles.codePanel, { backgroundColor: '#121724', borderColor: theme.colors.line }]}>
@@ -677,11 +715,11 @@ export function CodePanel({ code, label = 'TypeScript' }: { readonly code: strin
         <RNText style={styles.codeLabel}>{label}</RNText>
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel="예제 코드 복사"
+          accessibilityLabel={t.copyExample}
           onPress={copy}
           style={styles.codeCopyButton}
         >
-          <RNText style={styles.codeCopyLabel}>{copied ? 'COPIED' : 'COPY'}</RNText>
+          <RNText style={styles.codeCopyLabel}>{copied ? t.copied : t.copy}</RNText>
         </Pressable>
       </View>
       {Platform.OS === 'web' ? (
@@ -736,6 +774,7 @@ function SeoLinkCard({
   readonly badge?: string | undefined;
 }): ReactElement {
   const theme = useTheme();
+  const t = siteStrings(useLocale().locale);
   return (
     <Link href={href as Href} asChild>
       <Pressable
@@ -750,7 +789,7 @@ function SeoLinkCard({
             ) : null}
           </View>
           <Text role="body" color="textMuted" style={styles.linkCardDescription}>{description}</Text>
-          <RNText aria-hidden style={[styles.linkCardArrow, { color: theme.colors.primaryStrong }]}>자세히 보기 <RNText>→</RNText></RNText>
+          <RNText aria-hidden style={[styles.linkCardArrow, { color: theme.colors.primaryStrong }]}>{t.readMore} <RNText>→</RNText></RNText>
         </Surface>
       </Pressable>
     </Link>
@@ -766,6 +805,7 @@ export function AdjacentNav({
   readonly next?: { readonly href: string; readonly label: string } | undefined;
 }): ReactElement | null {
   const theme = useTheme();
+  const t = siteStrings(useLocale().locale);
   if (!previous && !next) return null;
 
   const item = (
@@ -775,7 +815,7 @@ export function AdjacentNav({
     <Link href={target.href as Href} asChild>
       <Pressable
         accessibilityRole="link"
-        accessibilityLabel={`${direction === 'previous' ? '이전' : '다음'} 컴포넌트: ${target.label}`}
+        accessibilityLabel={direction === 'previous' ? t.previousComponent(target.label) : t.nextComponent(target.label)}
         style={StyleSheet.flatten([
           styles.adjacentItem,
           { backgroundColor: theme.colors.surface, borderColor: theme.colors.line },
@@ -783,7 +823,7 @@ export function AdjacentNav({
         ])}
       >
         <RNText style={[styles.adjacentDirection, { color: theme.colors.textMuted }]}>
-          {direction === 'previous' ? '← 이전' : '다음 →'}
+          {direction === 'previous' ? t.previous : t.next}
         </RNText>
         <RNText style={[styles.adjacentLabel, { color: theme.colors.text }]}>{target.label}</RNText>
       </Pressable>
@@ -791,7 +831,7 @@ export function AdjacentNav({
   );
 
   return (
-    <Semantic as="nav" label="이웃 컴포넌트">
+    <Semantic as="nav" label={t.adjacentNavLabel}>
       <View style={styles.adjacentRow}>
         {previous ? item(previous, 'previous') : <View style={styles.adjacentSpacer} />}
         {next ? item(next, 'next') : <View style={styles.adjacentSpacer} />}
@@ -802,12 +842,11 @@ export function AdjacentNav({
 
 export function ReleaseNotice({ version }: { readonly version: string }): ReactElement {
   const theme = useTheme();
+  const t = siteStrings(useLocale().locale);
   return (
     <Surface padding="lg" style={[styles.releaseNotice, { borderColor: theme.colors.warning }]}>
-      <RNText style={[styles.releaseTitle, { color: theme.colors.warning }]}>v{version} 공개 예정 · 지금은 설치할 수 없습니다</RNText>
-      <Text role="caption" color="textMuted">
-        이 컴포넌트는 소스에만 있는 다음 릴리스 미리보기입니다. 현재 npm에 공개된 버전에는 이 export가 없어 지금 설치하면 import가 실패합니다. 아래 미리보기는 워크스페이스 소스로 렌더한 것이며, 이 페이지는 공개 전까지 검색 색인에서 제외됩니다.
-      </Text>
+      <RNText style={[styles.releaseTitle, { color: theme.colors.warning }]}>{t.releaseTitle(version)}</RNText>
+      <Text role="caption" color="textMuted">{t.releaseBody}</Text>
     </Surface>
   );
 }
@@ -845,6 +884,7 @@ const styles = StyleSheet.create({
   headerNavLabel: { fontSize: 13, fontWeight: '800' },
   themeToggle: { borderWidth: 1, marginLeft: 4, minWidth: 44, paddingHorizontal: 10 },
   themeToggleGlyph: { fontSize: 15, fontWeight: '800', lineHeight: 20 },
+  localeToggleLabel: { fontSize: 12, fontWeight: '900', lineHeight: 20 },
   textLink: { alignSelf: 'flex-start', justifyContent: 'center', minHeight: 36 },
   textLinkLabel: { fontSize: 13, fontWeight: '700' },
   breadcrumbs: { alignItems: 'center', flexDirection: 'row', flexWrap: 'wrap', gap: 8, paddingTop: 24 },

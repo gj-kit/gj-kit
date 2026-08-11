@@ -11,6 +11,8 @@ import type {
   PaginationDirection,
   PaginationPresentation,
 } from '@gj-kit/expo-ui';
+import { useLocale } from './locale';
+import type { Locale } from './locale';
 
 type ExampleMode = 'items' | 'pages' | 'cursor';
 
@@ -31,12 +33,68 @@ const DIRECTION_ITEMS = [
   { value: 'rtl', label: 'RTL' },
 ] as const;
 
-const CURSOR_BATCHES = [
-  '1–20번째 결과',
-  '21–40번째 결과',
-  '41–60번째 결과',
-  '61–80번째 결과',
-] as const;
+const CURSOR_BATCH_RANGES = ['1–20', '21–40', '41–60', '61–80'] as const;
+
+type ExampleStrings = {
+  readonly title: string;
+  readonly description: string;
+  readonly dataContract: string;
+  readonly presentation: string;
+  readonly direction: string;
+  readonly busyDescription: string;
+  readonly itemsLabel: string;
+  readonly pagesLabel: string;
+  readonly cursorLabel: string;
+  readonly pageLabel: (page: number, current: boolean) => string;
+  readonly cursorStatus: (batch: number, range: string) => string;
+  readonly itemsSummary: string;
+  readonly pagesSummary: string;
+  readonly cursorSummary: string;
+  readonly note: string;
+};
+
+const STRINGS: Readonly<Record<Locale, ExampleStrings>> = {
+  en: {
+    title: 'One component, three navigation contracts',
+    description:
+      'Switch the mode and presentation, then press the real previous, next, and page buttons to watch the controlled state.',
+    dataContract: 'Data contract',
+    presentation: 'Presentation',
+    direction: 'Direction',
+    busyDescription: 'Locks out duplicate page requests.',
+    itemsLabel: 'Payment history pages',
+    pagesLabel: 'Report pages',
+    cursorLabel: 'Search result cursor navigation',
+    pageLabel: (page, current) =>
+      current ? `Page ${page}, current page` : `Go to page ${page}`,
+    cursorStatus: (batch, range) => `Batch ${batch} · results ${range}`,
+    itemsSummary: '128 items · 20 per page',
+    pagesSummary: '24 pages, counted by the server',
+    cursorSummary: 'An opaque cursor only the server understands',
+    note:
+      'auto keeps full numbering on the web and switches to compact below theme.breakpoints.tablet on native. cursor cannot compute a position, so your app supplies a meaningful statusLabel.',
+  },
+  ko: {
+    title: '한 컴포넌트, 세 가지 탐색 계약',
+    description:
+      '모드와 표현을 바꾼 뒤 실제 이전·다음·페이지 버튼을 눌러 controlled 상태를 확인하세요.',
+    dataContract: '데이터 계약',
+    presentation: '표현',
+    direction: '방향',
+    busyDescription: '중복 페이지 요청을 잠급니다.',
+    itemsLabel: '결제 내역 페이지',
+    pagesLabel: '리포트 페이지',
+    cursorLabel: '검색 결과 커서 탐색',
+    pageLabel: (page, current) =>
+      current ? `${page}페이지, 현재 페이지` : `${page}페이지로 이동`,
+    cursorStatus: (batch, range) => `배치 ${batch} · ${range}번째 결과`,
+    itemsSummary: '총 128개 · 페이지당 20개',
+    pagesSummary: '서버가 계산한 24페이지',
+    cursorSummary: '서버만 아는 opaque cursor',
+    note:
+      'auto는 웹에서 full 번호를 유지하고, 네이티브에서는 theme.breakpoints.tablet 아래에서 compact로 전환합니다. cursor는 위치를 계산하지 않으므로 앱이 의미 있는 statusLabel을 제공합니다.',
+  },
+};
 
 function ControlGroup({
   label,
@@ -59,6 +117,7 @@ function ControlGroup({
 /** Interactive proof kept separate so the generic static component route stays hook-free. */
 export function PaginationLiveExample(): ReactElement {
   const theme = useTheme();
+  const t = STRINGS[useLocale().locale];
   const [mode, setMode] = useState<ExampleMode>('items');
   const [presentation, setPresentation] =
     useState<PaginationPresentation>('auto');
@@ -73,7 +132,7 @@ export function PaginationLiveExample(): ReactElement {
     <Pagination
       mode="numbered"
       countMode="items"
-      accessibilityLabel="결제 내역 페이지"
+      accessibilityLabel={t.itemsLabel}
       page={itemPage}
       totalItemCount={128}
       pageSize={20}
@@ -82,9 +141,7 @@ export function PaginationLiveExample(): ReactElement {
       disabled={disabled}
       busy={busy}
       getPageAccessibilityLabel={({ page: targetPage, current }) =>
-        current
-          ? `${targetPage}페이지, 현재 페이지`
-          : `${targetPage}페이지로 이동`
+        t.pageLabel(targetPage, current)
       }
       onPageChange={setItemPage}
       style={styles.pagination}
@@ -94,7 +151,7 @@ export function PaginationLiveExample(): ReactElement {
     <Pagination
       mode="numbered"
       countMode="pages"
-      accessibilityLabel="리포트 페이지"
+      accessibilityLabel={t.pagesLabel}
       page={page}
       pageCount={24}
       presentation={presentation}
@@ -102,9 +159,7 @@ export function PaginationLiveExample(): ReactElement {
       disabled={disabled}
       busy={busy}
       getPageAccessibilityLabel={({ page: targetPage, current }) =>
-        current
-          ? `${targetPage}페이지, 현재 페이지`
-          : `${targetPage}페이지로 이동`
+        t.pageLabel(targetPage, current)
       }
       onPageChange={setPage}
       style={styles.pagination}
@@ -113,10 +168,10 @@ export function PaginationLiveExample(): ReactElement {
   ) : (
     <Pagination
       mode="cursor"
-      accessibilityLabel="검색 결과 커서 탐색"
-      statusLabel={`배치 ${cursorBatch + 1} · ${CURSOR_BATCHES[cursorBatch]}`}
+      accessibilityLabel={t.cursorLabel}
+      statusLabel={t.cursorStatus(cursorBatch + 1, CURSOR_BATCH_RANGES[cursorBatch] ?? '')}
       hasPreviousPage={cursorBatch > 0}
-      hasNextPage={cursorBatch < CURSOR_BATCHES.length - 1}
+      hasNextPage={cursorBatch < CURSOR_BATCH_RANGES.length - 1}
       direction={direction}
       disabled={disabled}
       busy={busy}
@@ -124,7 +179,7 @@ export function PaginationLiveExample(): ReactElement {
         setCursorBatch((current) =>
           nextDirection === 'previous'
             ? Math.max(0, current - 1)
-            : Math.min(CURSOR_BATCHES.length - 1, current + 1),
+            : Math.min(CURSOR_BATCH_RANGES.length - 1, current + 1),
         );
       }}
       style={styles.pagination}
@@ -149,10 +204,10 @@ export function PaginationLiveExample(): ReactElement {
             aria-level={3}
             style={[styles.title, { color: theme.colors.text }]}
           >
-            한 컴포넌트, 세 가지 탐색 계약
+            {t.title}
           </RNText>
           <RNText style={[styles.description, { color: theme.colors.textMuted }]}>
-            모드와 표현을 바꾼 뒤 실제 이전·다음·페이지 버튼을 눌러 controlled 상태를 확인하세요.
+            {t.description}
           </RNText>
         </View>
         <View
@@ -164,14 +219,14 @@ export function PaginationLiveExample(): ReactElement {
 
       <View style={[styles.configPanel, { backgroundColor: theme.colors.background }]}>
         <View style={styles.configRow}>
-          <ControlGroup label="데이터 계약">
+          <ControlGroup label={t.dataContract}>
             <ToggleGroup
               selectionMode="single"
               value={mode}
               onValueChange={(nextMode) => {
                 if (nextMode !== null) setMode(nextMode);
               }}
-              accessibilityLabel="Pagination 데이터 계약"
+              accessibilityLabel={`Pagination ${t.dataContract}`}
               items={MODE_ITEMS}
               allowEmpty={false}
               size="sm"
@@ -179,14 +234,14 @@ export function PaginationLiveExample(): ReactElement {
             />
           </ControlGroup>
 
-          <ControlGroup label="표현">
+          <ControlGroup label={t.presentation}>
             <ToggleGroup
               selectionMode="single"
               value={presentation}
               onValueChange={(nextPresentation) => {
                 if (nextPresentation !== null) setPresentation(nextPresentation);
               }}
-              accessibilityLabel="Pagination 표현"
+              accessibilityLabel={`Pagination ${t.presentation}`}
               items={PRESENTATION_ITEMS}
               allowEmpty={false}
               disabled={mode === 'cursor'}
@@ -195,14 +250,14 @@ export function PaginationLiveExample(): ReactElement {
             />
           </ControlGroup>
 
-          <ControlGroup label="방향">
+          <ControlGroup label={t.direction}>
             <ToggleGroup
               selectionMode="single"
               value={direction}
               onValueChange={(nextDirection) => {
                 if (nextDirection !== null) setDirection(nextDirection);
               }}
-              accessibilityLabel="Pagination 쓰기 방향"
+              accessibilityLabel={`Pagination ${t.direction}`}
               items={DIRECTION_ITEMS}
               allowEmpty={false}
               size="sm"
@@ -220,7 +275,7 @@ export function PaginationLiveExample(): ReactElement {
           />
           <Switch
             label="Busy"
-            description="중복 페이지 요청을 잠급니다."
+            description={t.busyDescription}
             value={busy}
             onValueChange={setBusy}
             size="sm"
@@ -237,10 +292,10 @@ export function PaginationLiveExample(): ReactElement {
         <View style={styles.canvasHeader}>
           <RNText style={[styles.canvasTitle, { color: theme.colors.text }]}>
             {mode === 'items'
-              ? '총 128개 · 페이지당 20개'
+              ? t.itemsSummary
               : mode === 'pages'
-                ? '서버가 계산한 24페이지'
-                : '서버만 아는 opaque cursor'}
+                ? t.pagesSummary
+                : t.cursorSummary}
           </RNText>
           <RNText style={[styles.canvasMeta, { color: theme.colors.textMuted }]}>
             {direction.toUpperCase()} · {mode === 'cursor' ? 'compact' : presentation}
@@ -250,7 +305,7 @@ export function PaginationLiveExample(): ReactElement {
       </View>
 
       <RNText style={[styles.note, { color: theme.colors.textMuted }]}>
-        auto는 웹에서 full 번호를 유지하고, 네이티브에서는 theme.breakpoints.tablet 아래에서 compact로 전환합니다. cursor는 위치를 계산하지 않으므로 앱이 의미 있는 statusLabel을 제공합니다.
+        {t.note}
       </RNText>
     </View>
   );

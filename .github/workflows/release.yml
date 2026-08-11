@@ -33,9 +33,9 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - uses: changesets/action@v1
         with:
-          version-script: pnpm run version:packages
-          publish-script: pnpm run release:npm
-          create-github-releases: true
+          version: pnpm run version:packages
+          publish: pnpm run release:npm
+          createGithubReleases: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITHUB_PACKAGES_TOKEN: ${{ secrets.GITHUB_TOKEN }}

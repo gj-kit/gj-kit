@@ -3,6 +3,7 @@ import { useLocalSearchParams } from 'expo-router';
 import {
   componentDocsPath,
   componentSeoEntries,
+  getAdjacentComponents,
   getComponentSeoEntry,
   getRelatedComponents,
   isReleasedComponent,
@@ -15,8 +16,12 @@ import {
   webPageSchema,
 } from '../../../src/seo';
 import {
+  AdjacentNav,
   BulletList,
   CodePanel,
+  CommandBlock,
+  PreviewPanel,
+  PropsTable,
   ReleaseNotice,
   SeoLinkGrid,
   SeoPageHeading,
@@ -24,6 +29,9 @@ import {
   SeoParagraph,
   SeoSection,
 } from '../../../src/seo-page';
+import { PaginationLiveExample } from '../../../src/pagination-live-example';
+import { getComponentPreview } from '../../../src/component-previews';
+import { getComponentProps } from '../../../src/component-props';
 
 export function generateStaticParams(): readonly { slug: string }[] {
   return componentSeoEntries.map((entry) => ({ slug: entry.slug }));
@@ -52,6 +60,8 @@ export default function ComponentDetailPage(): ReactElement {
 
   const path = componentDocsPath(entry.slug);
   const released = isReleasedComponent(entry);
+  const Preview = getComponentPreview(entry.slug);
+  const propsEntry = getComponentProps(entry.slug);
   const title = released
     ? `${entry.name} 컴포넌트 — Expo·React Native | GJ Kit Expo UI`
     : `${entry.name} 컴포넌트 v${entry.since} 미리보기 | GJ Kit Expo UI`;
@@ -59,6 +69,7 @@ export default function ComponentDetailPage(): ReactElement {
     ? entry.description
     : `${entry.description} 현재 npm latest는 v${publishedPackageVersion}이며 이 API는 v${entry.since} 릴리스 예정입니다.`;
   const related = getRelatedComponents(entry);
+  const { previous, next } = getAdjacentComponents(entry);
 
   return (
     <>
@@ -90,24 +101,63 @@ export default function ComponentDetailPage(): ReactElement {
       >
         <SeoPageHeading
           eyebrow={`${entry.category.toUpperCase()} · SINCE v${entry.since}`}
-          title={`${entry.name} — ${entry.headline}`}
+          // headline은 이미 컴포넌트 이름으로 끝난다. 앞에 이름을 또 붙이면
+          // "Button — …타입 안전 Button"처럼 제목에서 이름이 두 번 나온다.
+          title={entry.headline}
           description={entry.description}
           {...(!released ? { preview: `npm v${publishedPackageVersion} · v${entry.since} 예정` } : {})}
         />
 
         {!released ? <ReleaseNotice version={entry.since} /> : null}
 
+        {Preview ? (
+          <SeoSection title={`${entry.name} 미리보기`}>
+            <PreviewPanel note="위 컨트롤은 실제로 동작합니다. 눌러 보고 상태를 바꿔 보세요.">
+              <Preview />
+            </PreviewPanel>
+          </SeoSection>
+        ) : null}
+
+        {entry.slug === 'pagination' ? (
+          <SeoSection title="Pagination 직접 조작해 보기">
+            <PaginationLiveExample />
+          </SeoSection>
+        ) : null}
+
         <SeoSection title={`${entry.name} 사용 시점과 역할`}>
           <SeoParagraph>{entry.summary}</SeoParagraph>
           <BulletList items={entry.features} />
         </SeoSection>
 
-        <SeoSection title="설치와 최소 예제">
+        <SeoSection title={released ? '설치와 최소 예제' : `최소 예제 (v${entry.since} 릴리스 후 사용 가능)`}>
           <SeoParagraph>
-            {entry.name}: 패키지 루트 엔트리에서 import한 뒤 앱이 소유한 상태와 이벤트를 연결하세요.
+            {released
+              ? `${entry.name}: 패키지 루트 엔트리에서 import한 뒤 앱이 소유한 상태와 이벤트를 연결하세요.`
+              : `${entry.name}은 아직 npm에 없습니다. 지금 설치되는 v${publishedPackageVersion}에는 이 export가 없어 아래 코드는 컴파일되지 않습니다. v${entry.since} 공개 후 사용하세요.`}
           </SeoParagraph>
-          <CodePanel code={`pnpm add @gj-kit/expo-ui\n\nimport { ${entry.name} } from '@gj-kit/expo-ui';\n\n${entry.snippet}`} />
+          {/*
+            미공개 컴포넌트에 설치 명령을 그대로 두면 "설치하면 쓸 수 있다"는
+            잘못된 신호를 준다. 설치 명령은 릴리스된 컴포넌트에만 보인다.
+          */}
+          {released ? <CommandBlock command="pnpm add @gj-kit/expo-ui" /> : null}
+          <CodePanel
+            code={`import { ${entry.name} } from '@gj-kit/expo-ui';\n\n${entry.snippet}`}
+            label={released ? 'TypeScript' : `TypeScript · v${entry.since} 예정 · npm 미공개`}
+          />
         </SeoSection>
+
+        {propsEntry ? (
+          <SeoSection title={`${entry.name} props`}>
+            <SeoParagraph>
+              아래 표는 패키지가 내보내는 {propsEntry.typeName} 타입에서 빌드 시점에 생성됩니다. 문서와 API가 어긋날 수 없습니다.
+            </SeoParagraph>
+            <PropsTable
+              rows={propsEntry.props}
+              typeName={propsEntry.typeName}
+              inheritsPlatformProps={propsEntry.inheritsPlatformProps}
+            />
+          </SeoSection>
+        ) : null}
 
         <SeoSection title="접근성과 플랫폼 동작">
           <SeoParagraph>{entry.accessibility}</SeoParagraph>
@@ -128,6 +178,11 @@ export default function ComponentDetailPage(): ReactElement {
             />
           </SeoSection>
         ) : null}
+
+        <AdjacentNav
+          {...(previous ? { previous: { href: componentDocsPath(previous.slug), label: previous.name } } : {})}
+          {...(next ? { next: { href: componentDocsPath(next.slug), label: next.name } } : {})}
+        />
       </SeoPageShell>
     </>
   );

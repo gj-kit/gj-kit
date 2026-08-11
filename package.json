@@ -10,7 +10,9 @@
     "typecheck": "pnpm -r typecheck",
     "test": "pnpm -r test",
     "test:types": "pnpm -r test:types",
-    "changeset": "changeset"
+    "changeset": "changeset",
+    "version:packages": "changeset version",
+    "release:npm": "pnpm run build && changeset publish && node scripts/publish-github-packages.mjs"
   },
   "devDependencies": {
     "@changesets/cli": "^2.29.0"

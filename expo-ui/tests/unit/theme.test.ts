@@ -17,7 +17,7 @@ import type { ColorKey, ThemeColors, ThemeOverrides } from '../../src/theme';
 function relativeLuminance(hex: string): number {
   const channels = [1, 3, 5].map((start) => Number.parseInt(hex.slice(start, start + 2), 16) / 255);
   const [red = 0, green = 0, blue = 0] = channels.map((channel) =>
-    channel <= 0.03928 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4,
+    channel <= 0.04045 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4,
   );
   return red * 0.2126 + green * 0.7152 + blue * 0.0722;
 }
@@ -29,8 +29,19 @@ function contrastRatio(first: string, second: string): number {
 }
 
 function expectAccessibleStatusColors(colors: ThemeColors): void {
-  const softPairs = [
+  const textPairs = [
     [colors.text, colors.surfaceSubtle],
+    [colors.textMuted, colors.surface],
+    [colors.textMuted, colors.surfaceSubtle],
+    [colors.textSubtle, colors.surface],
+    [colors.textSubtle, colors.surfaceSubtle],
+    [colors.tabInactive, colors.background],
+    [colors.tabInactive, colors.surface],
+    [colors.tabInactive, colors.surfaceSubtle],
+    [colors.primary, colors.background],
+    [colors.primary, colors.surface],
+    [colors.primaryStrong, colors.primarySoft],
+    [colors.onPrimary, colors.primary],
     [colors.danger, colors.dangerSoft],
     [colors.warning, colors.warningSoft],
     [colors.success, colors.successSoft],
@@ -43,14 +54,13 @@ function expectAccessibleStatusColors(colors: ThemeColors): void {
     [colors.onInfo, colors.infoStrong],
   ] as const;
 
-  for (const pair of [...softPairs, ...solidPairs]) {
+  for (const pair of [...textPairs, ...solidPairs]) {
     expect(contrastRatio(...pair)).toBeGreaterThanOrEqual(4.5);
   }
 
   const controlAndProgressPairs = [
+    // TextField/SearchField의 기본 1px 경계선은 surface와 3:1 이상이어야 한다.
     [colors.textSubtle, colors.surface],
-    [colors.primary, colors.surface],
-    [colors.primaryStrong, colors.primarySoft],
     [colors.danger, colors.dangerSoft],
     [colors.warning, colors.warningSoft],
     [colors.success, colors.successSoft],
@@ -208,7 +218,12 @@ describe('§3.3 EOP 대응 — undefined 값 스킵', () => {
 
 describe('§3.6 내장 팔레트 스팟체크', () => {
   it('lightTheme — 전신 tokens.json 계승 + shadow 신설', () => {
-    expect(lightTheme.colors.primary).toBe('#4A90E2');
+    expect(lightTheme.colors.primary).toBe('#1769C2');
+    expect(lightTheme.colors.primaryStrong).toBe('#0E5CAD');
+    expect(lightTheme.colors.onPrimary).toBe('#FFFFFF');
+    expect(lightTheme.colors.textMuted).toBe('#5D6675');
+    expect(lightTheme.colors.textSubtle).toBe('#667085');
+    expect(lightTheme.colors.tabInactive).toBe('#667085');
     expect(lightTheme.colors.shadow).toBe('#0F172A');
     expect(lightTheme.colors.background).toBe('#FFFFFF');
     expect(lightTheme.colors.text).toBe('#1D2733');
@@ -229,6 +244,11 @@ describe('§3.6 내장 팔레트 스팟체크', () => {
     expect(darkTheme.colors.background).toBe('#111418');
     expect(darkTheme.colors.surface).toBe('#1A1F26');
     expect(darkTheme.colors.primary).toBe('#5C9EEA');
+    expect(darkTheme.colors.primaryStrong).toBe('#6BAAF0');
+    expect(darkTheme.colors.onPrimary).toBe('#111418');
+    expect(darkTheme.colors.textMuted).toBe('#9AA4B0');
+    expect(darkTheme.colors.textSubtle).toBe('#8893A0');
+    expect(darkTheme.colors.tabInactive).toBe('#9AA4B0');
     expect(darkTheme.colors.shadow).toBe('#000000');
     expect(darkTheme.colors.danger).toBe('#FF8FAF');
     expect(darkTheme.colors.warning).toBe('#F6C453');

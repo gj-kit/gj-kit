@@ -84,6 +84,22 @@ export function isReleasedComponent(entry: ComponentSeoEntry): boolean {
   return true;
 }
 
+/**
+ * 상세 페이지에서 다음 컴포넌트로 넘어갈 때 목록으로 되돌아가지 않게 한다.
+ * 카탈로그가 카테고리 순서로 정렬돼 있어 인접 항목은 대개 같은 카테고리다.
+ */
+export function getAdjacentComponents(entry: ComponentSeoEntry): {
+  readonly previous: ComponentSeoEntry | undefined;
+  readonly next: ComponentSeoEntry | undefined;
+} {
+  const index = componentSeoEntries.findIndex((candidate) => candidate.slug === entry.slug);
+  if (index === -1) return { previous: undefined, next: undefined };
+  return {
+    previous: componentSeoEntries[index - 1],
+    next: componentSeoEntries[index + 1],
+  };
+}
+
 export function getRelatedComponents(entry: ComponentSeoEntry): readonly ComponentSeoEntry[] {
   return entry.related
     .map((reference) => getComponentSeoEntryByReference(reference))

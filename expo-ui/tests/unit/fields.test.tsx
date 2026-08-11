@@ -56,14 +56,14 @@ describe('§5.4 TextField', () => {
     expect(input.style.borderTopColor).toBe(hexToRgb(lightTheme.colors.dangerStrong));
   });
 
-  it('error가 없으면 보더는 colors.line, 헬퍼는 textMuted', () => {
+  it('error가 없으면 보더는 colors.textSubtle, 헬퍼는 textMuted', () => {
     render(
       <UiProvider>
         <TextField placeholder="ph" helperText="도움말" />
       </UiProvider>,
     );
     const input = screen.getByPlaceholderText('ph') as HTMLElement;
-    expect(input.style.borderTopColor).toBe(hexToRgb(lightTheme.colors.line));
+    expect(input.style.borderTopColor).toBe(hexToRgb(lightTheme.colors.textSubtle));
     const helper = screen.getByText('도움말') as HTMLElement;
     expect(helper.style.color).toBe(hexToRgb(lightTheme.colors.textMuted));
   });
@@ -137,7 +137,11 @@ describe('§5.5 SearchField', () => {
         <SearchField />
       </UiProvider>,
     );
-    expect(screen.getByPlaceholderText(enStrings.searchPlaceholder)).toBeTruthy();
+    const input = screen.getByPlaceholderText(enStrings.searchPlaceholder) as HTMLElement;
+    expect(input).toBeTruthy();
+    expect(input.parentElement?.style.borderTopColor).toBe(
+      hexToRgb(lightTheme.colors.textSubtle),
+    );
   });
 
   it('koStrings 주입 시 기본 placeholder가 "검색"이다', () => {

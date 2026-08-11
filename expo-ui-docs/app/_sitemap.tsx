@@ -7,6 +7,7 @@ import {
   SeoParagraph,
   SeoSection,
 } from '../src/seo-page';
+import { componentSeoEntries } from '../src/seo-content';
 
 /**
  * Expo Router의 개발용 route sitemap을 검색 결과에서 제외한다.
@@ -40,7 +41,7 @@ export default function InternalSitemapPage(): ReactElement {
               },
               {
                 href: '/docs/components',
-                title: '컴포넌트 31종',
+                title: `컴포넌트 ${componentSeoEntries.length}종`,
                 description: '현재 소스의 컴포넌트와 npm 릴리스 상태를 확인합니다.',
               },
               {

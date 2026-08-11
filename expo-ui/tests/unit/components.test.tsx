@@ -107,22 +107,23 @@ describe('§5.6 Tabs', () => {
     { label: '사진', value: 'photo' },
     { label: '비활성', value: 'off', disabled: true },
   ] as const;
+  const panels = { all: '전체 패널', photo: '사진 패널', off: '비활성 패널' } as const;
 
   it('활성 탭만 활성 스타일(primary 라벨·굵은 서체)로 렌더된다', () => {
-    renderWithTheme(<Tabs items={items} value="all" onChange={() => {}} />);
+    renderWithTheme(<Tabs accessibilityLabel="콘텐츠" items={items} value="all" onChange={() => {}} panels={panels} />);
     const active = screen.getByText('전체');
     const inactive = screen.getByText('사진');
-    // segmented 활성 라벨: colors.primary(#4A90E2) + typography.title.fontWeight(800)
-    expect(active.style.color).toBe('rgb(74, 144, 226)');
+    // segmented 활성 라벨: colors.primary(#1769C2) + typography.title.fontWeight(800)
+    expect(active.style.color).toBe('rgb(23, 105, 194)');
     expect(active.style.fontWeight).toBe('800');
-    // 비활성 라벨: colors.textMuted(#777777) + typography.body.fontWeight(400)
-    expect(inactive.style.color).toBe('rgb(119, 119, 119)');
+    // 비활성 라벨: colors.textMuted(#5D6675) + typography.body.fontWeight(400)
+    expect(inactive.style.color).toBe('rgb(93, 102, 117)');
     expect(inactive.style.fontWeight).toBe('400');
   });
 
   it('탭을 누르면 onChange가 그 탭의 value로 호출된다', () => {
     const onChange = vi.fn();
-    renderWithTheme(<Tabs items={items} value="all" onChange={onChange} />);
+    renderWithTheme(<Tabs accessibilityLabel="콘텐츠" items={items} value="all" onChange={onChange} panels={panels} />);
     fireEvent.click(screen.getAllByRole('tab')[1]!);
     expect(onChange).toHaveBeenCalledTimes(1);
     expect(onChange).toHaveBeenCalledWith('photo');
@@ -130,7 +131,7 @@ describe('§5.6 Tabs', () => {
 
   it('disabled 탭은 aria-disabled로 노출되고 눌러도 onChange가 호출되지 않는다', () => {
     const onChange = vi.fn();
-    renderWithTheme(<Tabs items={items} value="all" onChange={onChange} />);
+    renderWithTheme(<Tabs accessibilityLabel="콘텐츠" items={items} value="all" onChange={onChange} panels={panels} />);
     const disabledTab = screen.getAllByRole('tab')[2]!;
     expect(disabledTab.getAttribute('aria-disabled')).toBe('true');
     fireEvent.click(disabledTab);
@@ -152,7 +153,7 @@ describe('§5.7 SelectionIndicator / SelectableRow', () => {
       <SelectionIndicator selected={false} showUncheckedMark size={16} renderMark={renderMark} />,
     );
     // round(16 × 0.58) = 9 → 최소값 10으로 승격. 미선택 색은 colors.textSubtle.
-    expect(renderMark).toHaveBeenCalledWith({ color: '#728094', size: 10 });
+    expect(renderMark).toHaveBeenCalledWith({ color: '#667085', size: 10 });
   });
 
   it('SelectableRow는 children을 렌더하고 누르면 onPress가 호출된다', () => {

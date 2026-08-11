@@ -73,17 +73,19 @@ describe('§6 ③ Button 내용 필수 — label·children 둘 다 없으면 에
 describe('§6 ④ Tabs NoInfer — value 오타가 items 추론을 오염시키지 못함', () => {
   it("items 리터럴에 없는 value 'alL'은 컴파일 에러", () => {
     // @ts-expect-error 'alL'은 'all' | 'photo'에 없다 — NoInfer가 T 확장을 차단
-    void (<Tabs items={[{ label: '전체', value: 'all' }, { label: '사진', value: 'photo' }]} value="alL" onChange={noop} />);
+    void (<Tabs accessibilityLabel="콘텐츠" items={[{ label: '전체', value: 'all' }, { label: '사진', value: 'photo' }]} value="alL" onChange={noop} panels={{ all: '전체', photo: '사진' }} />);
   });
 
   it('올바른 value는 통과하고 onChange 인자는 리터럴 유니언으로 추론된다', () => {
     void (
       <Tabs
+        accessibilityLabel="콘텐츠"
         items={[
           { label: '전체', value: 'all' },
           { label: '사진', value: 'photo' },
         ]}
         value="photo"
+        panels={{ all: '전체', photo: '사진' }}
         onChange={(next) => {
           expectTypeOf(next).toEqualTypeOf<'all' | 'photo'>();
         }}

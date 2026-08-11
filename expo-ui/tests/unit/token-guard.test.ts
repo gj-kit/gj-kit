@@ -7,18 +7,29 @@
  * node:fs 사용은 테스트 파일 한정 예외 — 라이브러리 소스의 플랫폼 중립 규칙과 무관.
  */
 import { readdirSync, readFileSync } from 'node:fs';
-import { join, resolve } from 'node:path';
+import { join, relative, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 // jsdom 환경에서 import.meta.url은 file: 스킴이 아니다 — vitest root(패키지 루트) 기준 해석.
 const componentsDir = resolve(process.cwd(), 'src/components');
-const componentFiles = readdirSync(componentsDir).filter((name) => name.endsWith('.tsx'));
+
+/** 중첩 primitive 디렉터리까지 재귀로 스캔한다 — 새 하위 폴더가 guard를 우회하지 못한다. */
+function walkComponentFiles(dir: string): string[] {
+  return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
+    const fullPath = join(dir, entry.name);
+    if (entry.isDirectory()) return walkComponentFiles(fullPath);
+    return entry.name.endsWith('.tsx') ? [fullPath] : [];
+  });
+}
+
+const componentFiles = walkComponentFiles(componentsDir);
 
 /** 파일별 라인 스캔 — 위반을 "파일:라인 내용" 형태로 수집(실패 메시지가 곧 위치). */
 function violations(pattern: RegExp): string[] {
   const found: string[] = [];
-  for (const name of componentFiles) {
-    const lines = readFileSync(join(componentsDir, name), 'utf8').split('\n');
+  for (const file of componentFiles) {
+    const name = relative(componentsDir, file);
+    const lines = readFileSync(file, 'utf8').split('\n');
     lines.forEach((line, index) => {
       if (pattern.test(line)) {
         found.push(`${name}:${index + 1} ${line.trim()}`);

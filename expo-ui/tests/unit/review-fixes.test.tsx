@@ -113,6 +113,7 @@ describe('리뷰 수정 3 — underline 탭 서체가 전신(16/600)을 typograp
     render(
       <UiProvider>
         <Tabs
+          accessibilityLabel="콘텐츠"
           variant="underline"
           items={[
             { label: '전체', value: 'all' },
@@ -120,6 +121,7 @@ describe('리뷰 수정 3 — underline 탭 서체가 전신(16/600)을 typograp
           ]}
           value="all"
           onChange={() => undefined}
+          panels={{ all: '전체 패널', photo: '사진 패널' }}
         />
       </UiProvider>,
     );
@@ -138,10 +140,12 @@ describe('리뷰 수정 3 — underline 탭 서체가 전신(16/600)을 typograp
     render(
       <UiProvider theme={theme}>
         <Tabs
+          accessibilityLabel="콘텐츠"
           variant="underline"
           items={[{ label: '전체', value: 'all' }]}
           value="all"
           onChange={() => undefined}
+          panels={{ all: '전체 패널' }}
         />
       </UiProvider>,
     );

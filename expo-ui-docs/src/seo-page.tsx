@@ -1,4 +1,4 @@
-import { createElement, useEffect, useId } from 'react';
+import { createElement, useEffect, useId, useState } from 'react';
 import type { ReactElement, ReactNode } from 'react';
 import { Link, usePathname } from 'expo-router';
 import type { Href } from 'expo-router';
@@ -11,8 +11,12 @@ import {
   View,
 } from 'react-native';
 import { ContentFrame, Surface, Text, UiProvider, koStrings, useTheme } from '@gj-kit/expo-ui';
-import { BrandMark, siteIcons, siteThemes } from './site-theme';
+import type { ColorScheme } from '@gj-kit/expo-ui';
+import { BrandMark, LICENSE_URL, siteIcons, siteThemes } from './site-theme';
 import { useHydratedWindowWidth } from './responsive';
+import { componentSeoEntries } from './seo-content';
+import { SITE_NAV_LINKS } from './site-nav';
+import { useDocumentChrome, useSiteColorScheme } from './use-site-color-scheme';
 
 type BreadcrumbItem = {
   readonly label: string;
@@ -33,7 +37,18 @@ function Semantic({
   readonly label?: string | undefined;
 }): ReactElement {
   if (Platform.OS === 'web') {
-    return createElement(as, { className, id, ...(label ? { 'aria-label': label } : {}) }, children);
+    return createElement(
+      as,
+      {
+        className,
+        id,
+        // skip link가 <main>으로 포커스를 옮기려면 포커스 가능해야 한다.
+        // 없으면 링크만 이동하고 다음 Tab은 헤더로 되돌아간다.
+        ...(as === 'main' ? { tabIndex: -1 } : {}),
+        ...(label ? { 'aria-label': label } : {}),
+      },
+      children,
+    );
   }
   return <View nativeID={id} accessibilityLabel={label}>{children}</View>;
 }
@@ -82,9 +97,20 @@ export function SeoPageShell({
   readonly children: ReactNode;
   readonly wide?: boolean | undefined;
 }): ReactElement {
+  // 랜딩·문서 허브와 같은 훅을 써서 페이지를 옮겨도 선택한 테마가 유지된다.
+  const { colorScheme, toggleColorScheme } = useSiteColorScheme();
+  useDocumentChrome(siteThemes[colorScheme].colors.background);
+
   return (
-    <UiProvider theme={siteThemes} colorScheme="light" strings={koStrings} icons={siteIcons}>
-      <SeoPageFrame breadcrumbs={breadcrumbs} wide={wide}>{children}</SeoPageFrame>
+    <UiProvider theme={siteThemes} colorScheme={colorScheme} strings={koStrings} icons={siteIcons}>
+      <SeoPageFrame
+        breadcrumbs={breadcrumbs}
+        wide={wide}
+        colorScheme={colorScheme}
+        onToggleColorScheme={toggleColorScheme}
+      >
+        {children}
+      </SeoPageFrame>
     </UiProvider>
   );
 }
@@ -92,10 +118,14 @@ export function SeoPageShell({
 function SeoPageFrame({
   breadcrumbs,
   children,
+  colorScheme,
+  onToggleColorScheme,
   wide,
 }: {
   readonly breadcrumbs: readonly BreadcrumbItem[];
   readonly children: ReactNode;
+  readonly colorScheme: ColorScheme;
+  readonly onToggleColorScheme: () => void;
   readonly wide: boolean;
 }): ReactElement {
   const theme = useTheme();
@@ -103,9 +133,6 @@ function SeoPageFrame({
   const compactHeader = width < 760;
   const pathname = usePathname();
   const mainContentId = `main-content-${useId().replace(/[^a-zA-Z0-9_-]/g, '')}`;
-  const componentPath = breadcrumbs.some(
-    (item) => item.href === '/docs/components' || item.label.startsWith('컴포넌트'),
-  );
 
   useEffect(() => {
     if (Platform.OS !== 'web') return;
@@ -129,12 +156,16 @@ function SeoPageFrame({
             <View style={[styles.footer, { borderTopColor: theme.colors.line }]}>
               <View style={styles.footerIdentity}>
                 <RNText style={[styles.footerBrand, { color: theme.colors.text }]}>@gj-kit/expo-ui</RNText>
-                <RNText style={[styles.footerCopy, { color: theme.colors.textMuted }]}>MIT · Type-safe primitives for Expo and React Native.</RNText>
+                <RNText style={[styles.footerCopy, { color: theme.colors.textMuted }]}>Type-safe primitives for Expo and React Native.</RNText>
               </View>
               <View style={styles.footerLinks}>
-                <TextLink href="/docs/components" subtle>컴포넌트 31종</TextLink>
+                <TextLink href="/docs/components" subtle>컴포넌트 {componentSeoEntries.length}종</TextLink>
                 <TextLink href="/docs/accessibility" subtle>접근성</TextLink>
                 <TextLink href="/docs/theming" subtle>테마</TextLink>
+                <TextLink href="/docs/tailwind" subtle>Tailwind</TextLink>
+                <TextLink href="/docs/insets-keyboard" subtle>Safe area</TextLink>
+                <TextLink href="/docs/type-safety" subtle>타입 안전</TextLink>
+                <TextLink href={LICENSE_URL} subtle>MIT 라이선스 ↗</TextLink>
               </View>
             </View>
           </ContentFrame>
@@ -180,17 +211,40 @@ function SeoPageFrame({
 
             <Semantic as="nav" label="주요 문서">
               <View style={styles.headerNav}>
-                <HeaderNavLink href="/docs" label="Docs" active={!componentPath} compact={compactHeader} />
-                <HeaderNavLink href="/docs/components" label="Components" active={componentPath} compact={compactHeader} />
-                {!compactHeader ? (
-                  <HeaderNavLink href="/docs/getting-started" label="Getting started" />
-                ) : null}
-                <HeaderNavLink
-                  href="https://www.npmjs.com/package/@gj-kit/expo-ui"
-                  label="npm ↗"
-                  compact={compactHeader}
-                  emphasis
-                />
+                {SITE_NAV_LINKS.map((item) => {
+                  // 좁은 헤더에서는 Getting started를 접는다. 링크는 히어로와 푸터에 남는다.
+                  if (compactHeader && item.href === '/docs/getting-started') return null;
+                  // 실제 경로로 판정한다. 전에는 "컴포넌트 페이지가 아니면 Docs"라서
+                  // 가이드·404·_sitemap에서도 Docs에 aria-current="page"가 붙었다.
+                  const active =
+                    item.href === '/docs/components'
+                      ? pathname.startsWith('/docs/components')
+                      : pathname === item.href;
+                  return (
+                    <HeaderNavLink
+                      key={item.href}
+                      href={item.href}
+                      label={item.label}
+                      active={active}
+                      compact={compactHeader}
+                      emphasis={item.emphasis}
+                    />
+                  );
+                })}
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={colorScheme === 'light' ? '다크 모드로 전환' : '라이트 모드로 전환'}
+                  onPress={onToggleColorScheme}
+                  style={StyleSheet.flatten([
+                    styles.headerNavLink,
+                    styles.themeToggle,
+                    { borderColor: theme.colors.line },
+                  ])}
+                >
+                  <RNText aria-hidden style={[styles.themeToggleGlyph, { color: theme.colors.text }]}>
+                    {colorScheme === 'light' ? '☾' : '☀'}
+                  </RNText>
+                </Pressable>
               </View>
             </Semantic>
           </ContentFrame>
@@ -333,10 +387,18 @@ export function SeoSection({
   readonly title: string;
   readonly children: ReactNode;
 }): ReactElement {
+  const theme = useTheme();
   return (
     <Semantic as="section">
       <View style={styles.section}>
-        <RNText accessibilityRole="header" aria-level={2} style={styles.sectionTitle}>{title}</RNText>
+        <RNText
+          accessibilityRole="header"
+          aria-level={2}
+          // 색 토큰을 빼면 다크 모드에서 검은 제목이 검은 배경에 얹힌다.
+          style={[styles.sectionTitle, { color: theme.colors.text }]}
+        >
+          {title}
+        </RNText>
         {children}
       </View>
     </Semantic>
@@ -365,11 +427,263 @@ export function BulletList({ items }: { readonly items: readonly string[] }): Re
   );
 }
 
-export function CodePanel({ code, label = 'TypeScript' }: { readonly code: string; readonly label?: string | undefined }): ReactElement {
+/** 실제 컴포넌트를 렌더하는 미리보기 캔버스. 코드 블록보다 먼저 보여야 한다. */
+export function PreviewPanel({
+  children,
+  note,
+}: {
+  readonly children: ReactNode;
+  readonly note?: string | undefined;
+}): ReactElement {
   const theme = useTheme();
   return (
+    <View style={[styles.previewPanel, { backgroundColor: theme.colors.surface, borderColor: theme.colors.line }]}>
+      <View style={styles.previewTopline}>
+        <RNText style={[styles.previewEyebrow, { color: theme.colors.primaryStrong }]}>LIVE PREVIEW</RNText>
+        <RNText style={[styles.previewHint, { color: theme.colors.textMuted }]}>
+          문서용 목업이 아니라 설치되는 패키지의 실제 컴포넌트입니다.
+        </RNText>
+      </View>
+      <View style={[styles.previewCanvas, { backgroundColor: theme.colors.background, borderColor: theme.colors.line }]}>
+        {children}
+      </View>
+      {note ? <RNText style={[styles.previewHint, { color: theme.colors.textMuted }]}>{note}</RNText> : null}
+    </View>
+  );
+}
+
+export type PropRow = {
+  readonly name: string;
+  readonly type: string;
+  readonly required: boolean;
+  /** 판별 유니언의 한 갈래에서만 필요한 prop (Chip의 onRemove, Link의 href 등). */
+  readonly conditional?: boolean | undefined;
+  readonly description?: string | undefined;
+};
+
+/**
+ * props 표. 내용은 scripts/generate-props.mjs가 라이브러리의 실제 타입에서
+ * 뽑아내므로 손으로 고치지 않는다. 웹에서는 진짜 <table>로 렌더해 스크린리더와
+ * 검색 엔진이 행·열 관계를 읽을 수 있게 한다.
+ */
+export function PropsTable({
+  rows,
+  typeName,
+  inheritsPlatformProps = false,
+}: {
+  readonly rows: readonly PropRow[];
+  readonly typeName: string;
+  readonly inheritsPlatformProps?: boolean | undefined;
+}): ReactElement {
+  const theme = useTheme();
+
+  const conditionalCount = rows.filter((row) => row.conditional).length;
+  const caption =
+    `${typeName} — ${rows.length}개 prop · 필수 ${rows.filter((row) => row.required).length}개` +
+    (conditionalCount > 0 ? ` · 조건부 ${conditionalCount}개` : '');
+
+  if (Platform.OS === 'web') {
+    const cell = (content: ReactNode, extra?: Record<string, unknown>) =>
+      createElement(
+        'td',
+        {
+          style: {
+            borderTop: `1px solid ${theme.colors.line}`,
+            padding: '12px 14px',
+            verticalAlign: 'top',
+            ...(extra ?? {}),
+          },
+        },
+        content,
+      );
+
+    return createElement(
+      'div',
+      { style: { overflowX: 'auto', width: '100%' } },
+      createElement(
+        'table',
+        {
+          style: {
+            borderCollapse: 'collapse',
+            fontSize: 13,
+            minWidth: 560,
+            textAlign: 'left',
+            width: '100%',
+          },
+        },
+        createElement(
+          'caption',
+          {
+            style: {
+              color: theme.colors.textMuted,
+              fontSize: 12,
+              paddingBottom: 10,
+              textAlign: 'left',
+            },
+          },
+          caption,
+        ),
+        createElement(
+          'thead',
+          null,
+          createElement(
+            'tr',
+            { style: { color: theme.colors.textMuted } },
+            ...['Prop', 'Type', '필수', '설명'].map((heading) =>
+              createElement(
+                'th',
+                {
+                  key: heading,
+                  scope: 'col',
+                  style: { fontSize: 11, letterSpacing: 0.4, padding: '0 14px 10px', textTransform: 'uppercase' },
+                },
+                heading,
+              ),
+            ),
+          ),
+        ),
+        createElement(
+          'tbody',
+          null,
+          ...rows.map((row) =>
+            createElement(
+              'tr',
+              { key: row.name },
+              createElement(
+                'th',
+                {
+                  scope: 'row',
+                  style: {
+                    borderTop: `1px solid ${theme.colors.line}`,
+                    color: theme.colors.text,
+                    fontFamily: MONO_STACK,
+                    fontSize: 12.5,
+                    fontWeight: 700,
+                    padding: '12px 14px',
+                    textAlign: 'left',
+                    verticalAlign: 'top',
+                    whiteSpace: 'nowrap',
+                  },
+                },
+                row.name,
+              ),
+              cell(
+                createElement(
+                  'code',
+                  { style: { color: theme.colors.primaryStrong, fontFamily: MONO_STACK, fontSize: 12 } },
+                  row.type,
+                ),
+                { maxWidth: 320 },
+              ),
+              cell(
+                row.required
+                  ? createElement(
+                      'span',
+                      { style: { color: theme.colors.danger, fontSize: 11, fontWeight: 800 } },
+                      '필수',
+                    )
+                  : row.conditional
+                    ? createElement(
+                        'span',
+                        {
+                          style: { color: theme.colors.warning, fontSize: 11, fontWeight: 800 },
+                          title: '판별 유니언의 특정 갈래에서만 필요합니다.',
+                        },
+                        '조건부',
+                      )
+                    : createElement('span', { style: { color: theme.colors.textSubtle, fontSize: 11 } }, '—'),
+                { whiteSpace: 'nowrap' },
+              ),
+              cell(
+                createElement(
+                  'span',
+                  { style: { color: theme.colors.textMuted, lineHeight: 1.65 } },
+                  row.description ?? '',
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+      inheritsPlatformProps
+        ? createElement(
+            'p',
+            { style: { color: theme.colors.textMuted, fontSize: 12, marginTop: 12 } },
+            'React Native의 기본 props도 그대로 전달됩니다. 위 표는 이 라이브러리가 추가한 계약만 보여줍니다.',
+          )
+        : null,
+    );
+  }
+
+  return (
+    <View style={styles.propsList}>
+      <RNText style={[styles.propsCaption, { color: theme.colors.textMuted }]}>{caption}</RNText>
+      {rows.map((row) => (
+        <View key={row.name} style={[styles.propsRow, { borderTopColor: theme.colors.line }]}>
+          <RNText style={[styles.propName, { color: theme.colors.text }]}>
+            {row.name}
+            {row.required ? ' (필수)' : row.conditional ? ' (조건부)' : ''}
+          </RNText>
+          <RNText style={[styles.propType, { color: theme.colors.primaryStrong }]}>{row.type}</RNText>
+          {row.description ? (
+            <RNText style={[styles.propDescription, { color: theme.colors.textMuted }]}>{row.description}</RNText>
+          ) : null}
+        </View>
+      ))}
+    </View>
+  );
+}
+
+const MONO_STACK = 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace';
+
+function useCopy(text: string): { readonly copied: boolean; readonly copy: () => void } {
+  const [copied, setCopied] = useState(false);
+  const copy = () => {
+    if (Platform.OS !== 'web') return;
+    void navigator.clipboard?.writeText(text).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1600);
+    });
+  };
+  return { copied, copy };
+}
+
+/** 설치 명령처럼 그대로 붙여넣어야 하는 한 줄. 선택 대신 버튼으로 복사한다. */
+export function CommandBlock({ command }: { readonly command: string }): ReactElement {
+  const theme = useTheme();
+  const { copied, copy } = useCopy(command);
+  return (
+    <View style={styles.commandBlock}>
+      <RNText style={styles.commandPrompt}>$</RNText>
+      <RNText selectable style={styles.commandText}>{command}</RNText>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={`${command} 복사`}
+        onPress={copy}
+        style={[styles.copyButton, { backgroundColor: theme.colors.primary }]}
+      >
+        <RNText style={[styles.copyLabel, { color: theme.colors.onPrimary }]}>{copied ? 'COPIED' : 'COPY'}</RNText>
+      </Pressable>
+    </View>
+  );
+}
+
+export function CodePanel({ code, label = 'TypeScript' }: { readonly code: string; readonly label?: string | undefined }): ReactElement {
+  const theme = useTheme();
+  const { copied, copy } = useCopy(code);
+  return (
     <View style={[styles.codePanel, { backgroundColor: '#121724', borderColor: theme.colors.line }]}>
-      <RNText style={styles.codeLabel}>{label}</RNText>
+      <View style={styles.codeTopline}>
+        <RNText style={styles.codeLabel}>{label}</RNText>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="예제 코드 복사"
+          onPress={copy}
+          style={styles.codeCopyButton}
+        >
+          <RNText style={styles.codeCopyLabel}>{copied ? 'COPIED' : 'COPY'}</RNText>
+        </Pressable>
+      </View>
       {Platform.OS === 'web' ? (
         createElement(
           'pre',
@@ -443,13 +757,56 @@ function SeoLinkCard({
   );
 }
 
+/** 문서 끝에서 목록으로 되돌아가지 않고 이웃 컴포넌트로 바로 넘어가는 이동 줄. */
+export function AdjacentNav({
+  previous,
+  next,
+}: {
+  readonly previous?: { readonly href: string; readonly label: string } | undefined;
+  readonly next?: { readonly href: string; readonly label: string } | undefined;
+}): ReactElement | null {
+  const theme = useTheme();
+  if (!previous && !next) return null;
+
+  const item = (
+    target: { readonly href: string; readonly label: string },
+    direction: 'previous' | 'next',
+  ) => (
+    <Link href={target.href as Href} asChild>
+      <Pressable
+        accessibilityRole="link"
+        accessibilityLabel={`${direction === 'previous' ? '이전' : '다음'} 컴포넌트: ${target.label}`}
+        style={StyleSheet.flatten([
+          styles.adjacentItem,
+          { backgroundColor: theme.colors.surface, borderColor: theme.colors.line },
+          direction === 'next' ? styles.adjacentItemEnd : null,
+        ])}
+      >
+        <RNText style={[styles.adjacentDirection, { color: theme.colors.textMuted }]}>
+          {direction === 'previous' ? '← 이전' : '다음 →'}
+        </RNText>
+        <RNText style={[styles.adjacentLabel, { color: theme.colors.text }]}>{target.label}</RNText>
+      </Pressable>
+    </Link>
+  );
+
+  return (
+    <Semantic as="nav" label="이웃 컴포넌트">
+      <View style={styles.adjacentRow}>
+        {previous ? item(previous, 'previous') : <View style={styles.adjacentSpacer} />}
+        {next ? item(next, 'next') : <View style={styles.adjacentSpacer} />}
+      </View>
+    </Semantic>
+  );
+}
+
 export function ReleaseNotice({ version }: { readonly version: string }): ReactElement {
   const theme = useTheme();
   return (
     <Surface padding="lg" style={[styles.releaseNotice, { borderColor: theme.colors.warning }]}>
-      <RNText style={[styles.releaseTitle, { color: theme.colors.warning }]}>v{version} 공개 예정</RNText>
+      <RNText style={[styles.releaseTitle, { color: theme.colors.warning }]}>v{version} 공개 예정 · 지금은 설치할 수 없습니다</RNText>
       <Text role="caption" color="textMuted">
-        이 컴포넌트는 현재 소스에 포함된 다음 릴리스 미리보기입니다. npm latest에 반영될 때까지 검색 색인에서 제외됩니다.
+        이 컴포넌트는 소스에만 있는 다음 릴리스 미리보기입니다. 현재 npm에 공개된 버전에는 이 export가 없어 지금 설치하면 import가 실패합니다. 아래 미리보기는 워크스페이스 소스로 렌더한 것이며, 이 페이지는 공개 전까지 검색 색인에서 제외됩니다.
       </Text>
     </Surface>
   );
@@ -486,6 +843,8 @@ const styles = StyleSheet.create({
   },
   headerNavLinkCompact: { paddingHorizontal: 8 },
   headerNavLabel: { fontSize: 13, fontWeight: '800' },
+  themeToggle: { borderWidth: 1, marginLeft: 4, minWidth: 44, paddingHorizontal: 10 },
+  themeToggleGlyph: { fontSize: 15, fontWeight: '800', lineHeight: 20 },
   textLink: { alignSelf: 'flex-start', justifyContent: 'center', minHeight: 36 },
   textLinkLabel: { fontSize: 13, fontWeight: '700' },
   breadcrumbs: { alignItems: 'center', flexDirection: 'row', flexWrap: 'wrap', gap: 8, paddingTop: 24 },
@@ -506,8 +865,44 @@ const styles = StyleSheet.create({
   sectionTitle: { fontSize: 24, fontWeight: '800', lineHeight: 32 },
   paragraph: { fontSize: 15, lineHeight: 26 },
   nativeList: { gap: 8 },
+  propsList: { gap: 2, width: '100%' },
+  propsCaption: { fontSize: 12, paddingBottom: 8 },
+  propsRow: { borderTopWidth: 1, gap: 4, paddingVertical: 12 },
+  propName: { fontFamily: 'monospace', fontSize: 13, fontWeight: '800' },
+  propType: { fontFamily: 'monospace', fontSize: 12 },
+  propDescription: { fontSize: 13, lineHeight: 21 },
+  previewPanel: { borderRadius: 18, borderWidth: 1, gap: 12, padding: 18, width: '100%' },
+  previewTopline: { gap: 4 },
+  previewEyebrow: { fontSize: 10, fontWeight: '900', letterSpacing: 1.2 },
+  previewHint: { fontSize: 12, lineHeight: 19 },
+  previewCanvas: { borderRadius: 14, borderWidth: 1, gap: 14, minWidth: 0, padding: 20 },
+  commandBlock: {
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    backgroundColor: '#121724',
+    borderRadius: 12,
+    flexDirection: 'row',
+    gap: 12,
+    maxWidth: '100%',
+    minHeight: 46,
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+  },
+  commandPrompt: { color: '#9FF5D1', fontFamily: 'monospace', fontSize: 13, fontWeight: '900' },
+  commandText: { color: '#FFFFFF', flexShrink: 1, fontFamily: 'monospace', fontSize: 13, fontWeight: '700' },
+  copyButton: { borderRadius: 8, justifyContent: 'center', minHeight: 32, paddingHorizontal: 12 },
+  copyLabel: { fontSize: 10, fontWeight: '900', letterSpacing: 0.6 },
   codePanel: { borderRadius: 14, borderWidth: 1, gap: 12, overflow: 'hidden', padding: 20 },
+  codeTopline: { alignItems: 'center', flexDirection: 'row', gap: 12, justifyContent: 'space-between' },
   codeLabel: { color: '#8FA4C7', fontSize: 10, fontWeight: '800', letterSpacing: 1.2 },
+  codeCopyButton: {
+    backgroundColor: 'rgba(143, 164, 199, 0.16)',
+    borderRadius: 8,
+    justifyContent: 'center',
+    minHeight: 30,
+    paddingHorizontal: 11,
+  },
+  codeCopyLabel: { color: '#C8D6EC', fontSize: 10, fontWeight: '900', letterSpacing: 0.6 },
   codeText: { color: '#E7ECF5', fontFamily: 'monospace', fontSize: 13, lineHeight: 22 },
   linkGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 16 },
   linkCardPressable: { flexBasis: 280, flexGrow: 1, minWidth: 260 },
@@ -517,6 +912,22 @@ const styles = StyleSheet.create({
   linkCardBadge: { fontSize: 10, fontWeight: '800' },
   linkCardDescription: { fontSize: 14, lineHeight: 22, marginTop: 10 },
   linkCardArrow: { fontSize: 12, fontWeight: '800', marginTop: 'auto', paddingTop: 18 },
+  adjacentRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 12, paddingTop: 26 },
+  adjacentItem: {
+    borderRadius: 14,
+    borderWidth: 1,
+    flexBasis: 220,
+    flexGrow: 1,
+    gap: 5,
+    justifyContent: 'center',
+    minHeight: 72,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+  },
+  adjacentItemEnd: { alignItems: 'flex-end' },
+  adjacentSpacer: { flexBasis: 220, flexGrow: 1 },
+  adjacentDirection: { fontSize: 11, fontWeight: '800' },
+  adjacentLabel: { fontSize: 15, fontWeight: '800' },
   releaseNotice: { borderWidth: 1, gap: 6, marginBottom: 8 },
   releaseTitle: { fontSize: 13, fontWeight: '900' },
   footer: {

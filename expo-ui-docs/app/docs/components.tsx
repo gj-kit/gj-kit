@@ -15,6 +15,7 @@ import {
   Badge,
   Button,
   Checkbox,
+  Pagination,
   ProgressBar,
   Surface,
   Text,
@@ -36,6 +37,7 @@ import {
   webPageSchema,
 } from '../../src/seo';
 import {
+  CommandBlock,
   SeoLinkGrid,
   SeoPageHeading,
   SeoPageShell,
@@ -43,16 +45,17 @@ import {
 } from '../../src/seo-page';
 
 const PATH = '/docs/components';
-const TITLE = 'Expo UI 컴포넌트 31종 | GJ Kit Expo UI';
-const DESCRIPTION =
-  '소스에 포함된 Expo·React Native·Web용 TypeScript UI 컴포넌트 31종의 예제, 접근성, 테마 연동과 릴리스 상태를 확인하세요.';
 const ALL_CATEGORIES = '전체';
 
 type ReleaseFilter = 'all' | 'released' | 'preview';
 
 const categories = Array.from(new Set(componentSeoEntries.map((entry) => entry.category)));
+const componentCount = componentSeoEntries.length;
 const releasedCount = componentSeoEntries.filter(isReleasedComponent).length;
-const previewCount = componentSeoEntries.length - releasedCount;
+const previewCount = componentCount - releasedCount;
+const TITLE = `Expo UI 컴포넌트 ${componentCount}종 | GJ Kit Expo UI`;
+const DESCRIPTION =
+  `소스에 포함된 Expo·React Native·Web용 TypeScript UI 컴포넌트 ${componentCount}종의 예제, 접근성, 테마 연동과 릴리스 상태를 확인하세요.`;
 
 function CssLayout({
   className,
@@ -120,7 +123,7 @@ export default function ComponentsIndexPage(): ReactElement {
         breadcrumbs={[
           { label: '홈', href: '/' },
           { label: '문서', href: '/docs' },
-          { label: '컴포넌트 31종' },
+          { label: `컴포넌트 ${componentCount}종` },
         ]}
       >
         <CssLayout
@@ -130,13 +133,15 @@ export default function ComponentsIndexPage(): ReactElement {
           <View>
             <SeoPageHeading
               eyebrow="COMPONENT LIBRARY"
-              title="Expo·React Native UI 컴포넌트 31종"
+              title={`Expo·React Native UI 컴포넌트 ${componentCount}종`}
               description="하나의 타입 시스템과 테마 토큰으로 iOS, Android, Web UI를 조립하세요. 각 문서에서 최소 예제, 접근성 동작과 릴리스 상태를 바로 확인할 수 있습니다."
+              preview={previewCount > 0
+                ? `npm v${publishedPackageVersion} · v0.4 소스 미리보기 ${previewCount}종`
+                : undefined}
             />
             <ProofGrid />
             <View style={styles.installRow}>
-              <RNText style={styles.installPrompt}>$</RNText>
-              <RNText selectable style={styles.installCommand}>pnpm add @gj-kit/expo-ui</RNText>
+              <CommandBlock command="pnpm add @gj-kit/expo-ui" />
             </View>
           </View>
 
@@ -165,6 +170,22 @@ export default function ComponentsIndexPage(): ReactElement {
                 resultCount={visibleEntries.length}
               />
 
+              {/*
+                라이브 리전은 조건 분기 바깥에 항상 마운트돼 있어야 한다. 전에는
+                결과 0건이 되면 EmptyResults가 새로 마운트되면서 스크린리더가
+                아무것도 알리지 않았고, 카운터도 "12 / 49" 숫자쌍만 읽었다.
+              */}
+              <RNText
+                accessibilityLiveRegion="polite"
+                aria-live="polite"
+                role="status"
+                style={styles.visuallyHidden}
+              >
+                {visibleEntries.length === 0
+                  ? '일치하는 컴포넌트가 없습니다. 검색어나 카테고리, 릴리스 상태를 바꿔 보세요.'
+                  : `컴포넌트 ${visibleEntries.length}개를 찾았습니다. 전체 ${componentSeoEntries.length}개 중.`}
+              </RNText>
+
               {visibleEntries.length > 0 ? (
                 <View style={styles.gridTopGap}>
                   <ComponentGrid entries={visibleEntries} />
@@ -191,18 +212,32 @@ export default function ComponentsIndexPage(): ReactElement {
 }
 
 function ProofGrid(): ReactElement {
-  const proof = [
-    { value: String(componentSeoEntries.length), label: 'npm components' },
-    { value: '31', label: 'semantic colors' },
-    { value: '4', label: 'entry points' },
-    { value: '0', label: 'direct deps' },
-  ];
+  const theme = useTheme();
+  const proof = previewCount > 0
+    ? [
+        { value: String(componentCount), label: 'source components' },
+        { value: String(releasedCount), label: `npm v${publishedPackageVersion} stable` },
+        { value: String(previewCount), label: 'source previews' },
+        { value: '625', label: '534 unit + 91 type' },
+      ]
+    : [
+        { value: String(releasedCount), label: 'npm components' },
+        { value: '31', label: 'semantic colors' },
+        { value: '4', label: 'entry points' },
+        { value: '0', label: 'direct deps' },
+      ];
   return (
     <CssLayout className="seo-proof-grid" fallbackStyle={styles.proofFallback}>
       {proof.map((item) => (
-        <View key={item.label} style={styles.proofItem}>
-          <RNText style={styles.proofValue}>{item.value}</RNText>
-          <RNText style={styles.proofLabel}>{item.label}</RNText>
+        <View
+          key={item.label}
+          style={[
+            styles.proofItem,
+            { backgroundColor: theme.colors.surface, borderColor: theme.colors.line },
+          ]}
+        >
+          <RNText style={[styles.proofValue, { color: theme.colors.text }]}>{item.value}</RNText>
+          <RNText style={[styles.proofLabel, { color: theme.colors.textMuted }]}>{item.label}</RNText>
         </View>
       ))}
     </CssLayout>
@@ -217,6 +252,7 @@ function SourceShowcase({
   readonly onCheckedChange: (checked: boolean) => void;
 }): ReactElement {
   const theme = useTheme();
+  const [page, setPage] = useState(1);
   return (
     <Surface
       padding="xl"
@@ -250,6 +286,19 @@ function SourceShowcase({
           size="sm"
         />
       </View>
+      <Pagination
+        mode="numbered"
+        countMode="pages"
+        accessibilityLabel="컴포넌트 미리보기 페이지"
+        page={page}
+        pageCount={3}
+        siblingCount={0}
+        size="sm"
+        getPageAccessibilityLabel={({ page, current }) =>
+          `${page}페이지${current ? ' (현재)' : ''}`
+        }
+        onPageChange={setPage}
+      />
       <Button
         label={checked ? '상태 바꾸기' : '다시 확인하기'}
         onPress={() => onCheckedChange(!checked)}
@@ -320,7 +369,7 @@ function CategoryRail({
         <RNText style={[styles.railNoteCopy, { color: theme.colors.textMuted }]}>
           {previewCount > 0
             ? '미리보기 항목은 npm 공개 전까지 상세 페이지가 검색에서 제외됩니다.'
-            : '31개 컴포넌트가 모두 공개되어 설치와 검색 색인이 가능합니다.'}
+            : `${releasedCount}개 컴포넌트가 모두 공개되어 설치와 검색 색인이 가능합니다.`}
         </RNText>
       </View>
     </Surface>
@@ -417,11 +466,8 @@ function CatalogToolbar({
         </View>
       ) : null}
 
-      <RNText
-        accessibilityLiveRegion="polite"
-        aria-live="polite"
-        style={[styles.toolbarCount, { color: theme.colors.textMuted }]}
-      >
+      {/* 시각 표시는 짧게, 안내는 그리드 옆의 단일 라이브 리전이 담당한다. */}
+      <RNText aria-hidden style={[styles.toolbarCount, { color: theme.colors.textMuted }]}>
         {resultCount} / {componentSeoEntries.length}
       </RNText>
     </Surface>
@@ -515,29 +561,15 @@ const styles = StyleSheet.create({
   heroFallback: { flexDirection: 'row', gap: 32 },
   proofFallback: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
   proofItem: {
-    backgroundColor: '#FFFFFF',
-    borderColor: '#E4E5ED',
     borderRadius: 12,
     borderWidth: 1,
     minHeight: 72,
     paddingHorizontal: 14,
     paddingVertical: 12,
   },
-  proofValue: { color: '#121320', fontSize: 20, fontWeight: '900', lineHeight: 24 },
-  proofLabel: { color: '#60657A', fontSize: 10, fontWeight: '800', marginTop: 4, textTransform: 'uppercase' },
-  installRow: {
-    alignItems: 'center',
-    alignSelf: 'flex-start',
-    backgroundColor: '#121320',
-    borderRadius: 12,
-    flexDirection: 'row',
-    gap: 10,
-    marginTop: 14,
-    minHeight: 42,
-    paddingHorizontal: 15,
-  },
-  installPrompt: { color: '#9FF5D1', fontFamily: 'monospace', fontSize: 13, fontWeight: '900' },
-  installCommand: { color: '#FFFFFF', fontFamily: 'monospace', fontSize: 12, fontWeight: '700' },
+  proofValue: { fontSize: 20, fontWeight: '900', lineHeight: 24 },
+  proofLabel: { fontSize: 10, fontWeight: '800', marginTop: 4, textTransform: 'uppercase' },
+  installRow: { alignSelf: 'flex-start', marginTop: 14 },
   showcase: { gap: 14, minWidth: 0 },
   showcaseTopline: { alignItems: 'center', flexDirection: 'row', flexWrap: 'wrap', gap: 8, justifyContent: 'space-between' },
   showcaseEyebrow: { fontSize: 10, fontWeight: '900', letterSpacing: 1.2 },
@@ -601,6 +633,8 @@ const styles = StyleSheet.create({
   filterCount: { fontSize: 10, fontWeight: '900' },
   toolbarCount: { fontSize: 11, fontWeight: '800', paddingBottom: 13 },
   gridTopGap: { marginTop: 16 },
+  // 스크린리더 전용. display:none이면 읽히지 않으므로 화면 밖으로 밀어낸다.
+  visuallyHidden: { height: 1, left: -9999, overflow: 'hidden', position: 'absolute', width: 1 },
   componentGridFallback: { flexDirection: 'row', flexWrap: 'wrap', gap: 16 },
   componentCardLink: { height: '100%' },
   componentCard: { flex: 1, minHeight: 218 },

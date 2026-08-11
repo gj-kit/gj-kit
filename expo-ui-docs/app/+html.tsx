@@ -60,13 +60,24 @@ const globalStyles = `
     top: 0;
   }
 
-  a:focus-visible {
+  /*
+   * react-native-web의 Pressable은 outline: none을 인라인으로 깔기 때문에
+   * <button>으로 렌더되는 필터·토글·리셋 컨트롤이 키보드 포커스 시 아무 표시도
+   * 남기지 않았다(WCAG 2.4.7). a와 동일한 링을 button·input·[tabindex]까지 넓힌다.
+   */
+  a:focus-visible,
+  button:focus-visible,
+  [role='button']:focus-visible,
+  [tabindex]:focus-visible,
+  input:focus-visible,
+  summary:focus-visible {
     border-radius: 14px;
-    outline: 3px solid rgba(74, 63, 224, 0.38);
+    outline: 3px solid var(--gj-focus-ring, rgba(74, 63, 224, 0.38)) !important;
     outline-offset: 3px;
   }
 
-  a:active {
+  a:active,
+  button:active {
     opacity: 0.72;
   }
 
@@ -172,15 +183,43 @@ const globalStyles = `
     }
   }
 
+  /*
+   * 카드 호버 규칙(.seo-component-grid a)은 명시도 0,1,1이라 a 선택자만 쓰던
+   * 이전 감소-모션 블록(0,0,1)에게 이겼다. 미디어 쿼리는 명시도를 더해 주지
+   * 않으므로 카탈로그 49장의 lift 애니메이션이 그대로 남았다. 전역 리셋으로 바꾼다.
+   */
   @media (prefers-reduced-motion: reduce) {
-    html {
-      scroll-behavior: auto;
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      scroll-behavior: auto !important;
+      transition-duration: 0.01ms !important;
     }
 
-    a,
-    .seo-skip-link {
-      transition: none;
+    .seo-component-grid a:hover,
+    .seo-link-grid a:hover {
+      box-shadow: none;
+      transform: none;
     }
+  }
+
+  /* 긴 한글 제목이 음절 단위로 끊기지 않게 한다. keep-all은 한 선택자에만 있었다. */
+  h1,
+  h2,
+  h3,
+  .seo-directory-hero h1 {
+    word-break: keep-all;
+  }
+
+  /* skip link가 실제로 포커스를 옮기도록 main을 프로그래매틱 포커스 대상으로 둔다. */
+  main[id^='main-content'] {
+    scroll-margin-top: 88px;
+  }
+
+  main:focus {
+    outline: none;
   }
 
   ::selection {
@@ -204,7 +243,6 @@ export default function Html({ children }: PropsWithChildren) {
         <meta name="format-detection" content="telephone=no" />
         <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
         <link rel="manifest" href="/site.webmanifest" />
-        <link rel="preconnect" href="https://www.npmjs.com" />
 
         <ScrollViewStyleReset />
         <style dangerouslySetInnerHTML={{ __html: globalStyles }} />

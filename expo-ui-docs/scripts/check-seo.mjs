@@ -45,9 +45,13 @@ function fail(message) {
   throw new Error(`SEO check failed: ${message}`);
 }
 
-if (catalog.publishedVersion !== libraryPackage.version) {
+// publishedVersion은 "지금 npm에 올라간 버전"이다. 저장소 버전은 changeset
+// version에서 먼저 오르고 publish는 별도로 하므로 둘이 같을 필요는 없다.
+// 막아야 하는 것은 반대 방향뿐이다 — 아직 릴리스되지 않은 버전을 공개됐다고
+// 주장하면 설치할 수 없는 컴포넌트가 검색에 색인된다.
+if (compareVersions(catalog.publishedVersion, libraryPackage.version) > 0) {
   fail(
-    `catalog publishedVersion ${catalog.publishedVersion} does not match package version ${libraryPackage.version}`,
+    `catalog publishedVersion ${catalog.publishedVersion} is ahead of package version ${libraryPackage.version}`,
   );
 }
 
@@ -180,8 +184,12 @@ const homeSchemas = [
 ].map((match) => JSON.parse(match[1]));
 const softwareSourceCode = homeSchemas.find((schema) => schema['@type'] === 'SoftwareSourceCode');
 if (!softwareSourceCode) fail('home page has no SoftwareSourceCode JSON-LD');
-if (softwareSourceCode.version !== libraryPackage.version) {
-  fail('home SoftwareSourceCode version does not match package version');
+// 홈이 광고하는 버전은 방문자가 지금 설치할 수 있는 것, 즉 npm 공개 버전이다.
+// 저장소 버전을 쓰면 아직 publish되지 않은 번호를 설치 가능한 것처럼 알린다.
+if (softwareSourceCode.version !== catalog.publishedVersion) {
+  fail(
+    `home SoftwareSourceCode version ${softwareSourceCode.version} does not match catalog publishedVersion ${catalog.publishedVersion}`,
+  );
 }
 
 const notFound = await readFile(path.join(distDir, '+not-found.html'), 'utf8');

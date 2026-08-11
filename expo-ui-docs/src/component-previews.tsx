@@ -82,7 +82,7 @@ function TextPreview(): ReactElement {
     <Stack>
       <Text role="heading">Heading</Text>
       <Text role="title">Title</Text>
-      <Text role="body">Body — 본문 문단에 쓰는 기본 역할입니다.</Text>
+      <Text role="body">Body — The default role for body paragraphs.</Text>
       <Text role="label">Label</Text>
       <Text role="button">Button</Text>
       <Text role="tab">Tab</Text>
@@ -106,7 +106,7 @@ function ButtonPreview(): ReactElement {
         <Button label="Destructive" variant="destructive" size="sm" onPress={() => {}} />
         <Button label="Disabled" size="sm" disabled onPress={() => {}} />
         <Button
-          label={loading ? '저장 중' : '눌러서 loading'}
+          label={loading ? 'Saving' : 'Press to load'}
           size="sm"
           loading={loading}
           onPress={() => {
@@ -129,14 +129,14 @@ function IconButtonPreview(): ReactElement {
   return (
     <Row>
       <IconButton
-        accessibilityLabel={starred ? '즐겨찾기 해제' : '즐겨찾기 추가'}
+        accessibilityLabel={starred ? 'Remove from favorites' : 'Add to favorites'}
         icon={sparkIcon}
         onPress={() => setStarred((value) => !value)}
       />
-      <IconButton accessibilityLabel="항목 추가" icon={plusIcon} onPress={() => {}} />
-      <IconButton accessibilityLabel="비활성 예시" icon={plusIcon} disabled onPress={() => {}} />
+      <IconButton accessibilityLabel="Add item" icon={plusIcon} onPress={() => {}} />
+      <IconButton accessibilityLabel="Disabled example" icon={plusIcon} disabled onPress={() => {}} />
       <Text role="caption" color="textMuted">
-        accessibilityLabel은 타입 단계에서 필수입니다.
+        accessibilityLabel is required at the type level.
       </Text>
     </Row>
   );
@@ -144,12 +144,12 @@ function IconButtonPreview(): ReactElement {
 
 function ChipPreview(): ReactElement {
   const [filtered, setFiltered] = useState(true);
-  const [tags, setTags] = useState<readonly string[]>(['접근성', '테마']);
+  const [tags, setTags] = useState<readonly string[]>(['Accessibility', 'Theming']);
   return (
     <Stack>
       <Row>
-        <Chip kind="action" label="액션 칩" onPress={() => {}} />
-        <Chip kind="filter" label="Preview만" selected={filtered} onSelectedChange={setFiltered} />
+        <Chip kind="action" label="Action chip" onPress={() => {}} />
+        <Chip kind="filter" label="Preview only" selected={filtered} onSelectedChange={setFiltered} />
       </Row>
       <Row>
         {tags.map((tag) => (
@@ -157,12 +157,12 @@ function ChipPreview(): ReactElement {
             key={tag}
             kind="removable"
             label={tag}
-            removeAccessibilityLabel={`${tag} 태그 제거`}
+            removeAccessibilityLabel={`Remove ${tag} tag`}
             onRemove={() => setTags((current) => current.filter((item) => item !== tag))}
           />
         ))}
         {tags.length === 0 ? (
-          <Button label="태그 되돌리기" size="sm" variant="secondary" onPress={() => setTags(['접근성', '테마'])} />
+          <Button label="Restore tags" size="sm" variant="secondary" onPress={() => setTags(['Accessibility', 'Theming'])} />
         ) : null}
       </Row>
     </Stack>
@@ -173,8 +173,8 @@ function FloatingActionButtonPreview(): ReactElement {
   const theme = useTheme();
   return (
     <View style={[styles.fabStage, { backgroundColor: theme.colors.surfaceSubtle }]}>
-      <Text role="caption" color="textMuted">화면 모서리에 고정되는 액션</Text>
-      <FloatingActionButton label="새 프로젝트" icon={plusIcon} onPress={() => {}} offset="lg" />
+      <Text role="caption" color="textMuted">An action pinned to the screen corner</Text>
+      <FloatingActionButton label="New project" icon={plusIcon} onPress={() => {}} offset="lg" />
     </View>
   );
 }
@@ -185,13 +185,13 @@ function ConfirmActionRowPreview(): ReactElement {
     <Stack>
       <ConfirmActionRow
         destructive
-        confirmLabel="삭제"
-        cancelLabel="취소"
+        confirmLabel="Delete"
+        cancelLabel="Cancel"
         onCancel={() => setState('cancelled')}
         onConfirm={() => setState('confirmed')}
       />
       <Text role="caption" color="textMuted">
-        {state === 'idle' ? '아직 선택하지 않았습니다.' : state === 'confirmed' ? '삭제를 확인했습니다.' : '취소했습니다.'}
+        {state === 'idle' ? 'Nothing selected yet.' : state === 'confirmed' ? 'Deletion confirmed.' : 'Cancelled.'}
       </Text>
     </Stack>
   );
@@ -200,17 +200,17 @@ function ConfirmActionRowPreview(): ReactElement {
 // ─── 입력 ───────────────────────────────────────────────────────────────────
 
 function TextFieldPreview(): ReactElement {
-  const [value, setValue] = useState('디자인 시스템 개편');
+  const [value, setValue] = useState('Design system refresh');
   return (
     <Stack>
       <TextField
-        label="프로젝트 이름"
+        label="Project name"
         value={value}
         onChangeText={setValue}
         counter={`${value.length}/30`}
-        helperText="라벨·헬퍼·카운터가 같은 토큰을 씁니다."
+        helperText="Label, helper text, and counter share the same tokens."
       />
-      <TextField label="에러 상태" value="" onChangeText={() => {}} error="필수 입력 항목입니다." />
+      <TextField label="Error state" value="" onChangeText={() => {}} error="This field is required." />
     </Stack>
   );
 }
@@ -221,7 +221,7 @@ function SearchFieldPreview(): ReactElement {
     <Stack>
       <SearchField value={query} onChangeText={setQuery} />
       <Text role="caption" color="textMuted">
-        {query ? `"${query}" 검색 중` : 'placeholder와 아이콘은 UiProvider에서 주입됩니다.'}
+        {query ? `Searching for "${query}"` : 'The placeholder and icon are injected from UiProvider.'}
       </Text>
     </Stack>
   );
@@ -232,11 +232,11 @@ function FormFieldPreview(): ReactElement {
   const invalid = email.length > 0 && !email.includes('@');
   return (
     <FormField
-      label="업무용 이메일"
+      label="Work email"
       required
-      requiredAccessibilityLabel="업무용 이메일 (필수)"
-      helperText="초대 메일을 받을 주소입니다."
-      {...(invalid ? { error: '@ 가 포함된 주소를 입력하세요.' } : {})}
+      requiredAccessibilityLabel="Work email (required)"
+      helperText="Where the invitation will be sent."
+      {...(invalid ? { error: 'Enter an address that contains @.' } : {})}
     >
       {(controlProps) => (
         <TextField value={email} onChangeText={setEmail} placeholder="you@team.com" {...controlProps} />
@@ -250,11 +250,11 @@ function SelectPreview(): ReactElement {
   const [value, setValue] = useState<'stable' | 'preview' | null>('stable');
   return (
     <Select
-      label="릴리스 채널"
-      placeholder="채널 선택"
+      label="Release channel"
+      placeholder="Select a channel"
       items={[
         { value: 'stable', label: 'Stable' },
-        { value: 'preview', label: 'Preview', description: '테스트 빌드' },
+        { value: 'preview', label: 'Preview', description: 'Test builds' },
       ] as const}
       value={value}
       onValueChange={setValue}
@@ -271,10 +271,10 @@ function CheckboxPreview(): ReactElement {
       <Checkbox
         checked={checked}
         onCheckedChange={setChecked}
-        label="이용 약관에 동의합니다"
-        description="mixed 상태도 boolean 입력으로 안전하게 전환합니다."
+        label="I agree to the terms of service"
+        description="The mixed state also resolves safely from boolean input."
       />
-      <Checkbox checked onCheckedChange={() => {}} label="비활성 예시" disabled />
+      <Checkbox checked onCheckedChange={() => {}} label="Disabled example" disabled />
     </Stack>
   );
 }
@@ -283,8 +283,8 @@ function SwitchPreview(): ReactElement {
   const [enabled, setEnabled] = useState(true);
   return (
     <Stack>
-      <Switch value={enabled} onValueChange={setEnabled} label="새 소식 알림" description="주 1회 발송됩니다." />
-      <Switch value={false} onValueChange={() => {}} label="비활성 예시" disabled size="sm" />
+      <Switch value={enabled} onValueChange={setEnabled} label="Product updates" description="Sent once a week." />
+      <Switch value={false} onValueChange={() => {}} label="Disabled example" disabled size="sm" />
     </Stack>
   );
 }
@@ -293,11 +293,11 @@ function RadioGroupPreview(): ReactElement {
   const [channel, setChannel] = useState<'push' | 'email' | 'sms'>('push');
   return (
     <RadioGroup
-      accessibilityLabel="알림 채널"
+      accessibilityLabel="Notification channel"
       items={[
-        { label: '푸시', value: 'push' },
-        { label: '이메일', value: 'email' },
-        { label: '문자', value: 'sms', disabled: true },
+        { label: 'Push', value: 'push' },
+        { label: 'Email', value: 'email' },
+        { label: 'SMS', value: 'sms', disabled: true },
       ] as const}
       value={channel}
       onValueChange={setChannel}
@@ -310,10 +310,10 @@ function SliderPreview(): ReactElement {
   return (
     <Stack>
       <View style={styles.labelRow}>
-        <Text role="label">알림 음량</Text>
+        <Text role="label">Notification volume</Text>
         <Text role="caption" color="textMuted">{volume}%</Text>
       </View>
-      <Slider value={volume} min={0} max={100} step={5} accessibilityLabel="알림 음량" onValueChange={setVolume} />
+      <Slider value={volume} min={0} max={100} step={5} accessibilityLabel="Notification volume" onValueChange={setVolume} />
     </Stack>
   );
 }
@@ -326,7 +326,7 @@ function SelectionIndicatorPreview(): ReactElement {
     <Row>
       <SelectionIndicator selected={selected} />
       <SelectionIndicator selected={!selected} showUncheckedMark />
-      <Button label="상태 바꾸기" size="sm" variant="secondary" onPress={() => setSelected((value) => !value)} />
+      <Button label="Toggle state" size="sm" variant="secondary" onPress={() => setSelected((value) => !value)} />
     </Row>
   );
 }
@@ -337,14 +337,14 @@ function SelectableRowPreview(): ReactElement {
     <Surface padding="md" radius="md">
       <SelectableRow selected={selected === 'weekly'} onPress={() => setSelected('weekly')}>
         <View style={styles.rowCopy}>
-          <Text role="label">주간 회고 알림</Text>
-          <Text role="caption" color="textMuted">매주 일요일 오후 8시</Text>
+          <Text role="label">Weekly review reminder</Text>
+          <Text role="caption" color="textMuted">Every Sunday at 8 PM</Text>
         </View>
       </SelectableRow>
       <SelectableRow selected={selected === 'product'} onPress={() => setSelected('product')}>
         <View style={styles.rowCopy}>
-          <Text role="label">제품 업데이트</Text>
-          <Text role="caption" color="textMuted">새로운 컴포넌트 소식</Text>
+          <Text role="label">Product updates</Text>
+          <Text role="caption" color="textMuted">New component releases</Text>
         </View>
       </SelectableRow>
     </Surface>
@@ -386,17 +386,17 @@ function ToggleGroupPreview(): ReactElement {
     <Stack>
       <ToggleGroup
         selectionMode="single"
-        accessibilityLabel="목록 밀도"
+        accessibilityLabel="List density"
         value={density}
         onValueChange={(next) => setDensity(next ?? 'comfortable')}
         allowEmpty={false}
         items={[
-          { label: '여유', value: 'spacious' },
-          { label: '기본', value: 'comfortable' },
-          { label: '압축', value: 'compact' },
+          { label: 'Spacious', value: 'spacious' },
+          { label: 'Default', value: 'comfortable' },
+          { label: 'Compact', value: 'compact' },
         ] as const}
       />
-      <Text role="caption" color="textMuted">선택: {density}</Text>
+      <Text role="caption" color="textMuted">Selected: {density}</Text>
     </Stack>
   );
 }
@@ -407,7 +407,7 @@ function TabsPreview(): ReactElement {
   const [tab, setTab] = useState<'preview' | 'code'>('preview');
   return (
     <Tabs
-      accessibilityLabel="미리보기 탭"
+      accessibilityLabel="Preview tabs"
       items={[
         { label: 'Preview', value: 'preview' },
         { label: 'Code', value: 'code' },
@@ -415,8 +415,8 @@ function TabsPreview(): ReactElement {
       value={tab}
       onChange={setTab}
       panels={{
-        preview: <Text color="textMuted">Preview 패널의 내용입니다.</Text>,
-        code: <Text color="textMuted">Code 패널의 내용입니다.</Text>,
+        preview: <Text color="textMuted">Contents of the Preview panel.</Text>,
+        code: <Text color="textMuted">Contents of the Code panel.</Text>,
       }}
     />
   );
@@ -426,9 +426,9 @@ function LinkPreview(): ReactElement {
   return (
     <Row>
       <Link href="https://www.npmjs.com/package/@gj-kit/expo-ui" target="_blank" rel="noopener noreferrer">
-        npm 패키지 열기
+        Open the npm package
       </Link>
-      <Link onPress={() => {}}>액션형 Link</Link>
+      <Link onPress={() => {}}>Action Link</Link>
     </Row>
   );
 }
@@ -436,8 +436,8 @@ function LinkPreview(): ReactElement {
 function CollapsiblePreview(): ReactElement {
   const [open, setOpen] = useState(true);
   return (
-    <Collapsible title="설치 요구 사항" open={open} onOpenChange={setOpen} variant="outlined">
-      <Text color="textMuted">React Native 0.79 이상, TypeScript 5.x. 런타임 의존성은 없습니다.</Text>
+    <Collapsible title="Installation requirements" open={open} onOpenChange={setOpen} variant="outlined">
+      <Text color="textMuted">React Native 0.79 or newer, TypeScript 5.x. No runtime dependencies.</Text>
     </Collapsible>
   );
 }
@@ -449,13 +449,13 @@ function AccordionPreview(): ReactElement {
       items={[
         {
           value: 'controlled',
-          title: '왜 controlled API인가요?',
-          content: <Text color="textMuted">앱 상태와 UI 상태가 언제나 한 방향으로 흐릅니다.</Text>,
+          title: 'Why a controlled API?',
+          content: <Text color="textMuted">App state and UI state always flow in one direction.</Text>,
         },
         {
           value: 'a11y',
-          title: '접근성은 어디까지 포함하나요?',
-          content: <Text color="textMuted">역할, 상태, 키보드 이동과 패널 관계를 기본 제공합니다.</Text>,
+          title: 'How much accessibility is built in?',
+          content: <Text color="textMuted">Roles, states, keyboard movement, and panel relationships come by default.</Text>,
         },
       ] as const}
       value={value}
@@ -470,12 +470,12 @@ function PaginationPreview(): ReactElement {
     <Pagination
       mode="numbered"
       countMode="items"
-      accessibilityLabel="결제 내역 페이지"
+      accessibilityLabel="Payment history pages"
       page={page}
       totalItemCount={128}
       pageSize={20}
       getPageAccessibilityLabel={({ page: target, current }) =>
-        current ? `${target}페이지, 현재 페이지` : `${target}페이지로 이동`
+        current ? `Page ${target}, current page` : `Go to page ${target}`
       }
       onPageChange={setPage}
     />
@@ -502,7 +502,7 @@ function CardPreview(): ReactElement {
     <Stack>
       <Card variant="outlined">
         <Text role="label">outlined</Text>
-        <Text role="caption" color="textMuted">기본값입니다.</Text>
+        <Text role="caption" color="textMuted">This is the default.</Text>
       </Card>
       <Card variant="elevated">
         <Text role="label">elevated</Text>
@@ -523,7 +523,7 @@ function AspectRatioPreview(): ReactElement {
           <RNText style={[styles.ratioLabel, { color: theme.colors.primaryStrong }]}>16 : 9</RNText>
         </View>
       </AspectRatio>
-      <Text role="caption" color="textMuted">ratio는 0보다 큰 유한수만 허용합니다.</Text>
+      <Text role="caption" color="textMuted">ratio accepts only a finite number greater than zero.</Text>
     </Stack>
   );
 }
@@ -535,7 +535,7 @@ function ContentFramePreview(): ReactElement {
       <ContentFrame maxWidth={360} center padding="lg">
         <Surface padding="lg" radius="md">
           <Text role="label">maxWidth=360 · center</Text>
-          <Text role="caption" color="textMuted">넓은 화면에서도 읽기 폭을 고정합니다.</Text>
+          <Text role="caption" color="textMuted">Keeps the reading width fixed even on wide screens.</Text>
         </Surface>
       </ContentFrame>
     </View>
@@ -545,12 +545,12 @@ function ContentFramePreview(): ReactElement {
 function SectionPreview(): ReactElement {
   return (
     <Section
-      title="결제 수단"
-      subtitle="기본 카드는 한 번에 하나만 지정됩니다."
-      actions={<Button label="추가" size="sm" variant="secondary" onPress={() => {}} />}
+      title="Payment methods"
+      subtitle="Only one card can be the default at a time."
+      actions={<Button label="Add" size="sm" variant="secondary" onPress={() => {}} />}
     >
       <Surface padding="lg" radius="md">
-        <Text color="textMuted">섹션 본문이 이 자리에 들어갑니다.</Text>
+        <Text color="textMuted">Section body goes here.</Text>
       </Surface>
     </Section>
   );
@@ -560,9 +560,9 @@ function StickyActionBarPreview(): ReactElement {
   const theme = useTheme();
   return (
     <View style={[styles.barStage, { backgroundColor: theme.colors.surfaceSubtle }]}>
-      <Text role="caption" color="textMuted">화면 하단에 고정되는 액션 영역</Text>
+      <Text role="caption" color="textMuted">An action area pinned to the bottom of the screen</Text>
       <StickyActionBar>
-        <Button label="변경 사항 저장" onPress={() => {}} />
+        <Button label="Save changes" onPress={() => {}} />
       </StickyActionBar>
     </View>
   );
@@ -571,16 +571,16 @@ function StickyActionBarPreview(): ReactElement {
 function DividerPreview(): ReactElement {
   return (
     <Surface padding="md" radius="md">
-      <Text role="label">위 항목</Text>
+      <Text role="label">Item above</Text>
       <Divider />
-      <Text role="label">가운데 항목</Text>
+      <Text role="label">Middle item</Text>
       <Divider inset="md" />
-      <Text role="label">inset="md" 아래 항목</Text>
+      <Text role="label">inset="md" Item below</Text>
     </Surface>
   );
 }
 
-// ─── 상태 · 진행 ────────────────────────────────────────────────────────────
+// ─── Status · 진행 ────────────────────────────────────────────────────────────
 
 function BadgePreview(): ReactElement {
   return (
@@ -598,11 +598,11 @@ function BadgePreview(): ReactElement {
 function AlertPreview(): ReactElement {
   return (
     <Stack>
-      <Alert title="테마가 저장되었습니다" variant="success" live="polite">
-        모든 새 화면에 semantic token이 즉시 반영됩니다.
+      <Alert title="Theme saved" variant="success" live="polite">
+        Semantic tokens apply immediately to every new screen.
       </Alert>
-      <Alert title="미리보기 API입니다" variant="warning">
-        npm latest에는 아직 포함되지 않았습니다.
+      <Alert title="This is a preview API" variant="warning">
+        Not included in npm latest yet.
       </Alert>
     </Stack>
   );
@@ -611,9 +611,9 @@ function AlertPreview(): ReactElement {
 function SpinnerPreview(): ReactElement {
   return (
     <Row>
-      <Spinner accessibilityLabel="불러오는 중" />
-      <Spinner accessibilityLabel="작게 불러오는 중" size="sm" />
-      <Text role="caption" color="textMuted">size는 테마 metric에서 옵니다.</Text>
+      <Spinner accessibilityLabel="Loading" />
+      <Spinner accessibilityLabel="Loading, small" size="sm" />
+      <Text role="caption" color="textMuted">size comes from the theme metrics.</Text>
     </Row>
   );
 }
@@ -622,8 +622,8 @@ function ProgressBarPreview(): ReactElement {
   const [value, setValue] = useState(72);
   return (
     <Stack>
-      <ProgressBar value={value} accessibilityLabel="문서 생성 진행률" />
-      <ProgressBar value={null} variant="info" accessibilityLabel="동기화 진행률" accessibilityValueText="동기화 중" />
+      <ProgressBar value={value} accessibilityLabel="Document build progress" />
+      <ProgressBar value={null} variant="info" accessibilityLabel="Sync progress" accessibilityValueText="Syncing" />
       <Row>
         <Button label="-10" size="sm" variant="secondary" onPress={() => setValue((v) => Math.max(0, v - 10))} />
         <Button label="+10" size="sm" variant="secondary" onPress={() => setValue((v) => Math.min(100, v + 10))} />
@@ -640,7 +640,7 @@ function AvatarPreview(): ReactElement {
     <Row>
       <Avatar name="Ada Lovelace" decorative />
       <Avatar name="Grace Hopper" decorative size="sm" />
-      <Text role="caption" color="textMuted">이름에서 이니셜과 색을 파생합니다.</Text>
+      <Text role="caption" color="textMuted">Initials and color derive from the name.</Text>
     </Row>
   );
 }
@@ -685,15 +685,15 @@ function SkeletonPreview(): ReactElement {
 function EmptyStatePreview(): ReactElement {
   return (
     <EmptyState
-      title="아직 프로젝트가 없어요"
-      body="첫 번째 프로젝트를 만들어보세요."
-      action={{ label: '프로젝트 만들기', onPress: () => {} }}
+      title="No projects yet"
+      body="Create your first project."
+      action={{ label: 'Create a project', onPress: () => {} }}
     />
   );
 }
 
 function ErrorStatePreview(): ReactElement {
-  return <ErrorState message="네트워크 연결을 확인해주세요." onRetry={() => {}} />;
+  return <ErrorState message="Check your network connection." onRetry={() => {}} />;
 }
 
 function ToastPreview(): ReactElement {
@@ -701,10 +701,10 @@ function ToastPreview(): ReactElement {
   return (
     <Stack>
       <View style={[styles.toastStage, { backgroundColor: theme.colors.surfaceSubtle }]}>
-        <Toast message="문서 상태를 저장했습니다." variant="success" bottomOffset={16} />
+        <Toast message="Document state saved." variant="success" bottomOffset={16} />
       </View>
       <Text role="caption" color="textMuted">
-        단일 Toast는 위치만 계산합니다. 큐가 필요하면 ToastViewport를 쓰세요.
+        A single Toast only computes position. Use ToastViewport when you need a queue.
       </Text>
     </Stack>
   );
@@ -716,19 +716,19 @@ function ToastViewportPreview(): ReactElement {
     <Stack>
       <Row>
         <Button
-          label="성공 알림"
+          label="Success toast"
           size="sm"
-          onPress={() => queue.show({ message: '문서 상태를 저장했습니다.', variant: 'success' })}
+          onPress={() => queue.show({ message: 'Document state saved.', variant: 'success' })}
         />
         <Button
-          label="에러 알림"
+          label="Error toast"
           size="sm"
           variant="destructive-outline"
-          onPress={() => queue.show({ message: '저장에 실패했습니다.', variant: 'error' })}
+          onPress={() => queue.show({ message: 'Saving failed.', variant: 'error' })}
         />
       </Row>
       <Text role="caption" color="textMuted">
-        최대 2개를 표시하고 나머지는 FIFO로 대기합니다. 표시 중 {queue.visibleToasts.length}개.
+        Shows at most two and queues the rest FIFO. Visible: {queue.visibleToasts.length}.
       </Text>
       <ToastViewport
         toasts={queue.visibleToasts}
@@ -747,21 +747,21 @@ function ToastViewportPreview(): ReactElement {
 type PreviewRow = { readonly id: string; readonly member: string; readonly amount: number; readonly status: string };
 
 const PREVIEW_ROWS: readonly PreviewRow[] = [
-  { id: 'a', member: '김하늘', amount: 128_000, status: '완료' },
-  { id: 'b', member: '이도윤', amount: 54_000, status: '대기' },
-  { id: 'c', member: '박서준', amount: 12_000, status: '실패' },
+  { id: 'a', member: 'Ada Lovelace', amount: 128_000, status: 'Paid' },
+  { id: 'b', member: 'Grace Hopper', amount: 54_000, status: 'Pending' },
+  { id: 'c', member: 'Alan Turing', amount: 12_000, status: 'Failed' },
 ];
 
 const PREVIEW_COLUMNS = [
-  { id: 'member', header: '고객', sortable: true, getTextValue: ({ row }) => row.member },
+  { id: 'member', header: 'Customer', sortable: true, getTextValue: ({ row }) => row.member },
   {
     id: 'amount',
-    header: '금액',
+    header: 'Amount',
     align: 'end',
     sortable: true,
     getTextValue: ({ row }) => `₩${row.amount.toLocaleString('ko-KR')}`,
   },
-  { id: 'status', header: '상태', getTextValue: ({ row }) => row.status },
+  { id: 'status', header: 'Status', getTextValue: ({ row }) => row.status },
 ] as const satisfies readonly DataTableColumn<PreviewRow, 'member' | 'amount' | 'status', string>[];
 
 function DataTablePreview(): ReactElement {
@@ -769,8 +769,8 @@ function DataTablePreview(): ReactElement {
   const [selected, setSelected] = useState<readonly string[]>(['a']);
   return (
     <DataTable
-      caption="최근 결제"
-      description="정렬 요청과 선택 상태만 바뀌며 행 순서는 앱이 계속 소유합니다."
+      caption="Recent payments"
+      description="Only the sort request and selection change; the app still owns row order."
       state={{ status: 'ready', rows: PREVIEW_ROWS }}
       columns={PREVIEW_COLUMNS}
       getRowKey={(row) => row.id}
@@ -780,9 +780,9 @@ function DataTablePreview(): ReactElement {
       selection={{
         selectedRowKeys: selected,
         onSelectionChange: setSelected,
-        getRowSelectionAccessibilityLabel: ({ row }) => `${row.member} 결제 선택`,
-        selectAllAccessibilityLabel: '표시된 결제 전체 선택',
-        clearSelectionAccessibilityLabel: '표시된 결제 선택 해제',
+        getRowSelectionAccessibilityLabel: ({ row }) => `Select payment from ${row.member}`,
+        selectAllAccessibilityLabel: 'Select all shown payments',
+        clearSelectionAccessibilityLabel: 'Clear selection of shown payments',
       }}
       presentation="auto"
       renderListRow={({ row }) => (
@@ -794,7 +794,7 @@ function DataTablePreview(): ReactElement {
           <Badge
             label={row.status}
             size="sm"
-            variant={row.status === '완료' ? 'success' : row.status === '대기' ? 'warning' : 'error'}
+            variant={row.status === 'Paid' ? 'success' : row.status === 'Pending' ? 'warning' : 'error'}
           />
         </View>
       )}
@@ -812,25 +812,25 @@ function DialogPreview(): ReactElement {
   const [visible, setVisible] = useState(false);
   return (
     <Stack>
-      <Button label="Dialog 열기" onPress={() => setVisible(true)} />
+      <Button label="Open Dialog" onPress={() => setVisible(true)} />
       <Dialog visible={visible} onDismiss={() => setVisible(false)}>
         <DialogPanel
-          title="프로젝트를 삭제할까요?"
-          description="이 작업은 되돌릴 수 없습니다."
+          title="Delete this project?"
+          description="This cannot be undone."
           footer={
             <ConfirmActionRow
               destructive
-              confirmLabel="삭제"
+              confirmLabel="Delete"
               onCancel={() => setVisible(false)}
               onConfirm={() => setVisible(false)}
             />
           }
         >
-          <Text color="textMuted">삭제하면 연결된 문서와 설정도 함께 사라집니다.</Text>
+          <Text color="textMuted">Deleting also removes the linked documents and settings.</Text>
         </DialogPanel>
       </Dialog>
       <Text role="caption" color="textMuted">
-        웹에서는 focus trap과 Escape, 네이티브에서는 Modal과 back 처리를 같은 API로 다룹니다.
+        Focus trap and Escape on web, Modal and Back on native, behind one API.
       </Text>
     </Stack>
   );
@@ -840,11 +840,11 @@ function DialogPanelPreview(): ReactElement {
   return (
     <Stack>
       <DialogPanel
-        title="독립 패널로도 쓸 수 있습니다"
-        description="Dialog 없이 렌더하면 닫기 버튼이 나타나지 않습니다."
-        footer={<Button label="확인" onPress={() => {}} />}
+        title="Usable as a standalone panel"
+        description="Rendered without Dialog, so no close button appears."
+        footer={<Button label="OK" onPress={() => {}} />}
       >
-        <Text color="textMuted">인라인 레이아웃에 그대로 합성할 수 있는 패널입니다.</Text>
+        <Text color="textMuted">A panel you can compose directly into an inline layout.</Text>
       </DialogPanel>
     </Stack>
   );
@@ -855,14 +855,14 @@ function ActionSheetPreview(): ReactElement {
   const [last, setLast] = useState<string | null>(null);
   return (
     <Stack>
-      <Button label="ActionSheet 열기" onPress={() => setVisible(true)} />
+      <Button label="Open ActionSheet" onPress={() => setVisible(true)} />
       <ActionSheet
         visible={visible}
-        title="프로젝트 작업"
-        description="일반 button 의미를 유지하는 adaptive action surface입니다."
+        title="Project actions"
+        description="An adaptive action surface that keeps plain button semantics."
         items={[
-          { value: 'duplicate', label: '프로젝트 복제' },
-          { value: 'delete', label: '프로젝트 삭제', description: '복구할 수 없습니다.', destructive: true },
+          { value: 'duplicate', label: 'Duplicate project' },
+          { value: 'delete', label: 'Delete project', description: 'This cannot be recovered.', destructive: true },
         ] as const}
         onDismiss={(detail) => {
           setVisible(false);
@@ -870,7 +870,7 @@ function ActionSheetPreview(): ReactElement {
         }}
       />
       <Text role="caption" color="textMuted">
-        {last ? `마지막 선택: ${last}` : '아직 선택한 액션이 없습니다.'}
+        {last ? `Last selected: ${last}` : 'No action selected yet.'}
       </Text>
     </Stack>
   );
@@ -878,19 +878,19 @@ function ActionSheetPreview(): ReactElement {
 
 function SheetPreview(): ReactElement {
   const [open, setOpen] = useState(false);
-  const [name, setName] = useState('디자인 시스템 개편');
+  const [name, setName] = useState('Design system refresh');
   return (
     <Stack>
-      <Button label="Sheet 열기" onPress={() => setOpen(true)} />
+      <Button label="Open Sheet" onPress={() => setOpen(true)} />
       <Sheet
         open={open}
-        title="프로젝트 설정"
-        description="데스크톱에서는 logical end, 작은 화면에서는 bottom에 표시됩니다."
-        footer={<Button label="설정 저장" onPress={() => setOpen(false)} />}
+        title="Project settings"
+        description="Shown at the logical end on desktop and at the bottom on small screens."
+        footer={<Button label="Save settings" onPress={() => setOpen(false)} />}
         onOpenChange={setOpen}
       >
-        <TextField label="프로젝트 이름" value={name} onChangeText={setName} />
-        <Text role="caption" color="textMuted">header와 footer는 고정되고 본문만 스크롤됩니다.</Text>
+        <TextField label="Project name" value={name} onChangeText={setName} />
+        <Text role="caption" color="textMuted">The header and footer stay pinned; only the body scrolls.</Text>
       </Sheet>
     </Stack>
   );
@@ -900,14 +900,14 @@ function PopoverPreview(): ReactElement {
   const [open, setOpen] = useState(false);
   return (
     <Popover
-      triggerLabel="계정 도움말"
-      title="계정 정보"
+      triggerLabel="Account help"
+      title="Account details"
       description="controlled rich overlay"
       open={open}
       onOpenChange={setOpen}
       variant="outlined"
     >
-      <Text>프로필 공개 범위는 설정에서 언제든 바꿀 수 있습니다.</Text>
+      <Text>You can change profile visibility any time in settings.</Text>
     </Popover>
   );
 }
@@ -915,9 +915,9 @@ function PopoverPreview(): ReactElement {
 function TooltipPreview(): ReactElement {
   return (
     <Tooltip
-      triggerLabel="오버레이 도움말"
+      triggerLabel="Overlay help"
       triggerIcon={sparkIcon}
-      content="웹에서는 시각 설명, 네이티브에서는 접근성 힌트로 제공합니다."
+      content="A visual tooltip on web and an accessibility hint on native."
       onPress={() => {}}
     />
   );
@@ -930,11 +930,11 @@ function MenuPreview(): ReactElement {
   return (
     <Stack>
       <Menu
-        triggerLabel="프로젝트 작업"
+        triggerLabel="Project actions"
         items={[
-          { kind: 'action', value: 'duplicate', label: '프로젝트 복제' },
-          { kind: 'checkbox', value: 'compact', label: '압축 보기', checked: compact },
-          { kind: 'action', value: 'delete', label: '프로젝트 삭제', destructive: true },
+          { kind: 'action', value: 'duplicate', label: 'Duplicate project' },
+          { kind: 'checkbox', value: 'compact', label: 'Compact view', checked: compact },
+          { kind: 'action', value: 'delete', label: 'Delete project', destructive: true },
         ] as const}
         open={open}
         onOpenChange={setOpen}
@@ -945,7 +945,7 @@ function MenuPreview(): ReactElement {
         variant="outlined"
       />
       <Text role="caption" color="textMuted">
-        {last ? `마지막 액션: ${last}` : '압축 보기'} · {compact ? 'on' : 'off'}
+        {last ? `Last action: ${last}` : 'Compact view'} · {compact ? 'on' : 'off'}
       </Text>
     </Stack>
   );

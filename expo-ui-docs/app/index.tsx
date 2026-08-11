@@ -1,4 +1,4 @@
-import { createElement, useState } from 'react';
+import { Fragment, createElement, useState } from 'react';
 import type { ReactElement, ReactNode } from 'react';
 import { Link } from 'expo-router';
 import type { Href } from 'expo-router';
@@ -59,6 +59,7 @@ import {
   ToggleGroup,
   Tooltip,
   UiProvider,
+  enStrings,
   koStrings,
   useTheme,
   useToastController,
@@ -82,6 +83,10 @@ import {
 } from '../src/seo-content';
 import { useHydratedWindowWidth } from '../src/responsive';
 import { LinkPressable } from '../src/site-link';
+import { useLocale } from '../src/locale';
+import { landingStrings } from '../src/landing-strings';
+import type { DemoCategoryKey, LandingStrings } from '../src/landing-strings';
+import { siteStrings } from '../src/site-strings';
 import { useDocumentChrome, useSiteColorScheme } from '../src/use-site-color-scheme';
 import {
   SeoHead,
@@ -90,42 +95,34 @@ import {
   websiteSchema,
 } from '../src/seo';
 
-type DemoCategory =
-  | 'actions'
-  | 'forms'
-  | 'controls'
-  | 'selection'
-  | 'layout'
-  | 'status'
-  | 'display'
-  | 'data'
-  | 'feedback'
-  | 'dialog';
+type DemoCategory = DemoCategoryKey;
+
+const DEMO_CATEGORY_ORDER: readonly DemoCategory[] = [
+  'actions',
+  'forms',
+  'controls',
+  'selection',
+  'layout',
+  'status',
+  'display',
+  'data',
+  'feedback',
+  'dialog',
+];
 
 const SOURCE_COMPONENT_COUNT = componentSeoEntries.length;
 const RELEASED_COMPONENT_COUNT = componentSeoEntries.filter(isReleasedComponent).length;
 const PREVIEW_COMPONENT_COUNT = SOURCE_COMPONENT_COUNT - RELEASED_COMPONENT_COUNT;
 
-const FOOTER_LINKS: readonly { label: string; href: string }[] = [
-  { label: 'Home', href: '/' },
-  { label: 'Docs', href: '/docs' },
-  { label: 'Components', href: '/docs/components' },
-  { label: 'Getting started', href: '/docs/getting-started' },
-  { label: 'npm ↗', href: NPM_URL },
-];
-
-const DEMO_CATEGORIES: readonly { label: string; value: DemoCategory }[] = [
-  { label: 'Actions', value: 'actions' },
-  { label: 'Forms', value: 'forms' },
-  { label: 'Controls', value: 'controls' },
-  { label: 'Selection', value: 'selection' },
-  { label: 'Layout', value: 'layout' },
-  { label: 'Status', value: 'status' },
-  { label: 'Display', value: 'display' },
-  { label: 'Data', value: 'data' },
-  { label: 'Feedback', value: 'feedback' },
-  { label: 'Overlay', value: 'dialog' },
-];
+function footerLinks(t: LandingStrings): readonly { label: string; href: string }[] {
+  return [
+    { label: t.footerHome, href: '/' },
+    { label: t.footerDocs, href: '/docs' },
+    { label: t.footerComponents, href: '/docs/components' },
+    { label: t.footerGettingStarted, href: '/docs/getting-started' },
+    { label: 'npm ↗', href: NPM_URL },
+  ];
+}
 
 const COMPONENT_GROUPS = [
   { label: 'Foundation', items: ['Text'] },
@@ -142,92 +139,93 @@ const COMPONENT_GROUPS = [
   { label: 'Overlay', items: ['Dialog', 'DialogPanel', 'ConfirmActionRow', 'ActionSheet', 'Sheet', 'Popover', 'Tooltip', 'Menu'] },
 ] as const;
 
-const DEMO_SNIPPETS: Record<DemoCategory, string> = {
-  actions: `<Button label="저장" onPress={save} />\n<Button variant="secondary" label="미리보기" />\n<IconButton accessibilityLabel="설정 열기" icon={Settings} />`,
-  forms: `<SearchField value={query} onChangeText={setQuery} />\n<TextField\n  label="프로젝트 이름"\n  counter={\`\${name.length}/30\`}\n/>`,
-  controls: `const [volume, setVolume] = useState(60);\n\n<Slider\n  value={volume}\n  min={0}\n  max={100}\n  step={5}\n  accessibilityLabel="알림 음량"\n  onValueChange={setVolume}\n/>\n<ToggleGroup\n  selectionMode="single"\n  value={density}\n  onValueChange={setDensity}\n  accessibilityLabel="목록 밀도"\n  items={densityItems}\n  allowEmpty={false}\n/>`,
-  selection: `<SelectableRow\n  selected={selected}\n  onPress={() => setSelected(!selected)}\n>\n  <Text>주간 회고 알림</Text>\n</SelectableRow>`,
-  layout: `<Surface padding="xl" radius="lg" elevation="sm">\n  <Text role="title">토큰으로 조립하세요.</Text>\n  <Text color="textMuted">간격, 라운드, 그림자까지.</Text>\n</Surface>`,
-  status: `<Badge label="New" variant="success" />\n<Alert title="저장했습니다" variant="success" live="polite" />\n<ProgressBar value={72} accessibilityLabel="업로드 진행률" />\n<ProgressBar value={null} accessibilityLabel="동기화 진행률" />\n<Spinner accessibilityLabel="불러오는 중" />`,
-  display: `<ListItem\n  title="Ada Lovelace"\n  description="Core contributor"\n  leading={<Avatar name="Ada Lovelace" decorative />}\n  onPress={openProfile}\n/>\n<Divider />\n<Accordion items={sections} value={open} onValueChange={setOpen} />`,
-  data: `const [page, setPage] = useState(1);\nconst [sort, setSort] = useState<DataTableSort<'member' | 'amount'> | null>(null);\nconst [selectedKeys, setSelectedKeys] = useState<readonly string[]>([]);\n\n<DataTable\n  caption="최근 결제"\n  state={{ status: 'ready', rows: currentPageRows }}\n  columns={columns}\n  getRowKey={(row) => row.id}\n  rowHeaderColumnId="member"\n  sort={sort}\n  onSortChange={(next) => {\n    setSort(next);\n    notifySort(next); // rows 순서는 앱이 소유합니다.\n  }}\n  selection={{\n    selectedRowKeys: selectedKeys,\n    onSelectionChange: setSelectedKeys,\n    getRowSelectionAccessibilityLabel: ({ row }) => \`\${row.member} 결제 선택\`,\n  }}\n  presentation="auto"\n  renderListRow={({ row }) => <PaymentRow payment={row} />}\n/>\n<Pagination\n  mode="numbered"\n  countMode="items"\n  accessibilityLabel="결제 페이지"\n  page={page}\n  totalItemCount={totalItemCount}\n  pageSize={3}\n  onPageChange={setPage}\n/>`,
-  feedback: `const queue = useToastQueue({ maxVisible: 2 });\n\n<Button label="저장" onPress={() => queue.show({ message: '저장했습니다', variant: 'success' })} />\n<ToastViewport\n  toasts={queue.visibleToasts}\n  onDismiss={queue.dismiss}\n  onPause={queue.pause}\n  onResume={queue.resume}\n/>`,
-  dialog: `<Popover\n  triggerLabel="계정 도움말"\n  title="계정 정보"\n  open={popoverOpen}\n  onOpenChange={(next) => setPopoverOpen(next)}\n>\n  <Text>프로필 공개 범위를 설정합니다.</Text>\n</Popover>\n<Sheet\n  open={sheetOpen}\n  title="프로젝트 설정"\n  onOpenChange={(next) => setSheetOpen(next)}\n  footer={<Button label="저장" onPress={save} />}\n>\n  <TextField label="프로젝트 이름" value={name} />\n</Sheet>`,
-};
+
+type DataDemoStatus = 'done' | 'pending' | 'failed';
 
 type DataDemoRow = {
   readonly id: string;
   readonly member: string;
   readonly amount: number;
-  readonly status: '완료' | '대기' | '실패';
+  readonly status: DataDemoStatus;
 };
 
 type DataDemoColumnId = 'member' | 'amount' | 'status';
 type DataDemoSortableColumnId = 'member' | 'amount';
 
 const DATA_DEMO_ROWS: readonly DataDemoRow[] = [
-  { id: 'payment-a', member: '김민서', amount: 128_000, status: '완료' },
-  { id: 'payment-b', member: 'Ada Kim', amount: 84_500, status: '대기' },
-  { id: 'payment-c', member: 'Grace Lee', amount: 212_000, status: '실패' },
-  { id: 'payment-d', member: 'Linus Park', amount: 64_000, status: '완료' },
-  { id: 'payment-e', member: 'Margaret Han', amount: 156_500, status: '대기' },
-  { id: 'payment-f', member: 'Alan Choi', amount: 98_000, status: '완료' },
-  { id: 'payment-g', member: 'Evelyn Seo', amount: 310_000, status: '실패' },
+  { id: 'payment-a', member: 'Minseo Kim', amount: 128_000, status: 'done' },
+  { id: 'payment-b', member: 'Ada Kim', amount: 84_500, status: 'pending' },
+  { id: 'payment-c', member: 'Grace Lee', amount: 212_000, status: 'failed' },
+  { id: 'payment-d', member: 'Linus Park', amount: 64_000, status: 'done' },
+  { id: 'payment-e', member: 'Margaret Han', amount: 156_500, status: 'pending' },
+  { id: 'payment-f', member: 'Alan Choi', amount: 98_000, status: 'done' },
+  { id: 'payment-g', member: 'Evelyn Seo', amount: 310_000, status: 'failed' },
 ];
+
+function formatAmount(amount: number): string {
+  // 금액 단위는 데모 데이터의 일부라 로케일과 무관하게 유지한다.
+  return `₩${amount.toLocaleString('en-US')}`;
+}
 
 const DATA_DEMO_PAGE_SIZE = 3;
 
-const DATA_DEMO_COLUMNS = [
-  {
-    id: 'member',
-    header: '고객',
-    flex: 2,
-    sortable: true,
-    getTextValue: ({ row }) => row.member,
-  },
-  {
-    id: 'amount',
-    header: '금액',
-    width: 116,
-    align: 'end',
-    sortable: true,
-    firstSortDirection: 'descending',
-    getTextValue: ({ row }) => `₩${row.amount.toLocaleString('ko-KR')}`,
-  },
-  {
-    id: 'status',
-    header: '상태',
-    flex: 1,
-    getTextValue: ({ row }) => row.status,
-  },
-] as const satisfies readonly DataTableColumn<DataDemoRow, DataDemoColumnId, string>[];
-
-const QUICK_START = `import { UiProvider, Button, koStrings } from '@gj-kit/expo-ui';\nimport { createThemes } from '@gj-kit/expo-ui/theme';\n\nconst themes = createThemes();\n\nexport function App() {\n  return (\n    <UiProvider theme={themes} strings={koStrings}>\n      <Button label="시작하기" onPress={() => {}} />\n    </UiProvider>\n  );\n}`;
+// `as const`로 리터럴을 유지해야 DataTable이 sortable 컬럼 id를 좁혀 추론한다.
+// 넓어지면 onSortChange가 'status'까지 포함한 유니언을 넘긴다.
+function dataDemoColumns(t: LandingStrings) {
+  return [
+    {
+      id: 'member',
+      header: t.demoTableColumnMember,
+      flex: 2,
+      sortable: true,
+      getTextValue: ({ row }) => row.member,
+    },
+    {
+      id: 'amount',
+      header: t.demoTableColumnAmount,
+      width: 116,
+      align: 'end',
+      sortable: true,
+      firstSortDirection: 'descending',
+      getTextValue: ({ row }) => `${formatAmount(row.amount)}`,
+    },
+    {
+      id: 'status',
+      header: t.demoTableColumnStatus,
+      flex: 1,
+      getTextValue: ({ row }) => t.demoTableStatus[row.status],
+    },
+  ] as const satisfies readonly DataTableColumn<DataDemoRow, DataDemoColumnId, string>[];
+}
 
 export default function Home(): ReactElement {
   const { colorScheme, setColorScheme } = useSiteColorScheme();
+  const { locale } = useLocale();
+  const t = landingStrings(locale);
   useDocumentChrome(siteThemes[colorScheme].colors.background);
 
   return (
     <>
       <SeoHead
-        title="Expo·React Native UI 라이브러리 | @gj-kit/expo-ui"
-        description="TypeScript로 잘못된 UI 상태를 줄이는 Expo·React Native 컴포넌트 라이브러리입니다. 토큰 기반 light·dark 테마, 접근성 계약, React Native Web과 safe-area·키보드 유틸을 제공합니다."
+        title={t.metaTitle}
+        description={t.metaDescription}
         path="/"
+        locale={locale}
         schemas={[
           websiteSchema(),
           softwareSourceCodeSchema(publishedPackageVersion),
           webPageSchema({
             path: '/',
-            title: 'Expo·React Native UI 라이브러리 | @gj-kit/expo-ui',
-            description: 'Expo와 React Native를 위한 타입 안전 UI 컴포넌트 라이브러리',
+            title: t.metaTitle,
+            description: t.schemaDescription,
+            locale,
           }),
         ]}
       />
       <UiProvider
         theme={siteThemes}
         colorScheme={colorScheme}
-        strings={koStrings}
+        strings={locale === 'ko' ? koStrings : enStrings}
         icons={siteIcons}
       >
         <StatusBar style={colorScheme === 'dark' ? 'light' : 'dark'} />
@@ -248,6 +246,7 @@ function Landing({
   onColorSchemeChange: (scheme: ColorScheme) => void;
 }): ReactElement {
   const theme = useTheme();
+  const t = landingStrings(useLocale().locale);
   const width = useHydratedWindowWidth();
   const desktop = width >= 960;
   const compact = width < 680;
@@ -271,7 +270,7 @@ function Landing({
       await navigator.clipboard.writeText(value);
     }
     setCopied(key);
-    showToast({ message: '클립보드에 복사했습니다.', variant: 'success' });
+    showToast({ message: t.copiedToast, variant: 'success' });
     setTimeout(() => setCopied((current) => (current === key ? null : current)), 1800);
   };
 
@@ -323,7 +322,7 @@ function Landing({
             onCloseActionSheet={() => setActionSheetVisible(false)}
             onCloseDialog={() => setDialogVisible(false)}
             onCloseSheet={() => setSheetOpen(false)}
-            onCopyCode={() => copy(DEMO_SNIPPETS[category], 'demo')}
+            onCopyCode={() => copy(t.componentsSnippets[category], 'demo')}
             onOpenDialog={() => setDialogVisible(true)}
             onOpenSheet={() => setSheetOpen(true)}
             onOpenActionSheet={() => setActionSheetVisible(true)}
@@ -339,7 +338,7 @@ function Landing({
             colorScheme={colorScheme}
             desktop={desktop}
             copied={copied === 'quick-start'}
-            onCopy={() => copy(QUICK_START, 'quick-start')}
+            onCopy={() => copy(t.quickStartCode, 'quick-start')}
             onColorSchemeChange={onColorSchemeChange}
           />
         </View>
@@ -377,6 +376,9 @@ function SiteHeader({
   onToggleTheme: () => void;
 }): ReactElement {
   const theme = useTheme();
+  const { locale, toggleLocale } = useLocale();
+  const t = landingStrings(locale);
+  const nav = siteStrings(locale);
   return (
     <View
       style={[
@@ -391,7 +393,7 @@ function SiteHeader({
         <View style={styles.headerRow}>
           <LinkPressable
             href="/"
-            accessibilityLabel="@gj-kit/expo-ui 홈"
+            accessibilityLabel={t.homeLabel}
             style={styles.brand}
           >
             <BrandMark size={34} />
@@ -400,16 +402,30 @@ function SiteHeader({
 
           {!compact ? (
             <View style={styles.navLinks}>
-              <NavLink label="Why gj-kit" targetId="why" />
-              <NavLink label="Components" targetId="components" />
-              <NavLink label="Theme" targetId="theme" />
+              <NavLink label={t.navWhy} targetId="why" />
+              <NavLink label={t.navComponents} targetId="components" />
+              <NavLink label={t.navTheme} targetId="theme" />
             </View>
           ) : null}
 
           <View style={styles.headerActions}>
             <Pressable
               accessibilityRole="button"
-              accessibilityLabel={colorScheme === 'light' ? '다크 모드로 전환' : '라이트 모드로 전환'}
+              accessibilityLabel={locale === 'en' ? nav.toKorean : nav.toEnglish}
+              onPress={toggleLocale}
+              style={({ pressed }) => [
+                styles.themeButton,
+                { backgroundColor: theme.colors.surface, borderColor: theme.colors.line },
+                pressed ? styles.pressed : null,
+              ]}
+            >
+              <RNText style={[styles.localeGlyph, { color: theme.colors.text }]}>
+                {locale === 'en' ? '한' : 'EN'}
+              </RNText>
+            </Pressable>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={colorScheme === 'light' ? nav.toDark : nav.toLight}
               onPress={onToggleTheme}
               style={({ pressed }) => [
                 styles.themeButton,
@@ -421,7 +437,7 @@ function SiteHeader({
                 {colorScheme === 'light' ? '☾' : '☀'}
               </RNText>
             </Pressable>
-            <SiteButton compact={compact} label="Docs" href="/docs" />
+            <SiteButton compact={compact} label={nav.docs} href="/docs" />
           </View>
         </View>
       </ContentFrame>
@@ -482,6 +498,7 @@ function Hero({
   onHeroTabChange: (value: 'today' | 'week') => void;
 }): ReactElement {
   const theme = useTheme();
+  const t = landingStrings(useLocale().locale);
   return (
     <View style={styles.heroShell}>
       <View
@@ -513,26 +530,25 @@ function Hero({
                 { color: theme.colors.text },
               ]}
             >
-              Expo·React Native UI,{compact ? '\n' : ' '}<RNText style={{ color: theme.colors.primary }}>실수할 수 없게.</RNText>
+              {t.heroTitleLead}{compact ? '\n' : ' '}<RNText style={{ color: theme.colors.primary }}>{t.heroTitleAccent}</RNText>
             </RNText>
             <RNText style={[styles.heroDescription, { color: theme.colors.textMuted }]}> 
-              토큰 기반 테마와 접근성 계약을 TypeScript API에 담았습니다. Expo, bare React Native,
-              Web에서 같은 설계 언어를 더 안전하게 유지하세요.
+              {t.heroDescription}
             </RNText>
 
             <InstallBar copied={copied} onCopy={onCopyInstall} />
 
             <View style={styles.heroActions}>
-              <SiteButton label="빠르게 시작하기" href="/docs/getting-started" showArrow />
+              <SiteButton label={t.heroCtaStart} href="/docs/getting-started" showArrow />
               <SiteButton
-                label="컴포넌트 보기"
+                label={t.heroCtaComponents}
                 variant="secondary"
                 href="/docs/components"
               />
             </View>
 
             <View style={styles.inlineProofs}>
-              {['Expo & bare RN', 'React Native ≥ 0.79', 'TypeScript first'].map((item) => (
+              {t.heroProofs.map((item) => (
                 <View key={item} style={styles.inlineProof}>
                   <RNText style={{ color: theme.colors.success, fontWeight: '800' }}>✓</RNText>
                   <RNText style={[styles.inlineProofText, { color: theme.colors.textMuted }]}>{item}</RNText>
@@ -571,6 +587,8 @@ function HeroPreview({
   onTabChange: (value: 'today' | 'week') => void;
 }): ReactElement {
   const theme = useTheme();
+  const t = landingStrings(useLocale().locale);
+  const nav = siteStrings(useLocale().locale);
   return (
     <View
       style={[
@@ -584,7 +602,7 @@ function HeroPreview({
       <View style={styles.previewTopline}>
         <View style={styles.liveBadge}>
           <View style={styles.liveDot} />
-          <RNText style={styles.liveText}>LIVE PREVIEW</RNText>
+          <RNText style={styles.liveText}>{nav.livePreview}</RNText>
         </View>
         <RNText style={styles.previewMode}>{colorScheme === 'dark' ? 'DARK' : 'LIGHT'} THEME</RNText>
       </View>
@@ -592,15 +610,15 @@ function HeroPreview({
       <View style={[styles.phone, { backgroundColor: theme.colors.background, borderColor: theme.colors.line }]}> 
         <View style={styles.phoneTopbar}>
           <View>
-            <Text role="caption" color="textMuted">MONDAY, AUG 10</Text>
-            <RNText style={[styles.phoneTitle, { color: theme.colors.text }]}>오늘의 포커스</RNText>
+            <Text role="caption" color="textMuted">{t.previewDate}</Text>
+            <RNText style={[styles.phoneTitle, { color: theme.colors.text }]}>{t.previewTitle}</RNText>
           </View>
           <View style={[styles.avatar, { backgroundColor: theme.colors.primary }]}> 
             <RNText style={styles.avatarText}>G</RNText>
           </View>
         </View>
 
-        <SearchField value="" onChangeText={() => undefined} placeholder="기록 검색" />
+        <SearchField value="" onChangeText={() => undefined} placeholder={t.previewSearchPlaceholder} />
 
         <Surface padding="lg" radius="lg" style={styles.focusCard}>
           <View style={styles.focusCardTop}>
@@ -608,8 +626,8 @@ function HeroPreview({
               <RNText style={{ color: theme.colors.primary, fontWeight: '800' }}>✦</RNText>
             </View>
             <View style={styles.focusCopy}>
-              <Text role="label">UI 라이브러리 다듬기</Text>
-              <Text role="caption" color="textMuted">완료까지 2개의 작업</Text>
+              <Text role="label">{t.previewFocusTitle}</Text>
+              <Text role="caption" color="textMuted">{t.previewFocusCaption}</Text>
             </View>
             <SelectionIndicator selected={selected} size={20} />
           </View>
@@ -619,10 +637,10 @@ function HeroPreview({
         </Surface>
 
         <Tabs
-          accessibilityLabel="기간"
+          accessibilityLabel={t.previewRangeLabel}
           items={[
-            { label: '오늘', value: 'today' },
-            { label: '이번 주', value: 'week' },
+            { label: t.previewToday, value: 'today' },
+            { label: t.previewWeek, value: 'week' },
           ] as const}
           value={tab}
           onChange={onTabChange}
@@ -631,14 +649,14 @@ function HeroPreview({
               <View style={styles.phoneList}>
                 <SelectableRow selected={selected} onPress={() => onSelectedChange(!selected)}>
                   <View style={styles.rowCopy}>
-                    <Text role="label">컴포넌트 API 검토</Text>
-                    <Text role="caption" color="textMuted">타입 계약으로 잘못된 상태 차단</Text>
+                    <Text role="label">{t.previewTodayRows[0]?.title}</Text>
+                    <Text role="caption" color="textMuted">{t.previewTodayRows[0]?.caption}</Text>
                   </View>
                 </SelectableRow>
                 <SelectableRow selected={false} onPress={() => onSelectedChange(true)}>
                   <View style={styles.rowCopy}>
-                    <Text role="label">다크 테마 확인</Text>
-                    <Text role="caption" color="textMuted">토큰 누락 없이</Text>
+                    <Text role="label">{t.previewTodayRows[1]?.title}</Text>
+                    <Text role="caption" color="textMuted">{t.previewTodayRows[1]?.caption}</Text>
                   </View>
                 </SelectableRow>
               </View>
@@ -647,8 +665,8 @@ function HeroPreview({
               <View style={styles.phoneList}>
                 <SelectableRow selected onPress={() => onSelectedChange(false)}>
                   <View style={styles.rowCopy}>
-                    <Text role="label">접근성 회귀 테스트</Text>
-                    <Text role="caption" color="textMuted">키보드와 스크린리더 계약</Text>
+                    <Text role="label">{t.previewWeekRow.title}</Text>
+                    <Text role="caption" color="textMuted">{t.previewWeekRow.caption}</Text>
                   </View>
                 </SelectableRow>
               </View>
@@ -656,7 +674,7 @@ function HeroPreview({
           }}
         />
 
-        <Button label={selected ? '오늘 작업 완료' : '작업 선택하기'} onPress={() => onSelectedChange(!selected)} />
+        <Button label={selected ? t.previewCtaDone : t.previewCtaPick} onPress={() => onSelectedChange(!selected)} />
       </View>
 
       <View style={styles.typeSafeChip}>
@@ -674,11 +692,12 @@ function HeroPreview({
 
 function ProofStrip(): ReactElement {
   const theme = useTheme();
+  const t = landingStrings(useLocale().locale);
   const proofs = [
-    { value: String(SOURCE_COMPONENT_COUNT), label: 'Source components' },
-    { value: '31', label: 'Color roles' },
-    { value: '0', label: 'Direct runtime deps' },
-    { value: '625', label: '534 unit + 91 type' },
+    { value: String(SOURCE_COMPONENT_COUNT), label: t.proofSourceComponents },
+    { value: '31', label: t.proofColorRoles },
+    { value: '0', label: t.proofRuntimeDeps },
+    { value: '625', label: t.proofTests },
   ];
   return (
     <ContentFrame maxWidth={1180} center padding={20} style={styles.proofFrame}>
@@ -702,12 +721,13 @@ function ProofStrip(): ReactElement {
 
 function TypeSafetySection({ desktop }: { desktop: boolean }): ReactElement {
   const theme = useTheme();
+  const t = landingStrings(useLocale().locale);
   return (
     <SectionShell>
       <SectionEyebrow>TYPE CONTRACTS</SectionEyebrow>
       <SectionHeading
-        title="깨진 UI보다 먼저 오는 컴파일 에러."
-        description="접근성 라벨 누락, 죽은 액션, 존재하지 않는 토큰 키를 사용 지점에서 바로 드러냅니다. 앱이 실행된 뒤 발견할 문제를 코드 작성 중에 줄이세요."
+        title={t.typeSafetyTitle}
+        description={t.typeSafetyDescription}
       />
 
       <View style={[styles.contractGrid, desktop ? styles.twoColumns : null]}>
@@ -732,7 +752,7 @@ function TypeSafetySection({ desktop }: { desktop: boolean }): ReactElement {
             ]}
           />
           <View style={[styles.errorMessage, { backgroundColor: theme.colors.dangerSoft }]}> 
-            <RNText style={[styles.errorText, { color: theme.colors.dangerStrong }]}>× accessibilityLabel 속성이 필요합니다.</RNText>
+            <RNText style={[styles.errorText, { color: theme.colors.dangerStrong }]}>{t.typeSafetyErrorMessage}</RNText>
           </View>
         </View>
 
@@ -752,34 +772,27 @@ function TypeSafetySection({ desktop }: { desktop: boolean }): ReactElement {
           <CodeLines
             lines={[
               { text: '<IconButton', tone: 'muted' },
-              { text: '  accessibilityLabel="설정 열기"', tone: 'accent' },
+              { text: t.typeSafetyLabelLine, tone: 'accent' },
               { text: '  icon={Settings}', tone: 'normal' },
               { text: '  onPress={openSettings}', tone: 'normal' },
               { text: '/>', tone: 'muted' },
             ]}
           />
           <View style={[styles.errorMessage, { backgroundColor: theme.colors.primarySoft }]}> 
-            <RNText style={[styles.errorText, { color: theme.colors.primary }]}>✓ 스크린리더 계약이 props에 포함됩니다.</RNText>
+            <RNText style={[styles.errorText, { color: theme.colors.primary }]}>{t.typeSafetyOkMessage}</RNText>
           </View>
         </View>
       </View>
 
       <View style={[styles.featureGrid, desktop ? styles.threeColumns : null]}>
-        <FeatureCard
-          symbol="T"
-          title="완성된 테마만"
-          description="createTheme을 거친 완전한 토큰 객체만 Provider가 받습니다. 반쪽 테마가 숨어들지 않습니다."
-        />
-        <FeatureCard
-          symbol="A"
-          title="접근성을 API로"
-          description="IconButton의 라벨과 액션 핸들러처럼 빠뜨리기 쉬운 계약을 필수 prop으로 표현합니다."
-        />
-        <FeatureCard
-          symbol="↗"
-          title="앱이 소유하는 확장"
-          description="문구와 아이콘은 주입하고, NativeWind는 선택합니다. 라이브러리가 앱의 결정을 가로채지 않습니다."
-        />
+        {t.typeSafetyFeatures.map((feature) => (
+          <FeatureCard
+            key={feature.title}
+            symbol={feature.symbol}
+            title={feature.title}
+            description={feature.description}
+          />
+        ))}
       </View>
     </SectionShell>
   );
@@ -833,16 +846,17 @@ function ComponentsSection({
   onShowToast: (message: string, variant: 'error' | 'success' | 'info' | 'warning') => void;
 }): ReactElement {
   const theme = useTheme();
+  const t = landingStrings(useLocale().locale);
   return (
     <View style={{ backgroundColor: theme.colors.surface }}>
       <SectionShell>
         <SectionEyebrow>COMPONENTS</SectionEyebrow>
         <SectionHeading
-          title="설명보다 빠른, 실제 컴포넌트."
-          description="이 페이지의 데모는 배포 패키지를 직접 import합니다. 테마를 바꾸고, 입력하고, 눌러보세요."
+          title={t.componentsTitle}
+          description={t.componentsDescription}
           aside={
             <SiteButton
-              label="npm에서 보기"
+              label={t.componentsNpmCta}
               variant="secondary"
               href={NPM_URL}
               showArrow
@@ -851,14 +865,14 @@ function ComponentsSection({
         />
 
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.categoryRow}>
-          {DEMO_CATEGORIES.map((item) => {
-            const active = item.value === category;
+          {DEMO_CATEGORY_ORDER.map((value) => {
+            const active = value === category;
             return (
               <Pressable
-                key={item.value}
+                key={value}
                 accessibilityRole="tab"
                 accessibilityState={{ selected: active }}
-                onPress={() => onCategoryChange(item.value)}
+                onPress={() => onCategoryChange(value)}
                 style={({ pressed }) => [
                   styles.categoryChip,
                   {
@@ -874,7 +888,7 @@ function ComponentsSection({
                     { color: active ? theme.colors.background : theme.colors.textMuted },
                   ]}
                 >
-                  {item.label}
+                  {t.componentsCategories[value]}
                 </RNText>
               </Pressable>
             );
@@ -892,7 +906,7 @@ function ComponentsSection({
             <View style={styles.demoCanvasHeader}>
               <View>
                 <RNText style={[styles.demoTitle, { color: theme.colors.text }]}>Live canvas</RNText>
-                <RNText style={[styles.demoCaption, { color: theme.colors.textMuted }]}>실제 상태를 바꿔보세요.</RNText>
+                <RNText style={[styles.demoCaption, { color: theme.colors.textMuted }]}>{t.componentsCanvasCaption}</RNText>
               </View>
               <View style={[styles.canvasDots, { borderColor: theme.colors.line }]}> 
                 <View style={[styles.canvasDot, { backgroundColor: theme.colors.primary }]} />
@@ -929,7 +943,7 @@ function ComponentsSection({
               <CopyButton dark copied={copied} onPress={onCopyCode} />
             </View>
             <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-              <RNText selectable style={styles.codeBlockText}>{DEMO_SNIPPETS[category]}</RNText>
+              <RNText selectable style={styles.codeBlockText}>{t.componentsSnippets[category]}</RNText>
             </ScrollView>
             <View style={styles.codeFooter}>
               <View style={styles.codeStatusDot} />
@@ -939,7 +953,7 @@ function ComponentsSection({
         </View>
 
         <View style={styles.componentIndex}>
-          <RNText style={[styles.componentIndexTitle, { color: theme.colors.text }]}>{SOURCE_COMPONENT_COUNT}개의 작은 조각, 하나의 설계 언어</RNText>
+          <RNText style={[styles.componentIndexTitle, { color: theme.colors.text }]}>{t.componentsIndexTitle(SOURCE_COMPONENT_COUNT)}</RNText>
           <View style={styles.componentGroups}>
             {COMPONENT_GROUPS.map((group) => (
               <View
@@ -964,46 +978,46 @@ function ComponentsSection({
 
       <Dialog visible={dialogVisible} onDismiss={onCloseDialog}>
         <DialogPanel
-          title="프로젝트를 삭제할까요?"
-          description="Dialog, DialogPanel, ConfirmActionRow를 조합한 실제 예제입니다."
+          title={t.dialogTitle}
+          description={t.dialogDescription}
         >
           <ConfirmActionRow
             destructive
-            cancelLabel="아니요"
-            confirmLabel="삭제"
+            cancelLabel={t.dialogCancel}
+            confirmLabel={t.dialogConfirm}
             onCancel={onCloseDialog}
             onConfirm={() => {
               onCloseDialog();
-              onShowToast('삭제 예제를 확인했습니다.', 'info');
+              onShowToast(t.dialogToast, 'info');
             }}
           />
         </DialogPanel>
       </Dialog>
       <ActionSheet
         visible={actionSheetVisible}
-        title="프로젝트 작업"
-        description="일반 button 의미를 유지하는 adaptive action surface입니다."
+        title={t.actionSheetTitle}
+        description={t.actionSheetDescription}
         items={[
-          { value: 'duplicate', label: '프로젝트 복제' },
-          { value: 'delete', label: '프로젝트 삭제', description: '복구할 수 없습니다.', destructive: true },
+          { value: 'duplicate', label: t.actionSheetDuplicate },
+          { value: 'delete', label: t.actionSheetDelete, description: t.actionSheetDeleteHint, destructive: true },
         ] as const}
         onDismiss={(detail) => {
           onCloseActionSheet();
           if (detail.reason === 'action-select') {
-            onShowToast(`${detail.value} 액션을 선택했습니다.`, 'info');
+            onShowToast(t.actionSheetToast(detail.value), 'info');
           }
         }}
       />
       <Sheet
         open={sheetOpen}
-        title="프로젝트 설정"
-        description="데스크톱에서는 logical end, 작은 화면에서는 bottom에 표시됩니다."
+        title={t.sheetTitle}
+        description={t.sheetDescription}
         footer={(
           <Button
-            label="설정 저장"
+            label={t.sheetSave}
             onPress={() => {
               onCloseSheet();
-              onShowToast('Sheet 설정을 저장했습니다.', 'success');
+              onShowToast(t.sheetToast, 'success');
             }}
           />
         )}
@@ -1012,12 +1026,12 @@ function ComponentsSection({
         }}
       >
         <TextField
-          label="프로젝트 이름"
+          label={t.sheetProjectName}
           value={projectName}
           onChangeText={onProjectNameChange}
         />
         <Text role="caption" color="textMuted">
-          header와 footer는 고정되고 이 본문만 스크롤됩니다.
+          {t.sheetCaption}
         </Text>
       </Sheet>
     </View>
@@ -1050,6 +1064,7 @@ function ComponentDemo({
   onShowToast: (message: string, variant: 'error' | 'success' | 'info' | 'warning') => void;
 }): ReactElement {
   const theme = useTheme();
+  const t = landingStrings(useLocale().locale);
   const [demoTab, setDemoTab] = useState<'preview' | 'code'>('preview');
   const [checked, setChecked] = useState<boolean | 'mixed'>('mixed');
   const [switchEnabled, setSwitchEnabled] = useState(true);
@@ -1069,6 +1084,7 @@ function ComponentDemo({
   ]);
   const toastQueue = useToastQueue({ defaultDurationMs: 3_600, maxQueued: 3, maxVisible: 2 });
   const icon = (props: IconRenderProps) => <Glyph {...props}>✦</Glyph>;
+  const dataColumns = dataDemoColumns(t);
   const visibleDataRows = DATA_DEMO_ROWS.slice(
     (dataPage - 1) * DATA_DEMO_PAGE_SIZE,
     dataPage * DATA_DEMO_PAGE_SIZE,
@@ -1079,15 +1095,15 @@ function ComponentDemo({
       return (
         <View style={styles.demoStack}>
           <View style={styles.demoRow}>
-            <Button label="저장" onPress={() => onShowToast('안전하게 저장했습니다.', 'success')} />
-            <Button label="미리보기" variant="secondary" onPress={() => onShowToast('미리보기입니다.', 'info')} />
+            <Button label={t.demoSave} onPress={() => onShowToast(t.demoSaveToast, 'success')} />
+            <Button label={t.demoPreview} variant="secondary" onPress={() => onShowToast(t.demoPreviewToast, 'info')} />
           </View>
           <View style={styles.demoRow}>
-            <Button label="삭제" size="sm" variant="destructive-outline" onPress={onOpenDialog} />
-            <Button label="동기화 중" size="sm" loading />
-            <IconButton accessibilityLabel="즐겨찾기" icon={icon} onPress={() => onShowToast('즐겨찾기에 추가했습니다.', 'success')} />
+            <Button label={t.demoDelete} size="sm" variant="destructive-outline" onPress={onOpenDialog} />
+            <Button label={t.demoSyncing} size="sm" loading />
+            <IconButton accessibilityLabel={t.demoFavorite} icon={icon} onPress={() => onShowToast(t.demoFavoriteToast, 'success')} />
           </View>
-          <Text role="caption" color="textMuted">6 variants · 3 sizes · loading · disabled · icon</Text>
+          <Text role="caption" color="textMuted">{t.demoActionsCaption}</Text>
         </View>
       );
     case 'forms':
@@ -1095,14 +1111,14 @@ function ComponentDemo({
         <View style={styles.demoStack}>
           <SearchField value={query} onChangeText={onQueryChange} />
           <TextField
-            label="프로젝트 이름"
+            label={t.sheetProjectName}
             value={projectName}
             onChangeText={onProjectNameChange}
             counter={`${projectName.length}/30`}
-            helperText="입력, 라벨, 헬퍼가 같은 토큰을 사용합니다."
+            helperText={t.demoProjectNameHelper}
           />
           <Tabs
-            accessibilityLabel="데모 보기"
+            accessibilityLabel={t.demoViewLabel}
             items={[
               { label: 'Preview', value: 'preview' },
               { label: 'Code', value: 'code' },
@@ -1112,12 +1128,12 @@ function ComponentDemo({
             panels={{
               preview: (
                 <Text role="caption" color="textMuted">
-                  Preview 패널이 선택되었습니다.
+                  {t.demoPreviewPanel}
                 </Text>
               ),
               code: (
                 <Text role="caption" color="textMuted">
-                  Code 패널이 선택되었습니다.
+                  {t.demoCodePanel}
                 </Text>
               ),
             }}
@@ -1128,33 +1144,33 @@ function ComponentDemo({
     case 'controls':
       return (
         <Surface radius="lg" padding="xl" style={styles.selectionCard}>
-          <Text role="title">알림 환경설정</Text>
+          <Text role="title">{t.demoNotificationPrefs}</Text>
           <Checkbox
             checked={checked}
             onCheckedChange={setChecked}
-            label="이용 약관에 동의합니다"
-            description="mixed 상태도 boolean 입력으로 안전하게 전환합니다."
+            label={t.demoTermsLabel}
+            description={t.demoTermsDescription}
           />
           <Switch
             value={switchEnabled}
             onValueChange={setSwitchEnabled}
-            label="새 소식 알림"
-            description="네이티브 Switch의 키보드·스크린리더 동작을 보존합니다."
+            label={t.demoNewsLabel}
+            description={t.demoNewsDescription}
           />
           <RadioGroup
             items={[
-              { label: '푸시', value: 'push' },
-              { label: '이메일', value: 'email' },
-              { label: '문자', value: 'sms', disabled: true },
+              { label: t.demoChannelPush, value: 'push' },
+              { label: t.demoChannelEmail, value: 'email' },
+              { label: t.demoChannelSms, value: 'sms', disabled: true },
             ] as const}
             value={channel}
             onValueChange={setChannel}
-            accessibilityLabel="알림 채널"
+            accessibilityLabel={t.demoChannelLabel}
             orientation="horizontal"
           />
           <View style={styles.demoStack}>
             <View style={styles.sliderLabelRow}>
-              <Text role="label">알림 음량</Text>
+              <Text role="label">{t.demoVolumeLabel}</Text>
               <Text role="caption" color="textMuted">{volume}%</Text>
             </View>
             <Slider
@@ -1162,19 +1178,19 @@ function ComponentDemo({
               min={0}
               max={100}
               step={5}
-              accessibilityLabel="알림 음량"
+              accessibilityLabel={t.demoVolumeLabel}
               onValueChange={setVolume}
             />
             <ToggleGroup
               selectionMode="single"
               value={density}
               onValueChange={(next) => setDensity(next ?? 'comfortable')}
-              accessibilityLabel="목록 밀도"
+              accessibilityLabel={t.demoDensityLabel}
               allowEmpty={false}
               items={[
-                { label: '여유', value: 'spacious' },
-                { label: '기본', value: 'comfortable' },
-                { label: '압축', value: 'compact' },
+                { label: t.demoDensitySpacious, value: 'spacious' },
+                { label: t.demoDensityComfortable, value: 'comfortable' },
+                { label: t.demoDensityCompact, value: 'compact' },
               ] as const}
               size="sm"
             />
@@ -1184,18 +1200,18 @@ function ComponentDemo({
     case 'selection':
       return (
         <Surface radius="lg" padding="xl" style={styles.selectionCard}>
-          <Text role="title">알림 설정</Text>
-          <Text role="caption" color="textMuted">선택 상태와 접근성 상태가 함께 바뀝니다.</Text>
+          <Text role="title">{t.demoSelectionTitle}</Text>
+          <Text role="caption" color="textMuted">{t.demoSelectionCaption}</Text>
           <SelectableRow selected={selected} onPress={() => onSelectedChange(!selected)}>
             <View style={styles.rowCopy}>
-              <Text role="label">주간 회고 알림</Text>
-              <Text role="caption" color="textMuted">매주 일요일 오후 8시</Text>
+              <Text role="label">{t.demoSelectionRows[0]?.title}</Text>
+              <Text role="caption" color="textMuted">{t.demoSelectionRows[0]?.caption}</Text>
             </View>
           </SelectableRow>
           <SelectableRow selected={!selected} onPress={() => onSelectedChange(!selected)}>
             <View style={styles.rowCopy}>
-              <Text role="label">제품 업데이트</Text>
-              <Text role="caption" color="textMuted">새로운 컴포넌트 소식</Text>
+              <Text role="label">{t.demoSelectionRows[1]?.title}</Text>
+              <Text role="caption" color="textMuted">{t.demoSelectionRows[1]?.caption}</Text>
             </View>
           </SelectableRow>
         </Surface>
@@ -1209,7 +1225,7 @@ function ComponentDemo({
                 <RNText style={{ color: theme.colors.primary, fontWeight: '800' }}>G</RNText>
               </View>
               <View style={styles.rowCopy}>
-                <Text role="title">토큰으로 조립하세요.</Text>
+                <Text role="title">{t.demoLayoutTitle}</Text>
                 <Text role="caption" color="textMuted">padding="xl" · radius="lg" · elevation="sm"</Text>
               </View>
             </View>
@@ -1242,20 +1258,20 @@ function ComponentDemo({
             <Badge label="Attention" variant="warning" />
             <Badge label="Failed" variant="error" />
           </View>
-          <Alert title="새 테마가 저장되었습니다" variant="success" live="polite">
-            모든 새 화면에 semantic token이 즉시 반영됩니다.
+          <Alert title={t.demoAlertTitle} variant="success" live="polite">
+            {t.demoAlertBody}
           </Alert>
           <View style={styles.demoStack}>
-            <ProgressBar value={72} variant="success" accessibilityLabel="문서 생성 진행률" />
+            <ProgressBar value={72} variant="success" accessibilityLabel={t.demoProgressDocs} />
             <ProgressBar
               value={null}
               variant="info"
-              accessibilityLabel="컴포넌트 동기화 진행률"
-              accessibilityValueText="동기화 중"
+              accessibilityLabel={t.demoProgressSync}
+              accessibilityValueText={t.demoProgressSyncValue}
             />
             <View style={styles.demoRow}>
-              <Spinner accessibilityLabel="컴포넌트 불러오는 중" />
-              <Text role="caption" color="textMuted">determinate · indeterminate · localized loading</Text>
+              <Spinner accessibilityLabel={t.demoSpinnerLabel} />
+              <Text role="caption" color="textMuted">{t.demoStatusCaption}</Text>
             </View>
           </View>
         </View>
@@ -1269,7 +1285,7 @@ function ComponentDemo({
               description="Design systems contributor"
               leading={<Avatar name="Ada Lovelace" decorative />}
               trailing={<Badge label="Core" variant="info" size="sm" />}
-              onPress={() => onShowToast('프로필을 열었습니다.', 'info')}
+              onPress={() => onShowToast(t.demoProfileToast, 'info')}
             />
             <Divider inset="md" />
             <ListItem
@@ -1283,13 +1299,13 @@ function ComponentDemo({
             items={[
               {
                 value: 'overview',
-                title: '왜 controlled API인가요?',
-                content: <Text color="textMuted">앱 상태와 UI 상태가 언제나 한 방향으로 흐릅니다.</Text>,
+                title: t.demoAccordion[0]?.title ?? '',
+                content: <Text color="textMuted">{t.demoAccordion[0]?.content}</Text>,
               },
               {
                 value: 'accessibility',
-                title: '접근성은 어디까지 포함하나요?',
-                content: <Text color="textMuted">역할, 상태, 키보드 이동과 패널 관계를 기본 제공합니다.</Text>,
+                title: t.demoAccordion[1]?.title ?? '',
+                content: <Text color="textMuted">{t.demoAccordion[1]?.content}</Text>,
               },
             ] as const}
             value={openSection}
@@ -1301,31 +1317,33 @@ function ComponentDemo({
       return (
         <View style={styles.dataDemo}>
           <DataTable
-            caption="최근 결제"
-            description="정렬 요청과 선택 상태만 바뀌며 행 순서는 앱이 계속 소유합니다."
+            caption={t.demoTableCaption}
+            description={t.demoTableDescription}
             state={{ status: 'ready', rows: visibleDataRows }}
-            columns={DATA_DEMO_COLUMNS}
+            columns={dataColumns}
             getRowKey={(row) => row.id}
             rowHeaderColumnId="member"
             sort={dataSort}
             onSortChange={(next) => {
               setDataSort(next);
-              const column = next?.columnId === 'amount' ? '금액' : '고객';
-              const direction = next?.direction === 'ascending' ? '오름차순' : '내림차순';
+              const column =
+                next?.columnId === 'amount' ? t.demoTableColumnAmount : t.demoTableColumnMember;
+              const direction =
+                next?.direction === 'ascending' ? t.demoTableAscending : t.demoTableDescending;
               onShowToast(
                 next === null
-                  ? '정렬을 해제했습니다. 행 순서는 그대로입니다.'
-                  : `${column} ${direction} 정렬을 요청했습니다.`,
+                  ? t.demoTableSortCleared
+                  : t.demoTableSortRequested(column, direction),
                 'info',
               );
             }}
             selection={{
               selectedRowKeys: selectedPaymentKeys,
               onSelectionChange: setSelectedPaymentKeys,
-              getRowSelectionAccessibilityLabel: ({ row }) => `${row.member} 결제 선택`,
-              isRowSelectionDisabled: ({ row }) => row.status === '실패',
-              selectAllAccessibilityLabel: '표시된 결제 전체 선택',
-              clearSelectionAccessibilityLabel: '표시된 결제 선택 해제',
+              getRowSelectionAccessibilityLabel: ({ row }) => t.demoTableRowSelectLabel(row.member),
+              isRowSelectionDisabled: ({ row }) => row.status === 'failed',
+              selectAllAccessibilityLabel: t.demoTableSelectAll,
+              clearSelectionAccessibilityLabel: t.demoTableClearSelection,
             }}
             presentation="auto"
             renderListRow={({ row }) => (
@@ -1333,16 +1351,16 @@ function ComponentDemo({
                 <View style={styles.rowCopy}>
                   <Text role="label">{row.member}</Text>
                   <Text role="caption" color="textMuted">
-                    ₩{row.amount.toLocaleString('ko-KR')} · {row.status}
+                    {formatAmount(row.amount)} · {t.demoTableStatus[row.status]}
                   </Text>
                 </View>
                 <Badge
-                  label={row.status}
+                  label={t.demoTableStatus[row.status]}
                   size="sm"
                   variant={
-                    row.status === '완료'
+                    row.status === 'done'
                       ? 'success'
-                      : row.status === '대기'
+                      : row.status === 'pending'
                         ? 'warning'
                         : 'error'
                   }
@@ -1356,20 +1374,18 @@ function ComponentDemo({
             style={styles.dataTable}
           />
           <Text role="caption" color="textMuted" style={styles.dataSelectionSummary}>
-            {selectedPaymentKeys.length}개 선택 · 실패 행은 선택 대상에서 제외
+            {t.demoTableSelectionSummary(selectedPaymentKeys.length)}
           </Text>
           <Pagination
             mode="numbered"
             countMode="items"
-            accessibilityLabel="결제 페이지"
+            accessibilityLabel={t.demoPaginationLabel}
             page={dataPage}
             totalItemCount={DATA_DEMO_ROWS.length}
             pageSize={DATA_DEMO_PAGE_SIZE}
             siblingCount={0}
             size="sm"
-            getPageAccessibilityLabel={({ page, current }) =>
-              `${page}페이지${current ? ' (현재)' : ''}`
-            }
+            getPageAccessibilityLabel={({ page, current }) => t.demoPageLabel(page, current)}
             onPageChange={setDataPage}
             style={styles.dataPagination}
           />
@@ -1380,14 +1396,14 @@ function ComponentDemo({
         <View style={styles.demoStack}>
           <View style={styles.feedbackDemoRow}>
             <EmptyState
-              title="아직 프로젝트가 없어요"
-              body="첫 번째 프로젝트를 만들어보세요."
-              action={{ label: '프로젝트 만들기', onPress: () => onShowToast('새 프로젝트를 시작합니다.', 'success') }}
+              title={t.demoEmptyTitle}
+              body={t.demoEmptyBody}
+              action={{ label: t.demoEmptyAction, onPress: () => onShowToast(t.demoEmptyToast, 'success') }}
               style={styles.feedbackItem}
             />
             <ErrorState
-              message="네트워크 연결을 확인해주세요."
-              onRetry={() => onShowToast('다시 시도합니다.', 'info')}
+              message={t.demoErrorMessage}
+              onRetry={() => onShowToast(t.demoErrorToast, 'info')}
               style={styles.feedbackItem}
             />
           </View>
@@ -1401,14 +1417,14 @@ function ComponentDemo({
             </View>
           </Surface>
           <Surface padding="lg" style={styles.demoStack}>
-            <Text role="label">ToastViewport · FIFO queue</Text>
+            <Text role="label">{t.demoQueueTitle}</Text>
             <Text role="caption" color="textMuted">
-              최대 두 개를 표시하고, 숨겨진 탭·앱에서는 남은 시간을 보존합니다.
+              {t.demoQueueCaption}
             </Text>
             <Button
-              label="저장 알림 추가"
+              label={t.demoQueueButton}
               size="sm"
-              onPress={() => toastQueue.show({ message: '문서 상태를 저장했습니다.', variant: 'success' })}
+              onPress={() => toastQueue.show({ message: t.demoQueueToast, variant: 'success' })}
             />
           </Surface>
           <ToastViewport
@@ -1427,17 +1443,17 @@ function ComponentDemo({
           <View style={[styles.dialogIllustration, { backgroundColor: theme.colors.primarySoft }]}> 
             <RNText style={[styles.dialogIllustrationMark, { color: theme.colors.primary }]}>◇</RNText>
           </View>
-          <Text role="title">확인이 필요한 순간도 같은 언어로.</Text>
+          <Text role="title">{t.demoOverlayTitle}</Text>
           <Text role="body" color="textMuted" style={styles.dialogDemoCopy}>
-            웹 non-modal부터 네이티브 adaptive Dialog와 접근성 힌트까지 같은 API 경계로 적응합니다.
+            {t.demoOverlayCopy}
           </Text>
           <View style={styles.demoStack}>
             <Select
-              label="릴리스 채널"
-              placeholder="채널 선택"
+              label={t.demoReleaseChannel}
+              placeholder={t.demoReleaseChannelPlaceholder}
               items={[
                 { value: 'stable', label: 'Stable' },
-                { value: 'preview', label: 'Preview', description: '테스트 빌드' },
+                { value: 'preview', label: 'Preview', description: t.demoReleaseChannelPreviewHint },
               ] as const}
               value={releaseChannel}
               onValueChange={setReleaseChannel}
@@ -1446,51 +1462,51 @@ function ComponentDemo({
               size="sm"
             />
             <Menu
-              triggerLabel="프로젝트 작업"
+              triggerLabel={t.demoMenuTrigger}
               items={[
-                { kind: 'action', value: 'duplicate', label: '프로젝트 복제' },
-                { kind: 'checkbox', value: 'compact', label: '압축 보기', checked: compactView },
-                { kind: 'action', value: 'delete', label: '프로젝트 삭제', destructive: true },
+                { kind: 'action', value: 'duplicate', label: t.demoMenuDuplicate },
+                { kind: 'checkbox', value: 'compact', label: t.demoMenuCompact, checked: compactView },
+                { kind: 'action', value: 'delete', label: t.demoMenuDelete, destructive: true },
               ] as const}
               open={menuOpen}
               onOpenChange={(next) => setMenuOpen(next)}
               onSelect={(detail) => {
                 if (detail.kind === 'checkbox') setCompactView(detail.checked);
-                if (detail.kind === 'action') onShowToast(`${detail.value} 메뉴를 선택했습니다.`, 'info');
+                if (detail.kind === 'action') onShowToast(t.demoMenuToast(detail.value), 'info');
               }}
               size="sm"
               variant="outlined"
             />
             <View style={styles.demoRow}>
               <Popover
-                triggerLabel="계정 도움말"
-                title="계정 정보"
+                triggerLabel={t.demoPopoverTrigger}
+                title={t.demoPopoverTitle}
                 description="controlled rich overlay"
                 open={popoverOpen}
                 onOpenChange={(next) => setPopoverOpen(next)}
                 size="sm"
                 variant="outlined"
               >
-                <Text>프로필 공개 범위는 설정에서 언제든 바꿀 수 있습니다.</Text>
+                <Text>{t.demoPopoverBody}</Text>
               </Popover>
               <Tooltip
-                triggerLabel="오버레이 도움말"
+                triggerLabel={t.demoTooltipTrigger}
                 triggerIcon={icon}
-                content="웹에서는 시각 설명, 네이티브에서는 접근성 힌트로 제공합니다."
-                onPress={() => onShowToast('오버레이 도움말을 열었습니다.', 'info')}
+                content={t.demoTooltipContent}
+                onPress={() => onShowToast(t.demoTooltipToast, 'info')}
                 size="sm"
               />
             </View>
           </View>
           <View style={styles.demoRow}>
-            <Button label="Dialog 열기" onPress={onOpenDialog} />
+            <Button label={t.demoOpenDialog} onPress={onOpenDialog} />
             <Button
-              label="Sheet 열기"
+              label={t.demoOpenSheet}
               variant="secondary"
               onPress={onOpenSheet}
             />
             <Button
-              label="ActionSheet 열기"
+              label={t.demoOpenActionSheet}
               variant="secondary"
               onPress={onOpenActionSheet}
             />
@@ -1514,12 +1530,13 @@ function ThemeSection({
   onColorSchemeChange: (scheme: ColorScheme) => void;
 }): ReactElement {
   const theme = useTheme();
+  const t = landingStrings(useLocale().locale);
   return (
     <SectionShell>
       <SectionEyebrow>THEME SYSTEM</SectionEyebrow>
       <SectionHeading
-        title="한 번 정하면, 모든 화면이 함께 움직입니다."
-        description="색상 31롤, 서체 7롤, 간격·라운드·그림자·치수까지 하나의 완성된 테마로 관리합니다. 라이트와 다크를 쌍으로 만들고 시스템 설정을 따르세요."
+        title={t.themeTitle}
+        description={t.themeDescription}
       />
 
       <View style={[styles.themeGrid, desktop ? styles.twoColumns : null]}>
@@ -1574,8 +1591,8 @@ function ThemeSection({
           >
             <RNText style={[styles.themeGuaranteeIcon, { color: theme.colors.primary }]}>✓</RNText>
             <View style={styles.rowCopy}>
-              <RNText style={[styles.themeGuaranteeTitle, { color: theme.colors.text }]}>ThemePair 완전성 보장</RNText>
-              <RNText style={[styles.themeGuaranteeBody, { color: theme.colors.textMuted }]}>라이트나 다크 한쪽이 비어 있는 상태를 만들 수 없습니다.</RNText>
+              <RNText style={[styles.themeGuaranteeTitle, { color: theme.colors.text }]}>{t.themeGuaranteeTitle}</RNText>
+              <RNText style={[styles.themeGuaranteeBody, { color: theme.colors.textMuted }]}>{t.themeGuaranteeBody}</RNText>
             </View>
           </View>
         </View>
@@ -1584,28 +1601,23 @@ function ThemeSection({
           <View style={styles.quickStartHeader}>
             <View>
               <RNText style={styles.quickStartEyebrow}>QUICK START</RNText>
-              <RNText style={styles.quickStartTitle}>첫 화면까지 3분.</RNText>
+              <RNText style={styles.quickStartTitle}>{t.quickStartTitle}</RNText>
             </View>
             <CopyButton dark copied={copied} onPress={onCopy} />
           </View>
           <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-            <RNText selectable style={styles.quickStartCode}>{QUICK_START}</RNText>
+            <RNText selectable style={styles.quickStartCode}>{t.quickStartCode}</RNText>
           </ScrollView>
           <View style={styles.quickStartFooter}>
-            <View style={styles.quickStartStep}>
-              <RNText style={styles.quickStartNumber}>1</RNText>
-              <RNText style={styles.quickStartStepText}>테마 생성</RNText>
-            </View>
-            <View style={styles.quickStartLine} />
-            <View style={styles.quickStartStep}>
-              <RNText style={styles.quickStartNumber}>2</RNText>
-              <RNText style={styles.quickStartStepText}>Provider 연결</RNText>
-            </View>
-            <View style={styles.quickStartLine} />
-            <View style={styles.quickStartStep}>
-              <RNText style={styles.quickStartNumber}>3</RNText>
-              <RNText style={styles.quickStartStepText}>컴포넌트 사용</RNText>
-            </View>
+            {t.quickStartSteps.map((step, index) => (
+              <Fragment key={step}>
+                {index > 0 ? <View style={styles.quickStartLine} /> : null}
+                <View style={styles.quickStartStep}>
+                  <RNText style={styles.quickStartNumber}>{index + 1}</RNText>
+                  <RNText style={styles.quickStartStepText}>{step}</RNText>
+                </View>
+              </Fragment>
+            ))}
           </View>
         </View>
       </View>
@@ -1615,36 +1627,15 @@ function ThemeSection({
 
 function PlatformSection({ desktop }: { desktop: boolean }): ReactElement {
   const theme = useTheme();
-  const items = [
-    {
-      eyebrow: '/INSETS',
-      symbol: '⌁',
-      title: 'Safe area와 키보드까지',
-      description: 'Android edge-to-edge Modal의 키보드 겹침과 하단 inset을 다루는 검증된 유틸을 제공합니다.',
-      code: 'useModalKeyboardOverlap()',
-    },
-    {
-      eyebrow: '/TAILWIND',
-      symbol: '#',
-      title: 'NativeWind는 선택 사항',
-      description: '의존하지 않으면서 className passthrough와 테마에서 파생한 Tailwind preset을 제공합니다.',
-      code: 'createTailwindPreset(theme)',
-    },
-    {
-      eyebrow: 'STRINGS + ICONS',
-      symbol: '文',
-      title: '앱의 언어를 그대로',
-      description: '한국어·영어 문구와 아이콘 렌더러를 Provider에서 주입합니다. 별도 래퍼가 필요 없습니다.',
-      code: 'strings={koStrings}',
-    },
-  ];
+  const t = landingStrings(useLocale().locale);
+  const items = t.platformItems;
   return (
     <View style={{ backgroundColor: theme.colors.surface }}>
       <SectionShell>
         <SectionEyebrow>NATIVE-FIRST</SectionEyebrow>
         <SectionHeading
-          title="웹 데모 뒤에도, 네이티브 현실을 압니다."
-          description="Expo 앱에서 실제로 반복되는 플랫폼 문제를 작은 유틸과 명확한 경계로 해결합니다."
+          title={t.platformTitle}
+          description={t.platformDescription}
         />
         <View style={[styles.platformGrid, desktop ? styles.threeColumns : null]}>
           {items.map((item) => (
@@ -1683,14 +1674,15 @@ function FinalCta({
   copied: boolean;
   onCopy: () => void;
 }): ReactElement {
+  const t = landingStrings(useLocale().locale);
   return (
     <ContentFrame maxWidth={1180} center padding={compact ? 20 : 28} style={styles.finalFrame}>
       <View style={[styles.finalCta, compact ? styles.finalCtaCompact : null]}>
         <View style={[styles.finalOrb, { pointerEvents: 'none' }]} />
         <View style={styles.finalCopy}>
           <RNText style={styles.finalEyebrow}>BUILD WITH CONFIDENCE</RNText>
-          <RNText style={[styles.finalTitle, compact ? styles.finalTitleCompact : null]}>좋은 UI는, 좋은 제약에서 시작됩니다.</RNText>
-          <RNText style={styles.finalDescription}>설치는 가볍게. 테마와 접근성 계약은 단단하게.</RNText>
+          <RNText style={[styles.finalTitle, compact ? styles.finalTitleCompact : null]}>{t.finalTitle}</RNText>
+          <RNText style={styles.finalDescription}>{t.finalDescription}</RNText>
         </View>
         <View style={styles.finalActions}>
           <Pressable onPress={onCopy} style={({ pressed }) => [styles.finalInstall, pressed ? styles.pressed : null]}>
@@ -1699,7 +1691,7 @@ function FinalCta({
             <RNText style={styles.finalCopyLabel}>{copied ? 'COPIED' : 'COPY'}</RNText>
           </Pressable>
           <LinkPressable href="/docs/getting-started" style={styles.finalDocs}>
-            <RNText style={styles.finalDocsText}>문서에서 시작하기</RNText>
+            <RNText style={styles.finalDocsText}>{t.finalDocsLink}</RNText>
             <RNText aria-hidden style={styles.finalDocsArrow}>→</RNText>
           </LinkPressable>
         </View>
@@ -1710,6 +1702,7 @@ function FinalCta({
 
 function SiteFooter(): ReactElement {
   const theme = useTheme();
+  const t = landingStrings(useLocale().locale);
   return (
     <ContentFrame maxWidth={1180} center padding={20} style={styles.footerFrame}>
       <View style={[styles.footer, { borderTopColor: theme.colors.line }]}> 
@@ -1717,11 +1710,11 @@ function SiteFooter(): ReactElement {
           <BrandMark size={30} />
           <View>
             <RNText style={[styles.footerBrand, { color: theme.colors.text }]}>@gj-kit/expo-ui</RNText>
-            <RNText style={[styles.footerCaption, { color: theme.colors.textMuted }]}>Type-safe primitives for Expo & React Native.</RNText>
+            <RNText style={[styles.footerCaption, { color: theme.colors.textMuted }]}>{t.footerTagline}</RNText>
           </View>
         </View>
         <View style={styles.footerLinks}>
-          {FOOTER_LINKS.map((item) => (
+          {footerLinks(t).map((item) => (
             <LinkPressable key={item.label} href={item.href as Href} style={styles.footerLinkHit}>
               <RNText style={[styles.footerLink, { color: theme.colors.textMuted }]}>{item.label}</RNText>
             </LinkPressable>
@@ -1735,10 +1728,11 @@ function SiteFooter(): ReactElement {
 
 function InstallBar({ copied, onCopy }: { copied: boolean; onCopy: () => void }): ReactElement {
   const theme = useTheme();
+  const t = landingStrings(useLocale().locale);
   return (
     <Pressable
       accessibilityRole="button"
-      accessibilityLabel={`${INSTALL_COMMAND} 설치 명령 복사`}
+      accessibilityLabel={t.copyInstallLabel(INSTALL_COMMAND)}
       onPress={onCopy}
       style={({ pressed }) => [
         styles.installBar,
@@ -1923,10 +1917,11 @@ function CopyButton({
   onPress: () => void;
 }): ReactElement {
   const theme = useTheme();
+  const t = siteStrings(useLocale().locale);
   return (
     <Pressable
       accessibilityRole="button"
-      accessibilityLabel="코드 복사"
+      accessibilityLabel={t.copyExample}
       onPress={onPress}
       style={({ pressed }) => [
         styles.copyButton,
@@ -1958,6 +1953,7 @@ const styles = StyleSheet.create({
   navLabel: { fontFamily: FONT_FAMILY, fontSize: 13, fontWeight: '600' },
   headerActions: { alignItems: 'center', flexDirection: 'row', gap: 8 },
   themeButton: { alignItems: 'center', borderRadius: 999, borderWidth: 1, height: 38, justifyContent: 'center', width: 38 },
+  localeGlyph: { fontSize: 13, fontWeight: '800' },
   themeGlyph: { fontFamily: FONT_FAMILY, fontSize: 18, fontWeight: '700' },
   siteButton: { alignItems: 'center', borderRadius: 999, borderWidth: 1, flexDirection: 'row', gap: 10, justifyContent: 'center', minHeight: 42, paddingHorizontal: 18 },
   siteButtonCompact: { minHeight: 36, paddingHorizontal: 14 },

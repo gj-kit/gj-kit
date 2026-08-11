@@ -27,6 +27,14 @@
     "tailwind"
   ],
   "homepage": "https://gj-kit-expo-ui.expo.app/",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/gj-kit/gj-kit.git",
+    "directory": "expo-ui"
+  },
+  "bugs": {
+    "url": "https://github.com/gj-kit/gj-kit/issues"
+  },
   "license": "MIT",
   "type": "module",
   "sideEffects": false,

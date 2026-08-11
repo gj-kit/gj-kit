@@ -1,17 +1,24 @@
 import catalogJson from './seo-catalog.json';
+import type { Locale } from './locale';
 
-export type ComponentSeoEntry = {
-  readonly slug: string;
-  readonly name: string;
+/** 로케일마다 달라지는 컴포넌트 본문. */
+export type ComponentSeoText = {
   readonly category: string;
-  readonly since: string;
   readonly headline: string;
   readonly description: string;
   readonly summary: string;
   readonly features: readonly string[];
   readonly accessibility: string;
   readonly snippet: string;
+};
+
+export type ComponentSeoEntry = {
+  readonly slug: string;
+  readonly name: string;
+  readonly since: string;
   readonly related: readonly string[];
+  readonly ko: ComponentSeoText;
+  readonly en: ComponentSeoText;
 };
 
 export type GuideSection = {
@@ -21,14 +28,19 @@ export type GuideSection = {
   readonly code?: string | undefined;
 };
 
-export type GuideSeoEntry = {
-  readonly slug: string;
+export type GuideSeoText = {
   readonly title: string;
   readonly headline: string;
   readonly description: string;
   readonly summary: string;
   readonly sections: readonly GuideSection[];
+};
+
+export type GuideSeoEntry = {
+  readonly slug: string;
   readonly relatedComponents: readonly string[];
+  readonly ko: GuideSeoText;
+  readonly en: GuideSeoText;
 };
 
 type SeoCatalog = {
@@ -42,6 +54,20 @@ const catalog = catalogJson as SeoCatalog;
 export const publishedPackageVersion = catalog.publishedVersion;
 export const componentSeoEntries = catalog.components;
 export const guideSeoEntries = catalog.guides;
+
+/** 현재 로케일의 본문을 고른다. 호출부가 `entry.ko`를 직접 읽지 않게 한다. */
+export function componentText(entry: ComponentSeoEntry, locale: Locale): ComponentSeoText {
+  return entry[locale];
+}
+
+export function guideText(entry: GuideSeoEntry, locale: Locale): GuideSeoText {
+  return entry[locale];
+}
+
+/** 카테고리 목록은 카탈로그 순서를 따른다(중복 제거). */
+export function componentCategories(locale: Locale): readonly string[] {
+  return Array.from(new Set(componentSeoEntries.map((entry) => entry[locale].category)));
+}
 
 export function getComponentSeoEntry(slug: string): ComponentSeoEntry | undefined {
   return componentSeoEntries.find((entry) => entry.slug === slug);

@@ -8,6 +8,7 @@ const catalog = JSON.parse(
   await readFile(path.join(projectDir, 'src/seo-catalog.json'), 'utf8'),
 );
 const siteUrl = 'https://gj-kit-expo-ui.expo.app';
+const LOCALES = ['en', 'ko'];
 
 function compareVersions(first, second) {
   const left = first.split('.').map(Number);
@@ -56,11 +57,25 @@ for (const entry of catalog.components) {
     }
   }
   // 상세 페이지 h1은 headline을 그대로 쓴다. 이름으로 끝나지 않으면 제목에서
-  // 컴포넌트 이름이 사라진다.
-  if (!entry.headline.trim().endsWith(entry.name)) {
-    throw new Error(
-      `Headline must end with the component name so the detail page h1 contains it: ${entry.name} — ${entry.headline}`,
-    );
+  // 컴포넌트 이름이 사라진다. 두 로케일 모두 검사한다.
+  for (const locale of LOCALES) {
+    const text = entry[locale];
+    if (text === undefined) {
+      throw new Error(`Missing ${locale} text for component: ${entry.name}`);
+    }
+    if (!text.headline.trim().endsWith(entry.name)) {
+      throw new Error(
+        `[${locale}] Headline must end with the component name so the detail page h1 contains it: ${entry.name} — ${text.headline}`,
+      );
+    }
+    for (const field of ['category', 'description', 'summary', 'accessibility', 'snippet']) {
+      if (typeof text[field] !== 'string' || text[field].length === 0) {
+        throw new Error(`[${locale}] Empty ${field} for component: ${entry.name}`);
+      }
+    }
+    if (!Array.isArray(text.features) || text.features.length === 0) {
+      throw new Error(`[${locale}] Empty features for component: ${entry.name}`);
+    }
   }
 }
 
@@ -85,6 +100,18 @@ if (missingPreviews.length > 0) {
   throw new Error(
     `미리보기가 없는 컴포넌트: ${missingPreviews.join(', ')} — src/component-previews.tsx에 추가하세요.`,
   );
+}
+
+for (const guide of catalog.guides) {
+  for (const locale of LOCALES) {
+    const text = guide[locale];
+    if (text === undefined) throw new Error(`Missing ${locale} text for guide: ${guide.slug}`);
+    if (text.sections.length !== guide.ko.sections.length) {
+      throw new Error(
+        `[${locale}] Guide section count differs from ko for ${guide.slug}: ${text.sections.length} vs ${guide.ko.sections.length}`,
+      );
+    }
+  }
 }
 
 const releasedComponents = catalog.components.filter(

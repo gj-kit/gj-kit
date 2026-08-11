@@ -23,13 +23,19 @@ import {
 } from '@gj-kit/expo-ui';
 import type { ComponentSeoEntry } from '../../src/seo-content';
 import {
+  componentCategories,
   componentDocsPath,
   componentSeoEntries,
+  componentText,
   guideDocsPath,
   guideSeoEntries,
+  guideText,
   isReleasedComponent,
   publishedPackageVersion,
 } from '../../src/seo-content';
+import { useLocale } from '../../src/locale';
+import type { Locale } from '../../src/locale';
+import { siteStrings } from '../../src/site-strings';
 import {
   SeoHead,
   breadcrumbSchema,
@@ -45,17 +51,14 @@ import {
 } from '../../src/seo-page';
 
 const PATH = '/docs/components';
-const ALL_CATEGORIES = '전체';
+/** 카테고리 라벨은 로케일마다 다르므로 '전체'는 내부 센티널로 표현한다. */
+const ALL_CATEGORIES = '__all__';
 
 type ReleaseFilter = 'all' | 'released' | 'preview';
 
-const categories = Array.from(new Set(componentSeoEntries.map((entry) => entry.category)));
 const componentCount = componentSeoEntries.length;
 const releasedCount = componentSeoEntries.filter(isReleasedComponent).length;
 const previewCount = componentCount - releasedCount;
-const TITLE = `Expo UI 컴포넌트 ${componentCount}종 | GJ Kit Expo UI`;
-const DESCRIPTION =
-  `소스에 포함된 Expo·React Native·Web용 TypeScript UI 컴포넌트 ${componentCount}종의 예제, 접근성, 테마 연동과 릴리스 상태를 확인하세요.`;
 
 function CssLayout({
   className,
@@ -71,6 +74,10 @@ function CssLayout({
 }
 
 export default function ComponentsIndexPage(): ReactElement {
+  const { locale } = useLocale();
+  const t = siteStrings(locale);
+  const TITLE = t.catalogMetaTitle(componentCount);
+  const DESCRIPTION = t.catalogMetaDescription(componentCount);
   const [query, setQuery] = useState('');
   const [activeCategory, setActiveCategory] = useState(ALL_CATEGORIES);
   const [releaseFilter, setReleaseFilter] = useState<ReleaseFilter>('all');
@@ -82,19 +89,21 @@ export default function ComponentsIndexPage(): ReactElement {
   }));
 
   const visibleEntries = useMemo(() => {
-    const normalizedQuery = query.trim().toLocaleLowerCase('ko');
+    const normalizedQuery = query.trim().toLocaleLowerCase(locale);
     return componentSeoEntries.filter((entry) => {
-      if (activeCategory !== ALL_CATEGORIES && entry.category !== activeCategory) return false;
+      const text = componentText(entry, locale);
+      if (activeCategory !== ALL_CATEGORIES && text.category !== activeCategory) return false;
       const released = isReleasedComponent(entry);
       if (releaseFilter === 'released' && !released) return false;
       if (releaseFilter === 'preview' && released) return false;
       if (!normalizedQuery) return true;
-      return [entry.name, entry.category, entry.description]
+      // 로케일 본문만 검색하면 영어 화면에서 한글 키워드를 못 찾는다. 양쪽을 모두 훑는다.
+      return [entry.name, text.category, text.description, entry.ko.description, entry.en.description]
         .join(' ')
-        .toLocaleLowerCase('ko')
+        .toLocaleLowerCase(locale)
         .includes(normalizedQuery);
     });
-  }, [activeCategory, query, releaseFilter]);
+  }, [activeCategory, locale, query, releaseFilter]);
 
   const resetFilters = () => {
     setQuery('');
@@ -108,22 +117,23 @@ export default function ComponentsIndexPage(): ReactElement {
         title={TITLE}
         description={DESCRIPTION}
         path={PATH}
+        locale={locale}
         schemas={[
-          webPageSchema({ path: PATH, title: TITLE, description: DESCRIPTION, type: 'CollectionPage' }),
+          webPageSchema({ path: PATH, title: TITLE, description: DESCRIPTION, type: 'CollectionPage', locale }),
           breadcrumbSchema([
-            { name: '홈', path: '/' },
-            { name: '문서', path: '/docs' },
-            { name: '컴포넌트', path: PATH },
+            { name: t.home, path: '/' },
+            { name: t.docs, path: '/docs' },
+            { name: t.components, path: PATH },
           ]),
-          itemListSchema('GJ Kit Expo UI 컴포넌트', componentItems),
+          itemListSchema('GJ Kit Expo UI components', componentItems),
         ]}
       />
       <SeoPageShell
         wide
         breadcrumbs={[
-          { label: '홈', href: '/' },
-          { label: '문서', href: '/docs' },
-          { label: `컴포넌트 ${componentCount}종` },
+          { label: t.home, href: '/' },
+          { label: t.docs, href: '/docs' },
+          { label: t.componentsCount(componentCount) },
         ]}
       >
         <CssLayout
@@ -133,10 +143,10 @@ export default function ComponentsIndexPage(): ReactElement {
           <View>
             <SeoPageHeading
               eyebrow="COMPONENT LIBRARY"
-              title={`Expo·React Native UI 컴포넌트 ${componentCount}종`}
-              description="하나의 타입 시스템과 테마 토큰으로 iOS, Android, Web UI를 조립하세요. 각 문서에서 최소 예제, 접근성 동작과 릴리스 상태를 바로 확인할 수 있습니다."
+              title={t.catalogTitle(componentCount)}
+              description={t.catalogHeroDescription}
               preview={previewCount > 0
-                ? `npm v${publishedPackageVersion} · v0.4 소스 미리보기 ${previewCount}종`
+                ? t.catalogPreviewBadge(publishedPackageVersion, previewCount)
                 : undefined}
             />
             <ProofGrid />
@@ -151,7 +161,7 @@ export default function ComponentsIndexPage(): ReactElement {
           />
         </CssLayout>
 
-        <SeoSection title="컴포넌트 탐색">
+        <SeoSection title={t.catalogExplore}>
           <CssLayout
             className="seo-directory-layout"
             fallbackStyle={styles.directoryFallback}
@@ -182,8 +192,8 @@ export default function ComponentsIndexPage(): ReactElement {
                 style={styles.visuallyHidden}
               >
                 {visibleEntries.length === 0
-                  ? '일치하는 컴포넌트가 없습니다. 검색어나 카테고리, 릴리스 상태를 바꿔 보세요.'
-                  : `컴포넌트 ${visibleEntries.length}개를 찾았습니다. 전체 ${componentSeoEntries.length}개 중.`}
+                  ? `${t.catalogNoResults} ${t.catalogNoResultsBody}`
+                  : t.catalogResults(visibleEntries.length, componentSeoEntries.length)}
               </RNText>
 
               {visibleEntries.length > 0 ? (
@@ -197,12 +207,12 @@ export default function ComponentsIndexPage(): ReactElement {
           </CssLayout>
         </SeoSection>
 
-        <SeoSection title="설계 원칙부터 읽기">
+        <SeoSection title={t.catalogPrinciples}>
           <SeoLinkGrid
             items={guideSeoEntries.map((guide) => ({
               href: guideDocsPath(guide.slug),
-              title: guide.title,
-              description: guide.description,
+              title: guideText(guide, locale).title,
+              description: guideText(guide, locale).description,
             }))}
           />
         </SeoSection>
@@ -252,6 +262,7 @@ function SourceShowcase({
   readonly onCheckedChange: (checked: boolean) => void;
 }): ReactElement {
   const theme = useTheme();
+  const t = siteStrings(useLocale().locale);
   const [page, setPage] = useState(1);
   return (
     <Surface
@@ -259,29 +270,29 @@ function SourceShowcase({
       style={[styles.showcase, { borderColor: theme.colors.primary }]}
     >
       <View style={styles.showcaseTopline}>
-        <RNText style={[styles.showcaseEyebrow, { color: theme.colors.primaryStrong }]}>LIVE SOURCE PREVIEW</RNText>
+        <RNText style={[styles.showcaseEyebrow, { color: theme.colors.primaryStrong }]}>{t.showcaseEyebrow}</RNText>
         <Badge label="Type-safe" variant="info" size="sm" />
       </View>
-      <RNText style={[styles.showcaseTitle, { color: theme.colors.text }]}>한 번 설계하고, 모든 화면에서.</RNText>
+      <RNText style={[styles.showcaseTitle, { color: theme.colors.text }]}>{t.showcaseTitle}</RNText>
       <Text role="caption" color="textMuted" style={styles.showcaseCopy}>
-        아래 컨트롤은 문서 장식이 아니라 현재 워크스페이스의 실제 컴포넌트입니다.
+        {t.showcaseCopy}
       </Text>
       <View style={styles.showcaseControl}>
         <Checkbox
           checked={checked}
           onCheckedChange={onCheckedChange}
-          label="접근성 계약 포함"
-          description="Space 입력과 타입 안전 상태"
+          label={t.showcaseCheckboxLabel}
+          description={t.showcaseCheckboxDescription}
           size="sm"
         />
       </View>
       <View style={styles.progressBlock}>
         <View style={styles.progressLabelRow}>
-          <RNText style={[styles.progressLabel, { color: theme.colors.textMuted }]}>Cross-platform readiness</RNText>
+          <RNText style={[styles.progressLabel, { color: theme.colors.textMuted }]}>{t.showcaseProgressLabel}</RNText>
           <RNText style={[styles.progressValue, { color: theme.colors.primaryStrong }]}>{checked ? '92%' : '64%'}</RNText>
         </View>
         <ProgressBar
-          accessibilityLabel="크로스플랫폼 준비도"
+          accessibilityLabel={t.showcaseReadiness}
           value={checked ? 92 : 64}
           size="sm"
         />
@@ -289,18 +300,16 @@ function SourceShowcase({
       <Pagination
         mode="numbered"
         countMode="pages"
-        accessibilityLabel="컴포넌트 미리보기 페이지"
+        accessibilityLabel={t.showcasePreviewPages}
         page={page}
         pageCount={3}
         siblingCount={0}
         size="sm"
-        getPageAccessibilityLabel={({ page, current }) =>
-          `${page}페이지${current ? ' (현재)' : ''}`
-        }
+        getPageAccessibilityLabel={({ page, current }) => t.paginationPageLabel(page, current)}
         onPageChange={setPage}
       />
       <Button
-        label={checked ? '상태 바꾸기' : '다시 확인하기'}
+        label={checked ? t.showcaseToggle : t.showcaseRecheck}
         onPress={() => onCheckedChange(!checked)}
         size="sm"
         variant="primary-outline"
@@ -318,17 +327,19 @@ function CategoryRail({
   readonly onCategoryChange: (category: string) => void;
 }): ReactElement {
   const theme = useTheme();
-  const options = [ALL_CATEGORIES, ...categories];
+  const { locale } = useLocale();
+  const t = siteStrings(locale);
+  const options = [ALL_CATEGORIES, ...componentCategories(locale)];
   const content = (
     <Surface padding="lg" style={styles.categorySurface}>
-      <RNText style={[styles.railEyebrow, { color: theme.colors.textMuted }]}>BROWSE</RNText>
-      <RNText style={[styles.railTitle, { color: theme.colors.text }]}>카테고리</RNText>
+      <RNText style={[styles.railEyebrow, { color: theme.colors.textMuted }]}>{t.catalogBrowse}</RNText>
+      <RNText style={[styles.railTitle, { color: theme.colors.text }]}>{t.catalogCategories}</RNText>
       <CssLayout className="seo-category-options" fallbackStyle={styles.categoryOptionsFallback}>
         {options.map((category) => {
           const selected = category === activeCategory;
           const count = category === ALL_CATEGORIES
             ? componentSeoEntries.length
-            : componentSeoEntries.filter((entry) => entry.category === category).length;
+            : componentSeoEntries.filter((entry) => componentText(entry, locale).category === category).length;
           return (
             <Pressable
               key={category}
@@ -348,7 +359,7 @@ function CategoryRail({
                   { color: selected ? theme.colors.primaryStrong : theme.colors.textMuted },
                 ]}
               >
-                {category}
+                {category === ALL_CATEGORIES ? t.catalogAll : category}
               </RNText>
               <RNText
                 style={[
@@ -367,18 +378,16 @@ function CategoryRail({
           {previewCount > 0 ? `Preview ${previewCount}` : `npm v${publishedPackageVersion}`}
         </RNText>
         <RNText style={[styles.railNoteCopy, { color: theme.colors.textMuted }]}>
-          {previewCount > 0
-            ? '미리보기 항목은 npm 공개 전까지 상세 페이지가 검색에서 제외됩니다.'
-            : `${releasedCount}개 컴포넌트가 모두 공개되어 설치와 검색 색인이 가능합니다.`}
+          {previewCount > 0 ? t.catalogPreviewNote(previewCount) : t.catalogPublishedNote(releasedCount)}
         </RNText>
       </View>
     </Surface>
   );
 
   if (Platform.OS === 'web') {
-    return createElement('aside', { 'aria-label': '컴포넌트 필터', className: 'seo-category-rail' }, content);
+    return createElement('aside', { 'aria-label': t.catalogFilterRegion, className: 'seo-category-rail' }, content);
   }
-  return <View accessibilityLabel="컴포넌트 필터">{content}</View>;
+  return <View accessibilityLabel={t.catalogFilterRegion}>{content}</View>;
 }
 
 function CatalogToolbar({
@@ -395,25 +404,26 @@ function CatalogToolbar({
   readonly resultCount: number;
 }): ReactElement {
   const theme = useTheme();
+  const t = siteStrings(useLocale().locale);
   const filters: readonly { value: ReleaseFilter; label: string; count: number }[] = [
-    { value: 'all', label: '전체', count: componentSeoEntries.length },
-    { value: 'released', label: 'npm stable', count: releasedCount },
-    { value: 'preview', label: 'Preview', count: previewCount },
+    { value: 'all', label: t.catalogFilterAll, count: componentSeoEntries.length },
+    { value: 'released', label: t.catalogFilterStable, count: releasedCount },
+    { value: 'preview', label: t.catalogFilterPreview, count: previewCount },
   ];
   return (
     <Surface padding="lg" style={styles.toolbar}>
       <View style={styles.searchGroup}>
-        <RNText style={[styles.controlLabel, { color: theme.colors.text }]}>컴포넌트 검색</RNText>
+        <RNText style={[styles.controlLabel, { color: theme.colors.text }]}>{t.catalogSearchLabel}</RNText>
         <View style={[styles.searchBox, { backgroundColor: theme.colors.background, borderColor: theme.colors.textSubtle }]}>
           <RNText aria-hidden style={[styles.searchIcon, { color: theme.colors.textMuted }]}>⌕</RNText>
           <TextInput
-            accessibilityLabel="컴포넌트 검색"
+            accessibilityLabel={t.catalogSearchLabel}
             autoCapitalize="none"
             autoCorrect={false}
             clearButtonMode="never"
             nativeID="component-search-input"
             onChangeText={onQueryChange}
-            placeholder="Button, 접근성, 레이아웃…"
+            placeholder={t.catalogSearchPlaceholder}
             placeholderTextColor={theme.colors.textMuted}
             returnKeyType="search"
             style={[styles.searchInput, { color: theme.colors.text }]}
@@ -421,7 +431,7 @@ function CatalogToolbar({
           />
           {query ? (
             <Pressable
-              accessibilityLabel="검색어 지우기"
+              accessibilityLabel={t.catalogClearSearch}
               onPress={() => onQueryChange('')}
               style={({ pressed }) => [styles.clearButton, pressed ? styles.pressed : null]}
             >
@@ -432,8 +442,8 @@ function CatalogToolbar({
       </View>
 
       {previewCount > 0 ? (
-        <View style={styles.filterGroup} accessibilityLabel="릴리스 상태 필터">
-          <RNText style={[styles.controlLabel, { color: theme.colors.text }]}>릴리스 상태</RNText>
+        <View style={styles.filterGroup} accessibilityLabel={t.catalogReleaseLabel}>
+          <RNText style={[styles.controlLabel, { color: theme.colors.text }]}>{t.catalogReleaseLabel}</RNText>
           <View style={styles.filterRow}>
             {filters.map((filter) => {
               const selected = filter.value === releaseFilter;
@@ -482,6 +492,9 @@ function ComponentGrid({ entries }: { readonly entries: readonly ComponentSeoEnt
 
 function ComponentCard({ entry }: { readonly entry: ComponentSeoEntry }): ReactElement {
   const theme = useTheme();
+  const { locale } = useLocale();
+  const t = siteStrings(locale);
+  const text = componentText(entry, locale);
   const released = isReleasedComponent(entry);
   return (
     <Link href={componentDocsPath(entry.slug) as Href} asChild>
@@ -492,7 +505,7 @@ function ComponentCard({ entry }: { readonly entry: ComponentSeoEntry }): ReactE
         <Surface padding="lg" style={styles.componentCard}>
           <View style={styles.componentMetaRow}>
             <View style={[styles.categoryTag, { backgroundColor: theme.colors.surfaceSubtle }]}>
-              <RNText style={[styles.categoryTagText, { color: theme.colors.textMuted }]}>{entry.category}</RNText>
+              <RNText style={[styles.categoryTagText, { color: theme.colors.textMuted }]}>{text.category}</RNText>
             </View>
             <View
               style={[
@@ -524,10 +537,10 @@ function ComponentCard({ entry }: { readonly entry: ComponentSeoEntry }): ReactE
             {entry.name}
           </RNText>
           <Text role="body" color="textMuted" numberOfLines={3} style={styles.componentDescription}>
-            {entry.description}
+            {text.description}
           </Text>
           <View style={styles.componentFooter}>
-            <RNText style={[styles.componentMeta, { color: theme.colors.textMuted }]}>예제 · 접근성 · 연관 API</RNText>
+            <RNText style={[styles.componentMeta, { color: theme.colors.textMuted }]}>{t.catalogCardMeta}</RNText>
             <RNText aria-hidden style={[styles.componentArrow, { color: theme.colors.primaryStrong }]}>→</RNText>
           </View>
         </Surface>
@@ -538,10 +551,11 @@ function ComponentCard({ entry }: { readonly entry: ComponentSeoEntry }): ReactE
 
 function EmptyResults({ onReset }: { readonly onReset: () => void }): ReactElement {
   const theme = useTheme();
+  const t = siteStrings(useLocale().locale);
   return (
     <Surface padding="xl" style={styles.emptyResults}>
-      <RNText style={[styles.emptyTitle, { color: theme.colors.text }]}>일치하는 컴포넌트가 없습니다.</RNText>
-      <Text role="body" color="textMuted">검색어나 카테고리, 릴리스 상태를 바꿔 보세요.</Text>
+      <RNText style={[styles.emptyTitle, { color: theme.colors.text }]}>{t.catalogNoResults}</RNText>
+      <Text role="body" color="textMuted">{t.catalogNoResultsBody}</Text>
       <Pressable
         accessibilityRole="button"
         onPress={onReset}
@@ -551,7 +565,7 @@ function EmptyResults({ onReset }: { readonly onReset: () => void }): ReactEleme
           pressed ? styles.pressed : null,
         ]}
       >
-        <RNText style={[styles.resetLabel, { color: theme.colors.primaryStrong }]}>필터 초기화</RNText>
+        <RNText style={[styles.resetLabel, { color: theme.colors.primaryStrong }]}>{t.catalogReset}</RNText>
       </Pressable>
     </Surface>
   );

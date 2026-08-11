@@ -1,5 +1,9 @@
+import { useEffect } from 'react';
 import type { ReactElement } from 'react';
+import { Platform } from 'react-native';
 import Head from 'expo-router/head';
+import type { Locale } from './locale';
+import { DEFAULT_LOCALE } from './locale';
 
 export const SITE_URL = 'https://gj-kit-expo-ui.expo.app';
 export const SITE_NAME = 'GJ Kit Expo UI';
@@ -17,6 +21,23 @@ type SeoHeadProps = {
   readonly type?: 'website' | 'article' | undefined;
   readonly imageAlt?: string | undefined;
   readonly noindex?: boolean | undefined;
+  readonly locale?: Locale | undefined;
+};
+
+/** og:locale은 BCP-47이 아니라 언더스코어 형식을 쓴다. */
+const OG_LOCALE: Readonly<Record<Locale, string>> = { en: 'en_US', ko: 'ko_KR' };
+
+/** JSON-LD의 inLanguage는 BCP-47이다. */
+const SCHEMA_LANGUAGE: Readonly<Record<Locale, string>> = { en: 'en', ko: 'ko-KR' };
+
+const IMAGE_ALT: Readonly<Record<Locale, string>> = {
+  en: `${SITE_NAME} components and documentation preview`,
+  ko: `${SITE_NAME} 컴포넌트와 문서 미리보기`,
+};
+
+const PACKAGE_DESCRIPTION: Readonly<Record<Locale, string>> = {
+  en: 'Type-safe UI component library for Expo and React Native',
+  ko: 'Expo와 React Native를 위한 타입 안전한 UI 컴포넌트 라이브러리',
 };
 
 export function absoluteUrl(path: string): string {
@@ -28,16 +49,39 @@ function serializeJsonLd(value: JsonLd): string {
   return JSON.stringify(value).replace(/</g, '\\u003c');
 }
 
+function syncMeta(attribute: 'name' | 'property', key: string, content: string): void {
+  const node = document.head.querySelector(`meta[${attribute}="${key}"]`);
+  if (node) node.setAttribute('content', content);
+}
+
 export function SeoHead({
   title,
   description,
   path,
   schemas = [],
   type = 'website',
-  imageAlt = `${SITE_NAME} 컴포넌트와 문서 미리보기`,
+  imageAlt,
   noindex = false,
+  locale = DEFAULT_LOCALE,
 }: SeoHeadProps): ReactElement {
   const url = absoluteUrl(path);
+  const alt = imageAlt ?? IMAGE_ALT[locale];
+
+  // expo-router/head는 프리렌더된 <title>·<meta>를 하이드레이션 이후에 갱신하지
+  // 않는다. 언어를 바꾸면 본문만 번역되고 탭 제목과 공유 카드는 영어로 남아
+  // 있어서, 웹에서는 직접 맞춘다. 크롤러가 보는 초기 HTML은 그대로 영어다.
+  useEffect(() => {
+    if (Platform.OS !== 'web') return;
+    document.title = title;
+    syncMeta('name', 'description', description);
+    syncMeta('property', 'og:title', title);
+    syncMeta('property', 'og:description', description);
+    syncMeta('property', 'og:locale', OG_LOCALE[locale]);
+    syncMeta('property', 'og:image:alt', alt);
+    syncMeta('name', 'twitter:title', title);
+    syncMeta('name', 'twitter:description', description);
+    syncMeta('name', 'twitter:image:alt', alt);
+  }, [alt, description, locale, title]);
   const robots = noindex
     ? 'noindex, follow'
     : 'index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1';
@@ -51,7 +95,8 @@ export function SeoHead({
       <link rel="canonical" href={url} />
 
       <meta property="og:type" content={type} />
-      <meta property="og:locale" content="ko_KR" />
+      <meta property="og:locale" content={OG_LOCALE[locale]} />
+      <meta property="og:locale:alternate" content={OG_LOCALE[locale === 'en' ? 'ko' : 'en']} />
       <meta property="og:site_name" content={SITE_NAME} />
       <meta property="og:url" content={url} />
       <meta property="og:title" content={title} />
@@ -61,13 +106,13 @@ export function SeoHead({
       <meta property="og:image:type" content="image/png" />
       <meta property="og:image:width" content="1659" />
       <meta property="og:image:height" content="948" />
-      <meta property="og:image:alt" content={imageAlt} />
+      <meta property="og:image:alt" content={alt} />
 
       <meta name="twitter:card" content="summary_large_image" />
       <meta name="twitter:title" content={title} />
       <meta name="twitter:description" content={description} />
       <meta name="twitter:image" content={OG_IMAGE_URL} />
-      <meta name="twitter:image:alt" content={imageAlt} />
+      <meta name="twitter:image:alt" content={alt} />
 
       {schemas.map((schema, index) => (
         <script
@@ -89,8 +134,8 @@ export function websiteSchema(): JsonLd {
     name: SITE_NAME,
     alternateName: [PACKAGE_NAME, 'gj-kit Expo UI'],
     url: `${SITE_URL}/`,
-    description: 'Expo와 React Native를 위한 타입 안전한 UI 컴포넌트 라이브러리',
-    inLanguage: 'ko-KR',
+    description: PACKAGE_DESCRIPTION[DEFAULT_LOCALE],
+    inLanguage: SCHEMA_LANGUAGE[DEFAULT_LOCALE],
   };
 }
 
@@ -100,7 +145,7 @@ export function softwareSourceCodeSchema(version: string): JsonLd {
     '@type': 'SoftwareSourceCode',
     '@id': `${SITE_URL}/#package`,
     name: PACKAGE_NAME,
-    description: 'Expo와 React Native를 위한 타입 안전한 UI 컴포넌트 라이브러리',
+    description: PACKAGE_DESCRIPTION[DEFAULT_LOCALE],
     url: `${SITE_URL}/`,
     sameAs: [NPM_URL],
     programmingLanguage: ['TypeScript', 'JavaScript'],
@@ -118,11 +163,13 @@ export function webPageSchema({
   title,
   description,
   type = 'WebPage',
+  locale = DEFAULT_LOCALE,
 }: {
   readonly path: string;
   readonly title: string;
   readonly description: string;
   readonly type?: 'WebPage' | 'CollectionPage' | undefined;
+  readonly locale?: Locale | undefined;
 }): JsonLd {
   const url = absoluteUrl(path);
   return {
@@ -132,7 +179,7 @@ export function webPageSchema({
     url,
     name: title,
     description,
-    inLanguage: 'ko-KR',
+    inLanguage: SCHEMA_LANGUAGE[locale],
     isPartOf: { '@id': `${SITE_URL}/#website` },
   };
 }
@@ -142,11 +189,13 @@ export function techArticleSchema({
   headline,
   description,
   about,
+  locale = DEFAULT_LOCALE,
 }: {
   readonly path: string;
   readonly headline: string;
   readonly description: string;
   readonly about: string;
+  readonly locale?: Locale | undefined;
 }): JsonLd {
   const url = absoluteUrl(path);
   return {
@@ -156,7 +205,7 @@ export function techArticleSchema({
     headline,
     description,
     about,
-    inLanguage: 'ko-KR',
+    inLanguage: SCHEMA_LANGUAGE[locale],
     mainEntityOfPage: { '@id': `${url}#webpage` },
     author: { '@type': 'Organization', name: 'gj-kit', url: `${SITE_URL}/` },
     publisher: { '@type': 'Organization', name: 'gj-kit', url: `${SITE_URL}/` },

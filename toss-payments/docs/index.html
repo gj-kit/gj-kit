@@ -1,0 +1,168 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#070a12" />
+    <meta name="description" content="검증을 통과한 결제만 다음 단계로. 타입 안전한 토스페이먼츠 v2 TypeScript 라이브러리." />
+    <meta property="og:title" content="@gj-kit/toss-payments — Payment safety, encoded in types" />
+    <meta property="og:description" content="결제위젯·API v2 연동에서 빠뜨리기 쉬운 검증을 타입으로 강제합니다." />
+    <title>@gj-kit/toss-payments — Payment safety, encoded in types</title>
+    <link rel="stylesheet" href="./styles.css" />
+    <script defer src="./app.js"></script>
+  </head>
+  <body>
+    <div class="ambient ambient-one"></div>
+    <div class="ambient ambient-two"></div>
+    <header class="site-header">
+      <a class="brand" href="../" aria-label="GJ Kit product index"><span class="brand-mark">GJ</span><span>GJ KIT</span></a>
+      <nav aria-label="주요 탐색">
+        <a href="#why">Why it matters</a>
+        <a href="#flows">Flows</a>
+        <a href="#start">Get started</a>
+      </nav>
+      <a class="header-github" href="https://github.com/gj-kit/gj-kit/tree/main/toss-payments" target="_blank" rel="noreferrer">GitHub <span aria-hidden="true">↗</span></a>
+    </header>
+
+    <main>
+      <section class="hero" aria-labelledby="hero-title">
+        <div class="hero-copy">
+          <p class="eyebrow"><span class="pulse"></span> Type-safe payments for TypeScript</p>
+          <h1 id="hero-title">결제를 보내기 전에,<br /><em>실수부터 막으세요.</em></h1>
+          <p class="hero-lede">토스페이먼츠의 중요한 검증은 기억에 맡길 일이 아닙니다. <strong>@gj-kit/toss-payments</strong>는 결제 흐름의 순서·키의 경계·신뢰 수준을 타입에 남깁니다.</p>
+          <div class="hero-actions">
+            <a class="button button-primary" href="#start">3분 안에 시작하기 <span aria-hidden="true">→</span></a>
+            <a class="button button-quiet" href="https://github.com/gj-kit/gj-kit/blob/main/toss-payments/README.md" target="_blank" rel="noreferrer">README 읽기 <span aria-hidden="true">↗</span></a>
+          </div>
+          <div class="signal-row" aria-label="패키지 특징">
+            <span><i class="signal-dot"></i> Runtime deps 0</span>
+            <span><i class="signal-dot"></i> Node 20+ · Edge ready</span>
+            <span><i class="signal-dot"></i> Result, not throw</span>
+          </div>
+        </div>
+
+        <div class="hero-console" aria-label="안전한 결제 플로우 코드 예시">
+          <div class="console-top"><div class="window-dots"><i></i><i></i><i></i></div><span>checkout.ts</span><span class="console-status"><b></b> types checked</span></div>
+          <pre><code><span class="c-key">const</span> <span class="c-name">toss</span> = <span class="c-fn">createTossPayments</span>({
+  <span class="c-prop">secretKey</span>,
+  <span class="c-prop">orders</span>,
+  <span class="c-prop">webhook</span>: { <span class="c-prop">dedupe</span>, <span class="c-prop">autoRefetch</span>: <span class="c-key">true</span> },
+});
+
+<span class="c-key">const</span> <span class="c-name">done</span> = <span class="c-key">await</span> toss.<span class="c-prop">confirm</span>
+  .<span class="c-fn">confirmCallback</span>(req.url);</code></pre>
+          <div class="proof-line"><span class="proof-icon">✓</span><span>주문 금액 검증 · 승인 시한 · 키 종류가 코드 경계에서 확인됩니다.</span></div>
+        </div>
+      </section>
+
+      <section class="trust-strip" aria-label="핵심 약속">
+        <div><span class="trust-number" data-count="4">4</span><span>서로 바꿔 쓸 수 없는<br />키 타입</span></div>
+        <div><span class="trust-number" data-count="3">3</span><span>웹훅 신뢰 등급을<br />명시적으로 구분</span></div>
+        <div><span class="trust-word">0</span><span>결제 경로를 바꾸는<br />옵션 실패 경로</span></div>
+        <div><span class="trust-word">Result</span><span>예외 대신 모든 공개 작업의<br />판별 가능한 결과</span></div>
+      </section>
+
+      <section id="why" class="section why-section reveal">
+        <div class="section-heading">
+          <p class="eyebrow">The library has an opinion</p>
+          <h2>“나중에 확인하지”가<br />사고가 되는 곳을 설계했습니다.</h2>
+          <p>Stripe와 Vercel의 SDK 문서처럼 설치 방법에서 바로 가치 증명과 실행 가능한 코드로 이어지되, 이 라이브러리의 핵심인 <strong>오용 불가능성</strong>을 전면에 둡니다.</p>
+        </div>
+        <div class="guard-grid">
+          <article class="guard-card key-card">
+            <div class="card-icon key-icon">⌘</div>
+            <h3>키가 역할을 기억합니다.</h3>
+            <p>API/위젯 × 클라이언트/시크릿, 네 종류를 독립 브랜드로 분리합니다. 서버 키 파서는 browser 엔트리에 존재하지 않습니다.</p>
+            <div class="key-switcher" role="tablist" aria-label="키 사용처">
+              <button class="key-choice active" role="tab" aria-selected="true" data-key="api-client">API client</button>
+              <button class="key-choice" role="tab" aria-selected="false" data-key="api-secret">API secret</button>
+              <button class="key-choice" role="tab" aria-selected="false" data-key="widget-client">Widget client</button>
+              <button class="key-choice" role="tab" aria-selected="false" data-key="widget-secret">Widget secret</button>
+            </div>
+            <p class="key-detail" aria-live="polite"><b>브라우저 · 빌링 인증창</b><span><code>parseApiClientKey</code> · root entry</span></p>
+          </article>
+          <article class="guard-card">
+            <div class="card-icon flow-icon">↳</div>
+            <h3>순서를 메서드 부재로 강제합니다.</h3>
+            <p><code>setAmount</code> 전에는 렌더 메서드가, 렌더 전에는 결제 요청 메서드가 타입에 없습니다. 올바른 경로만 자연스럽게 보입니다.</p>
+            <div class="type-flow" aria-label="결제 위젯 상태 흐름"><span>load</span><i></i><span>amount</span><i></i><span>render</span><i></i><span class="checked">request</span></div>
+          </article>
+          <article class="guard-card">
+            <div class="card-icon web-icon">⌁</div>
+            <h3>웹훅을 같은 신뢰도로 취급하지 않습니다.</h3>
+            <p>서명, 입금 secret, 미검증 이벤트를 구분합니다. 확인할 수 없는 이벤트에는 재조회 경로가 타입으로 드러납니다.</p>
+            <div class="trust-levels"><span class="verified">signature</span><span class="verified">secret</span><span class="unverified">unverified → refetch</span></div>
+          </article>
+        </div>
+      </section>
+
+      <section id="flows" class="section flow-section reveal">
+        <div class="section-heading compact">
+          <p class="eyebrow">Pick a path</p>
+          <h2>결제의 중요한 순간마다,<br />다음 한 줄을 안전하게.</h2>
+        </div>
+        <div class="flow-workbench">
+          <div class="scenario-tabs" role="tablist" aria-label="코드 예시">
+            <button class="scenario active" role="tab" aria-selected="true" data-scenario="widget"><span>01</span> 위젯 결제</button>
+            <button class="scenario" role="tab" aria-selected="false" data-scenario="billing"><span>02</span> 빌링</button>
+            <button class="scenario" role="tab" aria-selected="false" data-scenario="webhook"><span>03</span> 웹훅</button>
+          </div>
+          <div class="scenario-display">
+            <div class="scenario-copy">
+              <p class="scenario-label">WIDGET CHECKOUT</p>
+              <h3 data-scenario-title>인증 완료와 승인을<br />혼동하지 않습니다.</h3>
+              <p data-scenario-description>successUrl의 값은 브라우저를 통과합니다. 저장한 주문과 대조를 마친 값만 <code>confirm</code>에 전달할 수 있습니다.</p>
+              <div class="mini-steps" data-scenario-steps><span>서버 주문 생성</span><i></i><span>위젯 요청</span><i></i><span class="current">검증 후 승인</span></div>
+            </div>
+            <div class="code-card">
+              <div class="code-card-head"><span data-code-label>confirm.ts</span><button class="copy-code" data-copy="widget" type="button">Copy</button></div>
+              <pre><code data-scenario-code></code></pre>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="section architecture reveal">
+        <div class="architecture-panel">
+          <div>
+            <p class="eyebrow">One composition point</p>
+            <h2>필요한 능력만<br />조립합니다.</h2>
+            <p><code>createTossPayments</code>에 스토어를 배선하면 해당 플로우가 생깁니다. 배선하지 않은 플로우는 반환 타입의 프로퍼티 자체가 아닙니다.</p>
+          </div>
+          <div class="kit-map" aria-label="TossPaymentsKit 구성도">
+            <div class="kit-root"><span>createTossPayments</span><small>always: client · events</small></div>
+            <div class="kit-branches">
+              <div><i class="branch-line"></i><span class="branch-dot cyan"></span><b>orders</b><small>→ confirm</small></div>
+              <div><i class="branch-line"></i><span class="branch-dot violet"></span><b>billingKeys</b><small>→ billing</small></div>
+              <div><i class="branch-line"></i><span class="branch-dot lime"></span><b>webhook.dedupe</b><small>→ webhook</small></div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section id="start" class="section start-section reveal">
+        <div class="start-copy">
+          <p class="eyebrow">Start with the golden path</p>
+          <h2>첫 결제는<br />가볍게 시작하세요.</h2>
+          <p>설치하고, 앱 부팅 시 한 번 조립한 뒤, 필요한 플로우만 사용하세요. 자세한 옵션·에러·운영 복구 경로는 README가 이어서 안내합니다.</p>
+          <div class="resource-links">
+            <a href="https://github.com/gj-kit/gj-kit/blob/main/toss-payments/README.md" target="_blank" rel="noreferrer">전체 가이드 <span>↗</span></a>
+            <a href="../toss-payments-nestjs/">NestJS를 사용한다면 <span>→</span></a>
+          </div>
+        </div>
+        <div class="install-panel">
+          <div class="install-tabs" role="tablist" aria-label="패키지 매니저">
+            <button class="install-tab active" role="tab" aria-selected="true" data-package-manager="pnpm">pnpm</button>
+            <button class="install-tab" role="tab" aria-selected="false" data-package-manager="npm">npm</button>
+            <button class="install-tab" role="tab" aria-selected="false" data-package-manager="yarn">yarn</button>
+          </div>
+          <div class="install-command"><code data-install-command>pnpm add @gj-kit/toss-payments</code><button class="copy-install" type="button" aria-label="설치 명령 복사">⧉</button></div>
+          <div class="install-note"><span>◎</span><p>브라우저 위젯·빌링 인증창도 쓴다면 <code>@tosspayments/tosspayments-sdk</code>를 추가하세요.</p></div>
+          <a class="button button-primary full" href="https://github.com/gj-kit/gj-kit/tree/main/toss-payments" target="_blank" rel="noreferrer">소스에서 살펴보기 <span aria-hidden="true">↗</span></a>
+        </div>
+      </section>
+    </main>
+    <footer class="site-footer"><a class="brand" href="../"><span class="brand-mark">GJ</span><span>GJ KIT</span></a><p>MIT License · Not affiliated with Toss Payments</p><a href="https://github.com/gj-kit/gj-kit" target="_blank" rel="noreferrer">GitHub ↗</a></footer>
+    <div class="toast" role="status" aria-live="polite">클립보드에 복사했어요.</div>
+  </body>
+</html>

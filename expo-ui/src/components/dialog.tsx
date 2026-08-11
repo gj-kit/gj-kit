@@ -231,6 +231,9 @@ export function DialogPanel({
             accessible
             nativeID={dialog?.titleId}
             accessibilityRole="header"
+            // RNW는 aria-level 없는 header를 <h1>으로 내보낸다. 다이얼로그 제목은
+            // 문서 제목이 아니라 페이지 안의 섹션 제목이므로 h2로 고정한다.
+            {...(Platform.OS === 'web' ? { 'aria-level': 2 } : {})}
             accessibilityLabel={dialog?.nativeTitleAccessibilityLabel}
             style={[roleTextStyle(theme, 'title'), { color: theme.colors.text }, titleStyle]}
           >

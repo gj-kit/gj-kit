@@ -33,6 +33,7 @@ import {
 import { PaginationLiveExample } from '../../../src/pagination-live-example';
 import { getComponentPreview } from '../../../src/component-previews';
 import { getComponentProps } from '../../../src/component-props';
+import { getComponentDetail } from '../../../src/seo-component-detail';
 import { useLocale } from '../../../src/locale';
 import { siteStrings } from '../../../src/site-strings';
 
@@ -71,6 +72,8 @@ export default function ComponentDetailPage(): ReactElement {
   }
 
   const text = componentText(entry, locale);
+  // 상세 본문은 이 라우트에서만 import한다 — seo-component-detail.ts 주석 참고.
+  const detail = getComponentDetail(entry.slug, locale);
   const path = componentDocsPath(entry.slug);
   const released = isReleasedComponent(entry);
   const Preview = getComponentPreview(entry.slug);
@@ -98,7 +101,7 @@ export default function ComponentDetailPage(): ReactElement {
           webPageSchema({ path, title, description, locale }),
           techArticleSchema({
             path,
-            headline: text.headline,
+            headline: detail?.headline ?? entry.name,
             description,
             about: `${entry.name} React Native component`,
             locale,
@@ -123,7 +126,7 @@ export default function ComponentDetailPage(): ReactElement {
           eyebrow={`${text.category.toUpperCase()} · SINCE v${entry.since}`}
           // headline은 이미 컴포넌트 이름으로 끝난다. 앞에 이름을 또 붙이면
           // "Button — …type-safe Button"처럼 제목에서 이름이 두 번 나온다.
-          title={text.headline}
+          title={detail?.headline ?? entry.name}
           description={text.description}
           {...(!released ? { preview: `npm v${publishedPackageVersion} · v${entry.since}` } : {})}
         />
@@ -141,8 +144,8 @@ export default function ComponentDetailPage(): ReactElement {
         {entry.slug === 'pagination' ? <PaginationLiveExample /> : null}
 
         <SeoSection title={t.sectionWhen(entry.name)}>
-          <SeoParagraph>{text.summary}</SeoParagraph>
-          <BulletList items={text.features} />
+          <SeoParagraph>{detail?.summary ?? text.description}</SeoParagraph>
+          <BulletList items={detail?.features ?? []} />
         </SeoSection>
 
         <SeoSection
@@ -159,7 +162,7 @@ export default function ComponentDetailPage(): ReactElement {
           */}
           {released ? <CommandBlock command="pnpm add @gj-kit/expo-ui" /> : null}
           <CodePanel
-            code={`import { ${entry.name} } from '@gj-kit/expo-ui';\n\n${text.snippet}`}
+            code={`import { ${entry.name} } from '@gj-kit/expo-ui';\n\n${detail?.snippet ?? ''}`}
             label={released ? 'TypeScript' : `TypeScript · v${entry.since} · not on npm yet`}
           />
         </SeoSection>
@@ -176,7 +179,7 @@ export default function ComponentDetailPage(): ReactElement {
         ) : null}
 
         <SeoSection title={t.sectionAccessibility}>
-          <SeoParagraph>{text.accessibility}</SeoParagraph>
+          <SeoParagraph>{detail?.accessibility ?? ''}</SeoParagraph>
           <SeoParagraph>{t.accessibilityTail}</SeoParagraph>
         </SeoSection>
 

@@ -138,12 +138,92 @@ const sitemap = [
   '',
 ].join('\n');
 
+/**
+ * 카탈로그를 소비자별로 쪼갠다. seo-catalog.json은 손으로 쓰는 정본이지만
+ * 통째로 import하면 랜딩까지 49종의 본문 전체를 내려받는다. 목록·검색에 필요한
+ * 가벼운 부분만 공용으로 두고, 상세 본문은 그 페이지의 청크에만 들어가게
+ * 파일 경계를 나눈다. Metro가 import 그래프를 따라 청크를 가르므로,
+ * 경계는 파일 하나로 충분하고 lazy 로딩은 필요 없다(프리렌더도 그대로 동작).
+ */
+const catalogIndex = {
+  publishedVersion: catalog.publishedVersion,
+  components: catalog.components.map((entry) => ({
+    slug: entry.slug,
+    name: entry.name,
+    since: entry.since,
+    related: entry.related,
+    ...Object.fromEntries(
+      LOCALES.map((locale) => [
+        locale,
+        { category: entry[locale].category, description: entry[locale].description },
+      ]),
+    ),
+  })),
+  guides: catalog.guides.map((guide) => ({
+    slug: guide.slug,
+    ...Object.fromEntries(
+      LOCALES.map((locale) => [
+        locale,
+        { title: guide[locale].title, description: guide[locale].description },
+      ]),
+    ),
+  })),
+};
+
+const componentDetail = Object.fromEntries(
+  catalog.components.map((entry) => [
+    entry.slug,
+    Object.fromEntries(
+      LOCALES.map((locale) => [
+        locale,
+        {
+          headline: entry[locale].headline,
+          summary: entry[locale].summary,
+          features: entry[locale].features,
+          accessibility: entry[locale].accessibility,
+          snippet: entry[locale].snippet,
+        },
+      ]),
+    ),
+  ]),
+);
+
+const guideDetail = Object.fromEntries(
+  catalog.guides.map((guide) => [
+    guide.slug,
+    {
+      relatedComponents: guide.relatedComponents,
+      ...Object.fromEntries(
+        LOCALES.map((locale) => [
+          locale,
+          {
+            headline: guide[locale].headline,
+            summary: guide[locale].summary,
+            sections: guide[locale].sections,
+          },
+        ]),
+      ),
+    },
+  ]),
+);
+
+function json(value) {
+  return `${JSON.stringify(value, null, 2)}\n`;
+}
+
 await Promise.all([
   writeFile(path.join(projectDir, 'public/robots.txt'), robots, 'utf8'),
   writeFile(path.join(projectDir, 'public/sitemap.xml'), sitemap, 'utf8'),
+  writeFile(path.join(projectDir, 'src/seo-catalog-index.json'), json(catalogIndex), 'utf8'),
+  writeFile(path.join(projectDir, 'src/seo-component-detail.json'), json(componentDetail), 'utf8'),
+  writeFile(path.join(projectDir, 'src/seo-guide-detail.json'), json(guideDetail), 'utf8'),
 ]);
 
 console.log(
   `SEO assets generated: ${routes.length} canonical routes (${releasedComponents.length} released components, ${catalog.components.length - releasedComponents.length} previews excluded).`,
 );
 console.log(`Live previews: ${previewSlugs.size}/${catalog.components.length} components covered.`);
+console.log(
+  `Catalog split: index ${(JSON.stringify(catalogIndex).length / 1024).toFixed(1)} kB shared, ` +
+    `detail ${((JSON.stringify(componentDetail).length + JSON.stringify(guideDetail).length) / 1024).toFixed(1)} kB off the shared chunk.`,
+);

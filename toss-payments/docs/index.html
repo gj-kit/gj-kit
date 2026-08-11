@@ -5,8 +5,12 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="theme-color" content="#070a12" />
     <meta name="description" content="검증을 통과한 결제만 다음 단계로. 타입 안전한 토스페이먼츠 v2 TypeScript 라이브러리." />
+    <link rel="canonical" href="https://gj-kit.github.io/gj-kit/toss-payments/" />
     <meta property="og:title" content="@gj-kit/toss-payments — Payment safety, encoded in types" />
     <meta property="og:description" content="결제위젯·API v2 연동에서 빠뜨리기 쉬운 검증을 타입으로 강제합니다." />
+    <meta property="og:type" content="website" />
+    <meta property="og:locale" content="ko_KR" />
+    <meta property="og:url" content="https://gj-kit.github.io/gj-kit/toss-payments/" />
     <title>@gj-kit/toss-payments — Payment safety, encoded in types</title>
     <link rel="stylesheet" href="./styles.css" />
     <script defer src="./app.js"></script>
@@ -19,7 +23,7 @@
       <nav aria-label="주요 탐색">
         <a href="#why">Why it matters</a>
         <a href="#flows">Flows</a>
-        <a href="#start">Get started</a>
+        <a href="#start">Golden path</a>
       </nav>
       <a class="header-github" href="https://github.com/gj-kit/gj-kit/tree/main/toss-payments" target="_blank" rel="noreferrer">GitHub <span aria-hidden="true">↗</span></a>
     </header>
@@ -31,7 +35,7 @@
           <h1 id="hero-title">결제를 보내기 전에,<br /><em>실수부터 막으세요.</em></h1>
           <p class="hero-lede">토스페이먼츠의 중요한 검증은 기억에 맡길 일이 아닙니다. <strong>@gj-kit/toss-payments</strong>는 결제 흐름의 순서·키의 경계·신뢰 수준을 타입에 남깁니다.</p>
           <div class="hero-actions">
-            <a class="button button-primary" href="#start">3분 안에 시작하기 <span aria-hidden="true">→</span></a>
+            <a class="button button-primary" href="#start">첫 승인 골든 패스 <span aria-hidden="true">→</span></a>
             <a class="button button-quiet" href="https://github.com/gj-kit/gj-kit/blob/main/toss-payments/README.md" target="_blank" rel="noreferrer">README 읽기 <span aria-hidden="true">↗</span></a>
           </div>
           <div class="signal-row" aria-label="패키지 특징">
@@ -58,7 +62,7 @@
       <section class="trust-strip" aria-label="핵심 약속">
         <div><span class="trust-number" data-count="4">4</span><span>서로 바꿔 쓸 수 없는<br />키 타입</span></div>
         <div><span class="trust-number" data-count="3">3</span><span>웹훅 신뢰 등급을<br />명시적으로 구분</span></div>
-        <div><span class="trust-word">0</span><span>결제 경로를 바꾸는<br />옵션 실패 경로</span></div>
+        <div><span class="trust-word">0</span><span>관측 옵션 실패가<br />결제 결과를 바꾸는 경로</span></div>
         <div><span class="trust-word">Result</span><span>예외 대신 모든 공개 작업의<br />판별 가능한 결과</span></div>
       </section>
 
@@ -66,7 +70,7 @@
         <div class="section-heading">
           <p class="eyebrow">The library has an opinion</p>
           <h2>“나중에 확인하지”가<br />사고가 되는 곳을 설계했습니다.</h2>
-          <p>Stripe와 Vercel의 SDK 문서처럼 설치 방법에서 바로 가치 증명과 실행 가능한 코드로 이어지되, 이 라이브러리의 핵심인 <strong>오용 불가능성</strong>을 전면에 둡니다.</p>
+          <p>결제는 “작동하는 코드”보다 <strong>검증을 건너뛸 수 없는 코드</strong>가 중요합니다. 키·순서·웹훅 신뢰도를 타입과 실행 경계에 남깁니다.</p>
         </div>
         <div class="guard-grid">
           <article class="guard-card key-card">
@@ -140,11 +144,11 @@
         </div>
       </section>
 
-      <section id="start" class="section start-section reveal">
+      <section id="start" class="section quickstart-section reveal">
         <div class="start-copy">
           <p class="eyebrow">Start with the golden path</p>
-          <h2>첫 결제는<br />가볍게 시작하세요.</h2>
-          <p>설치하고, 앱 부팅 시 한 번 조립한 뒤, 필요한 플로우만 사용하세요. 자세한 옵션·에러·운영 복구 경로는 README가 이어서 안내합니다.</p>
+          <h2>설치만 하지 말고,<br />첫 승인을 확인하세요.</h2>
+          <p>아래 세 단계는 서버 측 승인 경계의 최소 구성입니다. 실제 서비스에서는 개발용 메모리 저장소를 앱의 영속 저장소로 바꾼 뒤 배포하세요.</p>
           <div class="resource-links">
             <a href="https://github.com/gj-kit/gj-kit/blob/main/toss-payments/README.md" target="_blank" rel="noreferrer">전체 가이드 <span>↗</span></a>
             <a href="../toss-payments-nestjs/">NestJS를 사용한다면 <span>→</span></a>
@@ -159,6 +163,66 @@
           <div class="install-command"><code data-install-command>pnpm add @gj-kit/toss-payments</code><button class="copy-install" type="button" aria-label="설치 명령 복사">⧉</button></div>
           <div class="install-note"><span>◎</span><p>브라우저 위젯·빌링 인증창도 쓴다면 <code>@tosspayments/tosspayments-sdk</code>를 추가하세요.</p></div>
           <a class="button button-primary full" href="https://github.com/gj-kit/gj-kit/tree/main/toss-payments" target="_blank" rel="noreferrer">소스에서 살펴보기 <span aria-hidden="true">↗</span></a>
+        </div>
+        <div class="quickstart-steps" aria-label="첫 승인 골든 패스">
+          <article class="quickstart-step">
+            <p class="quickstart-number">01 · INSTALL</p>
+            <h3>서버 패키지를 설치합니다.</h3>
+            <p>위 설치 명령을 실행하고 <code>TOSS_SECRET_KEY</code>를 서버 환경 변수에만 설정하세요. 시크릿 키는 브라우저 코드에 두지 않습니다.</p>
+          </article>
+          <article class="quickstart-step quickstart-code-step">
+            <div class="quickstart-step-head"><div><p class="quickstart-number">02 · COMPOSE</p><h3>개발용 주문 저장소와 kit을 만듭니다.</h3></div><div class="quickstart-file"><span>toss.ts</span><button class="copy-quickstart" data-copy-target="#core-compose-code" type="button">Copy</button></div></div>
+            <pre><code id="core-compose-code">import { orThrow } from '@gj-kit/toss-payments';
+import {
+  createTossPayments,
+  parseApiSecretKey,
+  type OrderStore,
+} from '@gj-kit/toss-payments/server';
+
+const localOrders = new Map();
+const orders: OrderStore = {
+  saveOrder: async (order) =&gt; { localOrders.set(order.orderId, order); },
+  loadOrder: async (orderId) =&gt; localOrders.get(orderId) ?? null,
+};
+
+export const toss = createTossPayments({
+  secretKey: orThrow(parseApiSecretKey(process.env.TOSS_SECRET_KEY!)),
+  orders,
+});
+
+export function createCheckoutOrder() {
+  return toss.confirm.createOrder({
+    amount: 1000,
+    orderName: '테스트 주문',
+  });
+}</code></pre>
+            <p class="quickstart-warning">개발 확인용입니다. 프로덕션에서는 재시작에도 유지되는 DB 기반 <code>OrderStore</code>를 연결해야 금액 검증의 기준이 유지됩니다.</p>
+          </article>
+          <article class="quickstart-step quickstart-code-step">
+            <div class="quickstart-step-head"><div><p class="quickstart-number">03 · VERIFY THEN CONFIRM</p><h3>callback 값을 검증한 뒤 승인합니다.</h3></div><div class="quickstart-file"><span>confirm.ts</span><button class="copy-quickstart" data-copy-target="#core-confirm-code" type="button">Copy</button></div></div>
+            <pre><code id="core-confirm-code">import { isErr } from '@gj-kit/toss-payments';
+import { parseSuccessCallback } from '@gj-kit/toss-payments/server';
+import { toss } from './toss';
+
+export async function confirmPayment(url: string) {
+  const parsed = parseSuccessCallback(url);
+  if (isErr(parsed)) return { status: 400, body: parsed.error };
+
+  const verified = await toss.confirm.verify(parsed.value);
+  if (isErr(verified)) return { status: 400, body: verified.error };
+
+  const payment = await toss.confirm.confirm(verified.value);
+  return payment.ok
+    ? { status: 200, body: payment.value }
+    : { status: 502, body: payment.error };
+}</code></pre>
+          </article>
+        </div>
+        <div class="evidence-links" aria-label="신뢰 및 통합 자료">
+          <a href="https://github.com/gj-kit/gj-kit/blob/main/toss-payments/README.md" target="_blank" rel="noreferrer"><b>API·오류 가이드</b><span>구성 옵션과 복구 경로</span></a>
+          <a href="https://github.com/gj-kit/gj-kit/tree/main/toss-payments/tests" target="_blank" rel="noreferrer"><b>공개 테스트</b><span>유닛·통합·타입·골든 패스</span></a>
+          <a href="https://github.com/gj-kit/gj-kit/blob/main/toss-payments/CHANGELOG.md" target="_blank" rel="noreferrer"><b>변경 이력</b><span>릴리스별 호환성 확인</span></a>
+          <a href="https://github.com/gj-kit/gj-kit/blob/main/docs/agent-guide.md" target="_blank" rel="noreferrer"><b>에이전트 통합 가이드</b><span>결정적인 import·금지 규칙</span></a>
         </div>
       </section>
     </main>

@@ -94,6 +94,10 @@ document.querySelectorAll('.install-tab').forEach((button) => {
   });
 });
 document.querySelector('.copy-install').addEventListener('click', () => copy(document.querySelector('[data-install-command]').textContent));
+document.querySelectorAll('.copy-quickstart').forEach((button) => button.addEventListener('click', () => {
+  const code = document.querySelector(button.dataset.copyTarget);
+  if (code) copy(code.textContent);
+}));
 
 const observer = new IntersectionObserver((entries) => entries.forEach((entry) => {
   if (entry.isIntersecting) { entry.target.classList.add('visible'); observer.unobserve(entry.target); }

@@ -58,5 +58,9 @@ rawBodyToggle.addEventListener('change', () => {
 const packageManagers = { pnpm: 'pnpm add @gj-kit/toss-payments @gj-kit/toss-payments-nestjs', npm: 'npm install @gj-kit/toss-payments @gj-kit/toss-payments-nestjs', yarn: 'yarn add @gj-kit/toss-payments @gj-kit/toss-payments-nestjs' };
 document.querySelectorAll('.install-tab').forEach((button) => button.addEventListener('click', () => { document.querySelectorAll('.install-tab').forEach((item) => { const active = item === button; item.classList.toggle('active', active); item.setAttribute('aria-selected', String(active)); }); document.querySelector('[data-install-command]').textContent = packageManagers[button.dataset.packageManager]; }));
 document.querySelector('.copy-install').addEventListener('click', () => copy(document.querySelector('[data-install-command]').textContent));
+document.querySelectorAll('.copy-quickstart').forEach((button) => button.addEventListener('click', () => {
+  const code = document.querySelector(button.dataset.copyTarget);
+  if (code) copy(code.textContent);
+}));
 const observer = new IntersectionObserver((entries) => entries.forEach((entry) => { if (entry.isIntersecting) { entry.target.classList.add('visible'); observer.unobserve(entry.target); } }), { threshold: 0.13 });
 document.querySelectorAll('.reveal').forEach((element) => observer.observe(element));

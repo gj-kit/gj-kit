@@ -405,11 +405,16 @@ function CatalogToolbar({
 }): ReactElement {
   const theme = useTheme();
   const t = siteStrings(useLocale().locale);
-  const filters: readonly { value: ReleaseFilter; label: string; count: number }[] = [
-    { value: 'all', label: t.catalogFilterAll, count: componentSeoEntries.length },
-    { value: 'released', label: t.catalogFilterStable, count: releasedCount },
-    { value: 'preview', label: t.catalogFilterPreview, count: previewCount },
-  ];
+  // 미리보기가 남아 있을 때만 릴리스 필터를 보여준다. 전부 공개되면 갈래가
+  // 'all'과 'released' 두 개로 같아져, 아무것도 거르지 못하는 필터만 남는다.
+  const filters: readonly { value: ReleaseFilter; label: string; count: number }[] =
+    previewCount > 0
+      ? [
+          { value: 'all', label: t.catalogFilterAll, count: componentSeoEntries.length },
+          { value: 'released', label: t.catalogFilterStable, count: releasedCount },
+          { value: 'preview', label: t.catalogFilterPreview, count: previewCount },
+        ]
+      : [];
   return (
     <Surface padding="lg" style={styles.toolbar}>
       <View style={styles.searchGroup}>

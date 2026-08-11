@@ -23,12 +23,14 @@ export type DocsHubStrings = {
   readonly sidebarEyebrow: string;
   readonly sidebarNpmLink: string;
   readonly sidebarMeta: (stable: number, preview: number) => string;
+  readonly sidebarMetaAllReleased: (stable: number) => string;
 
   readonly heroBadge: (version: string, count: number) => string;
   readonly heroLicense: string;
   readonly heroTitleTop: string;
   readonly heroTitleBottom: string;
   readonly heroCopy: (version: string, released: number, preview: number) => string;
+  readonly heroCopyAllReleased: (version: string, released: number) => string;
   readonly heroCopyCommand: string;
   readonly heroComponentsLink: (count: number) => string;
   readonly heroGuideLink: string;
@@ -131,6 +133,7 @@ const en: DocsHubStrings = {
   sidebarEyebrow: 'DOCUMENTATION',
   sidebarNpmLink: 'View on npm ↗',
   sidebarMeta: (stable, preview) => `${stable} stable · ${preview} preview\nESM + CJS · MIT`,
+  sidebarMetaAllReleased: (stable) => `${stable} components · all published\nESM + CJS · MIT`,
 
   heroBadge: (version, count) => `DOCS · npm v${version} · ${count} source components`,
   heroLicense: 'MIT · React Native',
@@ -138,6 +141,8 @@ const en: DocsHubStrings = {
   heroTitleBottom: 'start fast, scale safely.',
   heroCopy: (version, released, preview) =>
     `Documents the ${released} components published in npm v${version} alongside ${preview} v0.4 source previews. Unreleased pages stay out of the search index, and token-based light and dark themes plus device-edge utilities share one type-safe API.`,
+  heroCopyAllReleased: (version, released) =>
+    `Documents all ${released} components published in npm v${version}. Every one of them is installable today, and token-based light and dark themes plus device-edge utilities share one type-safe API.`,
   heroCopyCommand: 'Copy the install command',
   heroComponentsLink: (count) => `${count} components`,
   heroGuideLink: 'Getting started guide',
@@ -401,6 +406,7 @@ const ko: DocsHubStrings = {
   sidebarEyebrow: 'DOCUMENTATION',
   sidebarNpmLink: 'npm에서 보기 ↗',
   sidebarMeta: (stable, preview) => `${stable} stable · ${preview} preview\nESM + CJS · MIT`,
+  sidebarMetaAllReleased: (stable) => `컴포넌트 ${stable}종 · 전부 공개\nESM + CJS · MIT`,
 
   heroBadge: (version, count) => `DOCS · npm v${version} · ${count} source components`,
   heroLicense: 'MIT · React Native',
@@ -408,6 +414,8 @@ const ko: DocsHubStrings = {
   heroTitleBottom: '빠르게 시작하고 안전하게 확장하세요.',
   heroCopy: (version, released, preview) =>
     `npm v${version}에 공개된 ${released}개와 v0.4 소스 미리보기 ${preview}개를 함께 문서화합니다. 미공개 상세 페이지는 검색에서 제외하며, 토큰 기반 light·dark 테마와 device edge 유틸을 같은 타입 안전 API로 제공합니다.`,
+  heroCopyAllReleased: (version, released) =>
+    `npm v${version}에 공개된 컴포넌트 ${released}종을 모두 문서화합니다. 전부 지금 설치할 수 있으며, 토큰 기반 light·dark 테마와 device edge 유틸을 같은 타입 안전 API로 제공합니다.`,
   heroCopyCommand: '설치 명령 복사',
   heroComponentsLink: (count) => `컴포넌트 ${count}종`,
   heroGuideLink: '시작 가이드',

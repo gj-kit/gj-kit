@@ -718,7 +718,9 @@ function Sidebar({
         <Surface padding="lg" style={styles.sidebarCard}>
           <Text role="label">npm v{publishedPackageVersion}</Text>
           <Text role="caption" color="textMuted" style={styles.sidebarCardCopy}>
-            {t.sidebarMeta(RELEASED_COMPONENT_COUNT, PREVIEW_COMPONENT_COUNT)}
+            {PREVIEW_COMPONENT_COUNT > 0
+              ? t.sidebarMeta(RELEASED_COMPONENT_COUNT, PREVIEW_COMPONENT_COUNT)
+              : t.sidebarMetaAllReleased(RELEASED_COMPONENT_COUNT)}
           </Text>
           <LinkPressable href={NPM_URL} style={styles.sidebarNpmLink}>
             <RNText style={[styles.sidebarNpmText, { color: theme.colors.primary }]}>{t.sidebarNpmLink}</RNText>
@@ -764,7 +766,9 @@ function Hero({ wide, onCopy }: { wide: boolean; onCopy: () => void }) {
           {t.heroTitleTop}{`\n`}{t.heroTitleBottom}
         </Text>
         <Text role="body" color="textMuted" style={styles.heroCopy}>
-          {t.heroCopy(publishedPackageVersion, RELEASED_COMPONENT_COUNT, PREVIEW_COMPONENT_COUNT)}
+          {PREVIEW_COMPONENT_COUNT > 0
+            ? t.heroCopy(publishedPackageVersion, RELEASED_COMPONENT_COUNT, PREVIEW_COMPONENT_COUNT)
+            : t.heroCopyAllReleased(publishedPackageVersion, RELEASED_COMPONENT_COUNT)}
         </Text>
         <View style={styles.heroActions}>
           <Button label={t.heroCopyCommand} size="lg" onPress={onCopy} />

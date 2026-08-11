@@ -1,6 +1,6 @@
 /**
- * Spinner / ProgressBar — 로딩과 작업 진행률을 의미론까지 포함해 표현한다.
- * 값·색·치수는 닫힌 API와 테마 토큰에서만 해석한다.
+ * Spinner / ProgressBar — loading and task progress, semantics included.
+ * Value, color, and dimensions resolve only from the closed API and theme tokens.
  */
 import { useEffect, useRef, useState } from 'react';
 import type { ReactElement } from 'react';
@@ -14,11 +14,11 @@ import { useStrings, useTheme } from './provider';
 export type ProgressSize = 'sm' | 'md' | 'lg';
 
 export interface SpinnerProps extends Omit<CommonProps, 'unstyled'> {
-  /** 기본 'md'. */
+  /** Defaults to 'md'. */
   size?: ProgressSize | undefined;
-  /** 기본 'primary'. */
+  /** Defaults to 'primary'. */
   color?: ColorKey | undefined;
-  /** 기본 strings.loading. */
+  /** Defaults to strings.loading. */
   accessibilityLabel?: string | undefined;
   unstyled?: never;
 }
@@ -65,19 +65,19 @@ export type ProgressBarVariant = 'primary' | 'info' | 'success' | 'warning' | 'e
 type ProgressBarBaseProps = Omit<CommonProps, 'unstyled'> & {
   variant?: ProgressBarVariant | undefined;
   size?: ProgressSize | undefined;
-  /** 스크린리더에 진행 대상이 무엇인지 전달한다. */
+  /** Tells a screen reader what is making progress. */
   accessibilityLabel: string;
   indicatorStyle?: StyleProp<ViewStyle> | undefined;
   indicatorClassName?: string | undefined;
   unstyled?: never;
 };
 
-/** `value={null}`은 현재 양을 알 수 없는 indeterminate 진행률이다. */
+/** `value={null}` is indeterminate progress whose current amount is unknown. */
 export type ProgressBarProps = ProgressBarBaseProps &
   (
     | {
         value: number;
-        /** 유한한 양수만 사용하며, 그 외 값은 100으로 정규화한다. */
+        /** Only finite positive numbers are used; anything else is normalized to 100. */
         max?: number | undefined;
         accessibilityValueText?: string | undefined;
       }

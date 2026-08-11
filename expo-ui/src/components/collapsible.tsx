@@ -1,6 +1,6 @@
 /**
- * Collapsible — 하나의 trigger와 content를 잇는 controlled disclosure.
- * Accordion이 목록 상태를 다룬다면 Collapsible은 독립적인 한 구역만 소유한다.
+ * Collapsible — a controlled disclosure joining one trigger to one content region.
+ * Where Accordion manages list state, Collapsible owns a single independent region.
  */
 import { useId } from 'react';
 import type { ReactElement, ReactNode } from 'react';
@@ -22,7 +22,7 @@ export type CollapsibleProps = CommonProps & {
   children: NonNullable<ReactNode>;
   disabled?: boolean | undefined;
   variant?: CollapsibleVariant | undefined;
-  /** 웹 heading level. 기본 3. */
+  /** Web heading level. Defaults to 3. */
   headingLevel?: 1 | 2 | 3 | 4 | 5 | 6 | undefined;
   triggerStyle?: StyleProp<ViewStyle> | undefined;
   contentStyle?: StyleProp<ViewStyle> | undefined;

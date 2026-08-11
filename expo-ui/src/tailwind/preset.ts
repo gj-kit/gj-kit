@@ -1,21 +1,23 @@
 /**
- * NativeWind/Tailwind preset — 설계 문서 §8.
+ * NativeWind/Tailwind preset — design doc §8.
  *
- * 이 폴더는 src/theme만 import한다(entry-guard 강제) — tailwind.config는 Node에서
- * 평가되므로 react-native 심볼이 섞이면 로드 자체가 실패한다.
+ * This folder imports only src/theme (enforced by entry-guard). tailwind.config is
+ * evaluated by Node, so a stray react-native symbol makes loading itself fail.
  *
- * 브랜드 Theme 입력 강제(§0 C) — 손조립 토큰으로 preset을 만들 수 없다.
- * 앱 커스텀 테마(createTheme 결과)가 그대로 유틸리티 클래스에 반영되므로
- * 전신의 정적 tokens.json 파생 preset이 가진 "이중 진실" 문제가 사라진다.
+ * A branded Theme input is required (§0 C) — a preset cannot be built from
+ * hand-assembled tokens. An app's custom theme (the result of createTheme) flows
+ * straight into the utility classes, which removes the "two sources of truth"
+ * problem of the predecessor's static tokens.json-derived preset.
  *
- * 다크 preset은 방출하지 않는다 — 런타임 테마 전환은 useTheme()이 정본이고,
- * className 경로의 다크는 NativeWind `dark:` 스킴 소관(§8, v2 검토 과제).
+ * No dark preset is emitted — useTheme() is the source of truth for runtime scheme
+ * switching, and dark on the className path belongs to NativeWind's `dark:` scheme
+ * (§8, revisit in v2).
  */
 import { lightTheme } from '../theme/createTheme';
 import type { Theme } from '../theme/tokens';
 
 export interface TailwindPresetOptions {
-  /** 클래스 접두사. 기본 'ui' → bg-ui-surface, p-ui-lg, rounded-ui-pill, text-ui-title … */
+  /** The class prefix. Defaults to 'ui' → bg-ui-surface, p-ui-lg, rounded-ui-pill, text-ui-title … */
   readonly prefix?: string | undefined;
 }
 
@@ -83,10 +85,10 @@ export function createTailwindPreset(
   };
 }
 
-/** zero-config: 내장 라이트 테마 preset. */
+/** zero-config: the built-in light theme preset. */
 export const defaultTailwindPreset: TailwindPreset = createTailwindPreset();
 
-/** (내부) #RGB/#RRGGBB에 불투명도를 얹은 rgba 문자열. 비-hex 입력은 그대로 반환. */
+/** (internal) An rgba string that layers opacity onto #RGB/#RRGGBB. Non-hex input is returned unchanged. */
 function hexOpacity(color: string, opacity: number): string {
   const match = /^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.exec(color);
   if (!match || match[1] === undefined) return color;

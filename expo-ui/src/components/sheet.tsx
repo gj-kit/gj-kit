@@ -52,17 +52,17 @@ interface SheetBaseProps extends Omit<CommonProps, 'unstyled'> {
   /** Compact screens resolve auto to bottom; tablet and larger resolve to end. */
   presentation?: SheetPresentation | undefined;
   accessibilityLabel?: string | undefined;
-  /** 기본 strings.close. */
+  /** Defaults to strings.close. */
   closeAccessibilityLabel?: string | undefined;
-  /** 기본 true. */
+  /** Defaults to true. */
   dismissOnBackdrop?: boolean | undefined;
-  /** backdrop, Escape/Back, accessibility escape, and close action을 모두 차단한다. */
+  /** Blocks the backdrop, Escape/Back, the accessibility escape, and the close action alike. */
   dismissDisabled?: boolean | undefined;
   initialFocusRef?: DialogFocusRef | undefined;
   finalFocusRef?: DialogFocusRef | undefined;
   overlayId?: string | undefined;
   safeAreaInsets?: SheetSafeAreaInsets | undefined;
-  /** 0보다 크면 bottom safe-area inset을 대체한다. */
+  /** Replaces the bottom safe-area inset when greater than 0. */
   keyboardOverlap?: number | undefined;
   titleStyle?: StyleProp<TextStyle> | undefined;
   bodyStyle?: StyleProp<ViewStyle> | undefined;

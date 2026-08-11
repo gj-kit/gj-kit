@@ -1,9 +1,10 @@
 /**
- * Skeleton / EmptyState / ErrorState / Toast / useToastController — 설계 문서 §5.9~§5.11.
+ * Skeleton / EmptyState / ErrorState / Toast / useToastController — design doc §5.9–§5.11.
  *
- * ThumbnailSkeleton은 삭제됐다(3:4 비율은 memorylog 사진 도메인 잔재 — §5.9).
- * TOAST_DURATION_MS·EMPTY_STATE_MAX_FONT_SIZE_MULTIPLIER 상수는 옵션 기본값과
- * metrics.maxFontScale 토큰으로 흡수됐다(§0 C).
+ * ThumbnailSkeleton is gone (the 3:4 ratio was a leftover from the memorylog photo
+ * domain — §5.9). The TOAST_DURATION_MS and EMPTY_STATE_MAX_FONT_SIZE_MULTIPLIER
+ * constants were absorbed into option defaults and the metrics.maxFontScale token
+ * (§0 C).
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { ReactElement, ReactNode } from 'react';
@@ -21,14 +22,14 @@ import { Button } from './button';
 // ─── Skeleton ──────────────────────────────────────────────────────────────
 
 export interface SkeletonProps extends Omit<CommonProps, 'unstyled'> {
-  /** 기본 'sm'. */
+  /** Defaults to 'sm'. */
   radius?: RadiusKey | undefined;
-  /** 기본 strings.loading. */
+  /** Defaults to strings.loading. */
   accessibilityLabel?: string | undefined;
   unstyled?: never;
 }
 
-/** 펄스 타이밍 — 전신 실측 보존(0.62↔1.0, 700ms). */
+/** The pulse timing — the predecessor's measured values, preserved (0.62↔1.0, 700ms). */
 const SKELETON_OPACITY_MIN = 0.62;
 const SKELETON_PULSE_MS = 700;
 
@@ -108,14 +109,14 @@ const getStateStyles = themedStyles((theme: Theme) => ({
 }));
 
 export interface EmptyStateProps extends Omit<CommonProps, 'unstyled'> {
-  /** 기본 strings.emptyTitle. */
+  /** Defaults to strings.emptyTitle. */
   title?: string | undefined;
   body?: string | undefined;
-  /** label 없이 onPress 없는 죽은 버튼을 구조로 차단(§6 ⑨ — C의 action 객체). */
+  /** Structurally blocks a dead button with no label and no onPress (§6 ⑨ — the action object from C). */
   action?: { readonly label: string; readonly onPress: () => void } | undefined;
-  /** 기본 icons.empty. */
+  /** Defaults to icons.empty. */
   leading?: ReactNode | undefined;
-  /** 기본 metrics.maxFontScale. */
+  /** Defaults to metrics.maxFontScale. */
   maxFontSizeMultiplier?: number | undefined;
   unstyled?: never;
 }
@@ -174,15 +175,15 @@ export function EmptyState({
 }
 
 export interface ErrorStateProps extends Omit<CommonProps, 'unstyled'> {
-  /** 기본 strings.errorTitle. */
+  /** Defaults to strings.errorTitle. */
   title?: string | undefined;
-  /** 기본 strings.errorBody. */
+  /** Defaults to strings.errorBody. */
   message?: string | undefined;
-  /** 있을 때만 버튼 렌더 — 죽은 버튼 불가(§5.10). */
+  /** Renders the button only when present — no dead buttons (§5.10). */
   onRetry?: (() => void) | undefined;
-  /** 기본 strings.retry. */
+  /** Defaults to strings.retry. */
   retryLabel?: string | undefined;
-  /** 기본 icons.error. */
+  /** Defaults to icons.error. */
   leading?: ReactNode | undefined;
   maxFontSizeMultiplier?: number | undefined;
   unstyled?: never;
@@ -244,7 +245,7 @@ export function ErrorState({
 
 export type ToastPayload = { message: string; variant: ToastVariant };
 
-/** 구 TOAST_DURATION_MS(2800) 상수의 옵션화(§5.11). */
+/** The former TOAST_DURATION_MS(2800) constant, turned into an option (§5.11). */
 const TOAST_DEFAULT_DURATION_MS = 2_800;
 
 export function useToastController<T extends ToastPayload = ToastPayload>(options?: {
@@ -264,13 +265,14 @@ export function useToastController<T extends ToastPayload = ToastPayload>(option
 
 export interface ToastProps {
   message: string;
-  /** 기본 'error'. */
+  /** Defaults to 'error'. */
   variant?: ToastVariant | undefined;
-  /** 기본 icons.toast[variant]. */
+  /** Defaults to icons.toast[variant]. */
   leading?: ReactNode | undefined;
   /**
-   * 하단 거리(순수 수치). 기본 96. safe-area 합성은 useBottomInset()과 조합(§7).
-   * 구 bottomOffset!==96 레거시 스타일 분기는 삭제됐다 — 값은 위치에만 쓰인다.
+   * Distance from the bottom as a plain number. Defaults to 96. Compose it with
+   * useBottomInset() for safe-area handling (§7). The legacy bottomOffset!==96
+   * style branch is gone — the value only affects position.
    */
   bottomOffset?: number | undefined;
   containerStyle?: StyleProp<ViewStyle> | undefined;

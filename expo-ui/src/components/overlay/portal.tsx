@@ -26,7 +26,7 @@ export interface OverlayHostProps {
   unstyled?: never;
 }
 
-/** 가장 마지막에 mount된 Host가 해당 Provider scope의 active host가 된다. */
+/** The most recently mounted Host becomes the active host of that Provider scope. */
 export function OverlayHost({ style, className, testID }: OverlayHostProps): ReactElement | null {
   const store = useRequiredOverlayPortalStore('OverlayHost');
   const id = useId();
@@ -66,7 +66,7 @@ export interface OverlayPortalProps {
   children: NonNullable<ReactNode>;
 }
 
-/** 내부 primitive용. 공개 제품 컴포넌트가 의미·dismiss 정책을 먼저 소유해야 한다. */
+/** For internal primitives. A public product component has to own the semantics and dismiss policy first. */
 export function OverlayPortal({ children }: OverlayPortalProps): null {
   const store = useRequiredOverlayPortalStore('OverlayPortal');
   const id = useId();

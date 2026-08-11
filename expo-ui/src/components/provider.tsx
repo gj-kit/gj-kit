@@ -1,5 +1,5 @@
 /**
- * UiProvider / 테마·문구·아이콘 컨텍스트 — 설계 문서 §3.4, §3.5.
+ * UiProvider and the theme, strings, and icon context — design doc §3.4, §3.5.
  */
 import { createContext, useContext, useLayoutEffect, useMemo } from 'react';
 import type { ReactElement, ReactNode } from 'react';
@@ -14,7 +14,7 @@ import { OverlayProvider, useOptionalOverlayStack } from './overlay/provider';
 const ThemeContext = createContext<Theme>(lightTheme);
 const StringsContext = createContext<UiStrings>(enStrings);
 const IconsContext = createContext<UiIcons>({});
-/** (내부) 중첩 Provider 판별 — 루트만 전역 스냅샷을 기록한다(§3.5). */
+/** (internal) Detects a nested Provider — only the root writes the global snapshot (§3.5). */
 const NestedContext = createContext<boolean>(false);
 
 // ─── 비-React 스냅샷 (§3.5) ────────────────────────────────────────────────
@@ -28,15 +28,17 @@ function publishActiveTheme(theme: Theme): void {
 }
 
 /**
- * 루트 UiProvider가 현재 흘리는 테마 스냅샷. Provider 이전/부재 시 lightTheme.
- * 리렌더 비유발 — expo-router 정적 옵션, 내비게이션 테마 등 비-React 경로 전용.
- * 중첩 Provider는 스냅샷을 쓰지 않으므로 다중 Provider 앱에서도 정의가 유일하다.
+ * A snapshot of the theme the root UiProvider is currently emitting; lightTheme
+ * before or without a Provider. It triggers no re-render and exists purely for
+ * non-React paths such as expo-router static options and navigation themes.
+ * Nested Providers do not write the snapshot, so its definition stays unique even
+ * in an app with several Providers.
  */
 export function getActiveTheme(): Theme {
   return activeTheme;
 }
 
-/** 루트 테마 교체 구독(내비게이션 테마 동기화 용). 반환값은 해제 함수. */
+/** Subscribes to root theme replacements, for syncing a navigation theme. Returns an unsubscribe function. */
 export function subscribeActiveTheme(listener: (theme: Theme) => void): () => void {
   themeListeners.add(listener);
   return () => {
@@ -48,20 +50,23 @@ export function subscribeActiveTheme(listener: (theme: Theme) => void): () => vo
 
 export interface UiProviderProps {
   /**
-   * Theme 하나 = 고정 스킴(전환 없음 — 명시적 결정). ThemePair = colorScheme
-   * 규칙으로 전환. 손조립 토큰 객체는 브랜드 미보유로 컴파일 에러(§6 ①).
-   * 미지정 시: 중첩 Provider는 부모의 해석된 Theme을 상속(부모가 Pair였어도
-   * 해석 결과 하나만 — colorScheme으로 재해석 불가), 루트는 lightTheme.
+   * A single Theme means a fixed scheme with no switching — an explicit decision.
+   * A ThemePair switches by the colorScheme rule. Hand-assembled token objects
+   * carry no brand and fail to compile (§6 ①). When omitted, a nested Provider
+   * inherits the parent's resolved Theme (only the resolved one, even if the
+   * parent held a Pair — colorScheme cannot re-resolve it) and the root uses
+   * lightTheme.
    */
   theme?: Theme | ThemePair | undefined;
   /**
-   * theme이 ThemePair일 때만 의미. 'system'(기본): RN Appearance 추종.
-   * 'light'/'dark': 앱 제어(설정 토글 등 — 영속화는 앱 소유).
+   * Only meaningful when theme is a ThemePair. 'system' (default) follows RN
+   * Appearance. 'light' and 'dark' are app-controlled, e.g. a settings toggle —
+   * persistence stays with the app.
    */
   colorScheme?: ColorScheme | 'system' | undefined;
-  /** 완전한 UiStrings만 — §4.1. 미지정 시 중첩은 부모 상속, 루트는 enStrings. */
+  /** A complete UiStrings only — §4.1. When omitted, a nested Provider inherits from its parent and the root uses enStrings. */
   strings?: UiStrings | undefined;
-  /** 아이콘 기본값 계층 — §4.2. 미지정 시 중첩은 부모 상속, 미지정 슬롯은 내장 폴백. */
+  /** The icon default layer — §4.2. When omitted, a nested Provider inherits from its parent and an unspecified slot uses the built-in fallback. */
   icons?: UiIcons | undefined;
   children?: ReactNode | undefined;
 }
@@ -121,7 +126,7 @@ export function UiProvider({
     : <OverlayProvider>{content}</OverlayProvider>;
 }
 
-/** 활성 스킴으로 해석된 Theme. Provider 없으면 lightTheme (Provider는 선택 — 전신과 동일). */
+/** The Theme resolved for the active scheme. lightTheme without a Provider (the Provider is optional — same as the predecessor). */
 export function useTheme(): Theme {
   return useContext(ThemeContext);
 }
@@ -130,17 +135,17 @@ export function useStrings(): UiStrings {
   return useContext(StringsContext);
 }
 
-/** (내부) 컴포넌트 전용 — 공개 표면 아님. */
+/** (internal) Components only — not part of the public surface. */
 export function useIcons(): UiIcons {
   return useContext(IconsContext);
 }
 
-/** 해석된 현재 스킴 — 'system'이면 OS 값 반영 결과(§3.4). */
+/** The resolved current scheme — with 'system', the result of applying the OS value (§3.4). */
 export function useResolvedColorScheme(): ColorScheme {
   return useTheme().scheme;
 }
 
-/** (내부) 테스트 전용 — 스냅샷 초기화. 공개 표면 아님. */
+/** (internal) Tests only — resets the snapshot. Not part of the public surface. */
 export function resetActiveThemeForTest(): void {
   activeTheme = lightTheme;
   themeListeners.clear();

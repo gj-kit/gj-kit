@@ -1,13 +1,13 @@
-/** AspectRatio — 미디어 슬롯의 비율을 플랫폼 공통 View 스타일로 고정한다. */
+/** AspectRatio — pins the ratio of a media slot through a platform-shared View style. */
 import type { ReactElement, ReactNode } from 'react';
 import { View } from 'react-native';
 import { nativeWindProps } from './internal';
 import type { CommonProps } from './internal';
 
 export interface AspectRatioProps extends Omit<CommonProps, 'unstyled'> {
-  /** width / height. 0보다 큰 유한수만 허용한다. */
+  /** width / height. Only finite numbers greater than 0 are allowed. */
   ratio: number;
-  /** 생략할 수 있지만 전달한다면 null/undefined가 아닌 노드여야 한다. */
+  /** It can be omitted, but if you pass it, it has to be a node — not null or undefined. */
   children?: NonNullable<ReactNode>;
   unstyled?: never;
 }

@@ -1,8 +1,9 @@
 /**
- * 선언적 Toast 큐와 viewport.
+ * The declarative Toast queue and viewport.
  *
- * 단일 Toast/useToastController의 작은 호환 API는 feedback.tsx에 남겨 두고,
- * 이 모듈은 여러 알림의 순서·수명·상호작용을 명시적으로 소유한다.
+ * The small compatibility API of the single Toast and useToastController stays in
+ * feedback.tsx; this module explicitly owns the ordering, lifetime, and
+ * interaction of several notifications.
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { ReactElement } from 'react';
@@ -19,7 +20,7 @@ import { roleTextStyle } from './text';
 
 declare const toastIdBrand: unique symbol;
 
-/** 큐가 발급한 식별자만 update/dismiss API에 되돌려 줄 수 있게 하는 명목 타입. */
+/** The nominal type that lets only queue-issued identifiers be handed back to the update and dismiss APIs. */
 export type ToastId = string & { readonly [toastIdBrand]: 'ToastId' };
 
 export type ToastAnnouncement = 'off' | 'polite' | 'assertive';
@@ -40,18 +41,18 @@ export interface ToastAction {
 export interface ToastRequest {
   readonly title?: string | undefined;
   readonly message: string;
-  /** 기본 'info'. */
+  /** Defaults to 'info'. */
   readonly variant?: ToastVariant | undefined;
-  /** null이면 사용자가 닫을 때까지 유지한다. */
+  /** When null, it stays until the user dismisses it. */
   readonly durationMs?: number | null | undefined;
-  /** 기본 'polite'. */
+  /** Defaults to 'polite'. */
   readonly announcement?: ToastAnnouncement | undefined;
   readonly action?: ToastAction | undefined;
-  /** 동일 키를 다시 show하면 기존 위치와 id를 보존한 채 내용을 교체한다. */
+  /** Calling show again with the same key replaces the content while preserving the existing position and id. */
   readonly dedupeKey?: string | undefined;
 }
 
-/** update에서 null은 기존의 선택 속성을 명시적으로 제거한다. */
+/** In update, null explicitly removes an existing optional property. */
 export interface ToastUpdate {
   readonly title?: string | null | undefined;
   readonly message?: string | undefined;
@@ -62,7 +63,7 @@ export interface ToastUpdate {
   readonly dedupeKey?: string | null | undefined;
 }
 
-/** show/update 입력을 검증하고 기본값까지 해석한 공개 스냅샷. */
+/** The public snapshot after show/update input is validated and defaults are resolved. */
 export interface ToastRecord {
   readonly id: ToastId;
   readonly title?: string | undefined;
@@ -75,11 +76,11 @@ export interface ToastRecord {
 }
 
 export interface UseToastQueueOptions {
-  /** 동시에 보이는 수. 기본 1. */
+  /** How many are visible at once. Defaults to 1. */
   readonly maxVisible?: number | undefined;
-  /** 보이는 항목 뒤에서 기다릴 수 있는 수. 기본 9(총 기본 상한 10). */
+  /** How many can wait behind the visible ones. Defaults to 9, for a default cap of 10 in total. */
   readonly maxQueued?: number | undefined;
-  /** request.durationMs가 생략됐을 때의 수명. 기본 5000ms. */
+  /** The lifetime used when request.durationMs is omitted. Defaults to 5000ms. */
   readonly defaultDurationMs?: number | undefined;
   readonly onDismiss?:
     | ((toast: ToastRecord, reason: ToastDismissReason) => void)
@@ -87,7 +88,7 @@ export interface UseToastQueueOptions {
 }
 
 export interface ToastQueueController {
-  /** visible + queued의 FIFO 전체 스냅샷. */
+  /** The full FIFO snapshot of visible plus queued. */
   readonly records: readonly ToastRecord[];
   readonly visibleToasts: readonly ToastRecord[];
   readonly queuedCount: number;
@@ -323,8 +324,9 @@ function applyQueueBound(
 }
 
 /**
- * FIFO queue. 시간 상태는 ref에 두어 pause/resume가 렌더 지연 없이 남은 시간을
- * 보존하고, 공개 records에는 렌더에 필요한 정규화 데이터만 노출한다.
+ * A FIFO queue. Timing state lives in a ref so pause and resume preserve the
+ * remaining time without waiting on a render, and the public records expose only
+ * the normalized data a render needs.
  */
 export function useToastQueue(options: UseToastQueueOptions = {}): ToastQueueController {
   assertObject(options, 'Toast queue options');
@@ -649,9 +651,9 @@ export interface ToastViewportProps extends Omit<CommonProps, 'unstyled'> {
   readonly onDismiss: (id: ToastId, reason: ToastViewportDismissReason) => void;
   readonly onPause: (id: ToastId) => void;
   readonly onResume: (id: ToastId) => void;
-  /** 기본 'bottom'. */
+  /** Defaults to 'bottom'. */
   readonly placement?: ToastViewportPlacement | undefined;
-  /** 화면 가장자리와의 거리. 기본 spacing.xl. */
+  /** The distance from the screen edge. Defaults to spacing.xl. */
   readonly offset?: number | undefined;
   unstyled?: never;
 }
@@ -895,7 +897,7 @@ function ToastViewportItem({
   );
 }
 
-/** 고정 위치 렌더러. 레이아웃만 소유하며 큐 상태는 콜백으로 되돌린다. */
+/** The fixed-position renderer. It owns layout only and hands queue state back through callbacks. */
 export function ToastViewport({
   toasts,
   onDismiss,

@@ -1,9 +1,10 @@
 /**
- * Badge / Alert — 짧은 상태 라벨과 인라인 피드백.
+ * Badge / Alert — short status labels and inline feedback.
  *
- * 색은 상태별 soft·strong·on-color 토큰 쌍에서만 해석한다. Alert는 기본적으로
- * 정적인 설명이므로 live="off"이며, 비동기 갱신을 알릴 때만 polite/assertive를
- * 명시한다. 라이브 영역은 포커스를 이동하지 않는다.
+ * Color resolves only from the per-status soft, strong, and on-color token pairs.
+ * Alert is a static description by default, so it uses live="off"; specify polite
+ * or assertive only when announcing an asynchronous update. A live region never
+ * moves focus.
  */
 import type { ReactElement, ReactNode } from 'react';
 import { Platform, StyleSheet, Text as RNText, View } from 'react-native';
@@ -26,7 +27,7 @@ type StatusPalette = {
   foreground: string;
 };
 
-/** 상태가 다른 의미의 색 토큰을 빌리지 않도록 매핑을 한곳에 고정한다. */
+/** Pins the mapping in one place so a status never borrows a color token that means something else. */
 function statusPalette(variant: StatusVariant, theme: Theme): StatusPalette {
   switch (variant) {
     case 'info':
@@ -100,11 +101,11 @@ const getStyles = themedStyles((theme: Theme) => ({
 
 export interface BadgeProps extends Omit<CommonProps, 'unstyled'> {
   label: string;
-  /** 기본 'neutral'. */
+  /** Defaults to 'neutral'. */
   variant?: StatusVariant | undefined;
-  /** 기본 'md'. */
+  /** Defaults to 'md'. */
   size?: BadgeSize | undefined;
-  /** 정적 노드 또는 색·크기를 받는 아이콘 렌더 함수. */
+  /** A static node, or an icon render function that receives color and size. */
   leading?: ReactNode | RenderIcon | undefined;
   labelStyle?: StyleProp<TextStyle> | undefined;
   labelClassName?: string | undefined;
@@ -156,28 +157,28 @@ export function Badge({
 }
 
 type AlertOwnProps = Omit<CommonProps, 'unstyled'> & {
-  /** 기본 'info'. neutral은 알림 의도가 아니므로 허용하지 않는다. */
+  /** Defaults to 'info'. neutral is not allowed because it carries no notification intent. */
   variant?: Exclude<StatusVariant, 'neutral'> | undefined;
-  /** 미지정 시 icons.toast[variant]. */
+  /** Falls back to icons.toast[variant]. */
   leading?: ReactNode | RenderIcon | undefined;
   action?: { readonly label: string; readonly onPress: () => void } | undefined;
-  /** 있을 때만 닫기 버튼을 렌더한다. */
+  /** Renders the close button only when present. */
   onDismiss?: (() => void) | undefined;
-  /** 기본 strings.close. */
+  /** Defaults to strings.close. */
   dismissAccessibilityLabel?: string | undefined;
-  /** 기본 'off'. 동적으로 삽입·갱신되는 알림에만 opt-in한다. */
+  /** Defaults to 'off'. Opt in only for notices that are inserted or updated dynamically. */
   live?: AlertLive | undefined;
   unstyled?: never;
 };
 
-/** 제목 또는 비어 있지 않은 children 중 하나는 반드시 있어야 한다. */
+/** Either a title or non-empty children must be present. */
 export type AlertProps = AlertOwnProps &
   (
     | { title: string; children?: ReactNode | undefined }
     | { title?: never; children: NonNullable<ReactNode> }
   );
 
-/** icons.close가 없을 때도 닫기 어포던스가 사라지지 않는 내장 텍스트 폴백. */
+/** The built-in text fallback that keeps the dismiss affordance from disappearing when icons.close is absent. */
 function closeGlyph(
   iconProps: IconRenderProps,
   style: TextStyle,

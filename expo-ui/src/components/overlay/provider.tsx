@@ -21,8 +21,9 @@ export interface OverlayProviderProps {
 }
 
 /**
- * Overlay registry scope. 앱 전역 Provider 아래, navigation tree 위에 두는 것이 기본이다.
- * 별도 native Modal 안에서 inline overlay가 필요하면 그 Modal 안에 새 scope를 만든다.
+ * The overlay registry scope. It belongs below the app-wide Provider and above the
+ * navigation tree by default. Create a new scope inside a separate native Modal
+ * when that Modal needs its own inline overlays.
  */
 export function OverlayProvider({ children }: OverlayProviderProps): ReactElement {
   const environmentRef = useRef<OverlayEnvironment | null>(null);
@@ -61,7 +62,7 @@ export function useOptionalOverlayPortalStore(): OverlayPortalStore | null {
   return useContext(OverlayContext)?.portals ?? null;
 }
 
-/** 내부 product overlay가 같은 Provider scope의 dismiss stack을 공유하는 통로. */
+/** The channel through which internal product overlays share the dismiss stack of the same Provider scope. */
 export function useOptionalOverlayStack(): OverlayStack | null {
   return useContext(OverlayContext)?.stack ?? null;
 }

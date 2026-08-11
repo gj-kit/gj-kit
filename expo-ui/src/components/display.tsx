@@ -1,9 +1,9 @@
 /**
- * Avatar / Divider / ListItem — 표시·구조 기본 프리미티브.
+ * Avatar / Divider / ListItem — the display and structure primitives.
  *
- * 색·간격·타이포·제어 크기는 테마 토큰을 통해서만 흐른다.
- * 이미지·인터랙션 의미는 타입 유니언으로 강제해 무의미한 접근성
- * 요소가 발행되지 않게 한다.
+ * Color, spacing, typography, and control sizing flow only through theme tokens.
+ * Image and interaction semantics are enforced by type unions so that no
+ * meaningless accessibility element is ever emitted.
  */
 import { useCallback, useEffect, useId, useState } from 'react';
 import type { ReactElement, ReactNode } from 'react';
@@ -27,7 +27,7 @@ import { roleTextStyle } from './text';
 
 export type AvatarSize = 'sm' | 'md' | 'lg';
 
-/** Avatar가 소유하는 소스·스타일·접근성 prop은 이 슬롯에서 덮어쓸 수 없다. */
+/** The source, style, and accessibility props Avatar owns cannot be overridden from this slot. */
 export type AvatarImageProps = Omit<
   ImageProps,
   | keyof AccessibilityProps
@@ -41,20 +41,20 @@ export type AvatarImageProps = Omit<
 >;
 
 type AvatarBaseProps = Omit<CommonProps, 'unstyled'> & {
-  /** 이름은 이미지 미지정·로드 실패 시 초성을 만드는 데 쓴다. */
+  /** The name is used to build initials when no image is given or the image fails to load. */
   name: string;
   source?: ImageSourcePropType | undefined;
   size?: AvatarSize | undefined;
-  /** 미지정 시 name에서 초성을 만든다. */
+  /** Builds initials from name when omitted. */
   fallback?: ReactNode | undefined;
-  /** 소스·스타일·접근성을 제외한 RN Image prop. onError는 내부 폴백과 병합된다. */
+  /** RN Image props apart from source, style, and accessibility. onError is merged with the internal fallback. */
   imageProps?: AvatarImageProps | undefined;
   imageStyle?: StyleProp<ImageStyle> | undefined;
   unstyled?: never;
 };
 
 type InformativeAvatar = {
-  /** 프로필 이미지가 전달하는 의미. 장식이 아니면 필수다. */
+  /** What the profile image conveys. Required unless it is decorative. */
   alt: string;
   decorative?: false | undefined;
 };
@@ -87,7 +87,7 @@ function firstCharacter(value: string): string {
   return Array.from(value)[0] ?? '';
 }
 
-/** 공백 단어는 첫·끝 글자, 한 단어는 첫 두 글자를 쓴다. Hangul도 안전하다. */
+/** For a spaced name it takes the first and last initials, and for a single word the first two letters. Safe for Hangul too. */
 export function avatarInitials(name: string): string {
   const parts = name.trim().split(/\s+/u).filter(Boolean);
   if (parts.length === 0) return '?';
@@ -192,15 +192,15 @@ export type DividerOrientation = 'horizontal' | 'vertical';
 
 export interface DividerProps extends Omit<CommonProps, 'unstyled'> {
   orientation?: DividerOrientation | undefined;
-  /** 테마 color role만 허용. 기본 'line'. */
+  /** Theme color roles only. Defaults to 'line'. */
   color?: ColorKey | undefined;
-  /** 기본 StyleSheet.hairlineWidth. */
+  /** Defaults to StyleSheet.hairlineWidth. */
   thickness?: number | undefined;
-  /** 선의 시작·끝 축 여백. 토큰 키가 1급, 숫자는 실측 탈출구. */
+  /** The start and end margins along the line's axis. Token keys are first class, numbers are the escape hatch for measured values. */
   inset?: SpacingKey | number | undefined;
-  /** 선과 인접 콘텐츠 사이 여백. 토큰 키가 1급, 숫자는 실측 탈출구. */
+  /** The gap between the line and the adjacent content. Token keys are first class, numbers are the escape hatch for measured values. */
   spacing?: SpacingKey | number | undefined;
-  /** 기본 true. false면 separator 의미론을 발행한다. */
+  /** Defaults to true. When false it emits separator semantics. */
   decorative?: boolean | undefined;
   unstyled?: never;
 }

@@ -33,7 +33,7 @@ type WebKeyboardEvent = {
   preventDefault: () => void;
 };
 
-/** src는 DOM lib를 갖지 않는다. RNW 전용 이벤트 prop은 이 좁은 브리지에서만 캐스팅한다. */
+/** src has no DOM lib. RNW-only event props are cast in this narrow bridge and nowhere else. */
 function webInteractionProps(
   onActivate: () => void,
   disabled: boolean,
@@ -138,13 +138,13 @@ function ControlCopy({
 }
 
 type CheckboxOwnProps = CommonProps & {
-  /** `mixed`는 select-all 같은 부분 선택 상태다. 사용자 입력 결과는 항상 boolean. */
+  /** `mixed` is a partial selection state such as select-all. The result of user input is always a boolean. */
   checked: boolean | 'mixed';
   onCheckedChange: (checked: boolean) => void;
   description?: string | undefined;
   disabled?: boolean | undefined;
   size?: ControlSize | undefined;
-  /** check/minus Provider 아이콘보다 우선하는 단일 마크 슬롯. */
+  /** A single mark slot that takes precedence over the check and minus Provider icons. */
   renderMark?: RenderIcon | undefined;
 };
 
@@ -276,7 +276,7 @@ type SwitchOwnProps = CommonProps & {
 
 export type SwitchProps = SwitchOwnProps & VisibleOrAccessibleLabel;
 
-/** 네이티브 Switch를 그대로 사용해 플랫폼 키보드·스크린리더 동작을 보존한다. */
+/** Uses the native Switch as is, preserving the platform's keyboard and screen reader behavior. */
 export function Switch({
   value,
   onValueChange,

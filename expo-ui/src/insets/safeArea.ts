@@ -1,11 +1,13 @@
 /**
- * 하단 safe-area 순수 함수 — 설계 문서 §7. memorylog2 원명 보존(sed 이관).
+ * The pure bottom safe-area function — design doc §7. Name preserved from
+ * memorylog2 (a sed-level port).
  *
- * 하단 앵커 서피스의 규칙은 하나다: 디자인 여백 + 실제 하단 inset.
- * Android는 창이 실제로 확장된 만큼의 inset을 보고한다(제스처 내비 ~24dp,
- * 엣지투엣지 3버튼 ~48dp, 창이 내비 위에서 끝나면 0) — 합성 최소치를 얹지
- * 않는다. 과거의 48dp 폴백은 제스처 기기를 과패딩했고, 화면별 opt-out이
- * inset 자체를 떨어뜨리는 사고로 이어졌다(memorylog2 실측 확정 규칙).
+ * A bottom-anchored surface follows one rule: design padding plus the real bottom
+ * inset. Android reports an inset matching how far the window actually extends
+ * (~24dp for gesture navigation, ~48dp for edge-to-edge three-button, 0 when the
+ * window stops above the navigation bar) — no synthetic minimum is added. The old
+ * 48dp fallback over-padded gesture devices and led to per-screen opt-outs that
+ * dropped the inset entirely (a rule confirmed by measurement in memorylog2).
  */
 import { Platform } from 'react-native';
 

@@ -1,8 +1,9 @@
 /**
- * "./theme" 엔트리 — react·react-native import 0 (설계 문서 §2).
+ * The "./theme" entry — zero react and react-native imports (design doc §2).
  *
- * 앱 테마 모듈은 반드시 여기서 import한다 — tailwind.config(Node 평가)가 앱 테마
- * 모듈을 require할 때 "." 경유면 react-native import로 로드가 실패한다.
+ * App theme modules must import from here. When tailwind.config (evaluated by
+ * Node) requires an app theme module that went through ".", the react-native
+ * import makes loading fail.
  */
 export type {
   ColorScheme,

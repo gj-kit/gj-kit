@@ -1,7 +1,7 @@
 /**
- * Tabs (구 SegmentedTabs) — 설계 문서 §5.6.
+ * Tabs (formerly SegmentedTabs) — design doc §5.6.
  *
- * NoInfer<T> — value 오타가 items의 T 추론을 오염시키지 못한다(§6 ④).
+ * NoInfer<T> — a typo in value cannot pollute the inference of T from items (§6 ④).
  */
 import { useId, useRef } from 'react';
 import type { ReactElement, ReactNode } from 'react';
@@ -21,9 +21,9 @@ type TabsBaseProps<T extends string> = {
   items: readonly TabItem<T>[];
   value: NoInfer<T>;
   onChange: (value: T) => void;
-  /** tablist의 접근성 이름. */
+  /** The accessible name of the tablist. */
   accessibilityLabel: string;
-  /** 기본 'segmented'. */
+  /** Defaults to 'segmented'. */
   variant?: 'segmented' | 'underline' | undefined;
   style?: StyleProp<ViewStyle> | undefined;
   className?: string | undefined;
@@ -32,9 +32,9 @@ type TabsBaseProps<T extends string> = {
 };
 
 type TabsPanelsProps<T extends string> = {
-  /** value마다 대응하는 panel. 키 누락·오타는 타입 오류다. */
+  /** The panel matching each value. A missing key or a typo is a type error. */
   panels: Readonly<Record<NoInfer<T>, NonNullable<ReactNode>>>;
-  /** 기본 keep-mounted. */
+  /** Defaults to keep-mounted. */
   panelMountStrategy?: 'keep-mounted' | 'active-only' | undefined;
   panelStyle?: StyleProp<ViewStyle> | undefined;
   panelClassName?: string | undefined;
@@ -43,8 +43,9 @@ type TabsPanelsProps<T extends string> = {
 export type TabsProps<T extends string> = TabsBaseProps<T> & TabsPanelsProps<T>;
 
 /**
- * 탭 행 높이 — 전신 실측 보존(segmented 40 / underline 48). 토큰에 대응 개념이
- * 없어 상수로 명명(§3.8 예외 — token-guard 범위는 색·서체 리터럴).
+ * Tab row height — the predecessor's measured values preserved (segmented 40,
+ * underline 48). No token concept corresponds to it, so it is named as a constant
+ * (§3.8 exception — token-guard covers color and type literals).
  */
 const SEGMENTED_TAB_MIN_HEIGHT = 40;
 const UNDERLINE_TAB_MIN_HEIGHT = 48;

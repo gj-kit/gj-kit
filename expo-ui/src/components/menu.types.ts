@@ -13,7 +13,7 @@ export type MenuTriggerVariant = 'filled' | 'outlined' | 'ghost';
 type MenuItemBase<T extends string> = {
   readonly value: T;
   readonly label: string;
-  /** typeahead가 시각 라벨과 달라야 할 때만 지정한다. */
+  /** Specify this only when typeahead has to differ from the visible label. */
   readonly textValue?: string | undefined;
   readonly description?: string | undefined;
   readonly leading?: ReactNode | RenderIcon | undefined;
@@ -25,14 +25,14 @@ type MenuItemBase<T extends string> = {
 export type MenuActionItem<T extends string> = MenuItemBase<T> & {
   readonly kind: 'action';
   readonly destructive?: boolean | undefined;
-  /** 기본 true. */
+  /** Defaults to true. */
   readonly closeOnSelect?: boolean | undefined;
 };
 
 export type MenuCheckboxItem<T extends string> = MenuItemBase<T> & {
   readonly kind: 'checkbox';
   readonly checked: boolean | 'mixed';
-  /** 기본 false — 여러 옵션을 연속으로 바꿀 수 있다. */
+  /** Defaults to false, so several options can be changed in a row. */
   readonly closeOnSelect?: boolean | undefined;
   readonly destructive?: never;
 };
@@ -72,13 +72,13 @@ export interface MenuOpenChangeDetails<T extends string> {
 
 type MenuTriggerProps =
   | {
-      /** 시각 라벨이자 기본 접근성 이름. */
+      /** Both the visible label and the default accessible name. */
       readonly triggerLabel: string;
       readonly iconOnly?: false | undefined;
       readonly triggerIcon?: ReactNode | RenderIcon | undefined;
     }
   | {
-      /** icon-only trigger의 필수 접근성 이름. */
+      /** The required accessible name of an icon-only trigger. */
       readonly triggerLabel: string;
       readonly iconOnly: true;
       readonly triggerIcon: NonNullable<ReactNode> | RenderIcon;
@@ -93,12 +93,12 @@ export type MenuProps<T extends string> = Omit<CommonProps, 'unstyled'> &
       details: MenuOpenChangeDetails<NoInfer<T>>,
     ) => void;
     readonly onSelect: (details: MenuSelectDetails<NoInfer<T>>) => void;
-    /** menu landmark 이름. 기본 triggerLabel. */
+    /** The menu landmark name. Defaults to triggerLabel. */
     readonly accessibilityLabel?: string | undefined;
     readonly disabled?: boolean | undefined;
-    /** 선택은 막되 이미 열린 메뉴의 dismiss는 허용한다. */
+    /** Blocks selection while still allowing an already open menu to dismiss. */
     readonly busy?: boolean | undefined;
-    /** outside/Escape/Back/접근성 escape를 막는다. */
+    /** Blocks outside presses, Escape, Back, and the accessibility escape. */
     readonly dismissDisabled?: boolean | undefined;
     readonly placement?: MenuPlacement | undefined;
     readonly direction?: MenuDirection | undefined;
@@ -106,9 +106,9 @@ export type MenuProps<T extends string> = Omit<CommonProps, 'unstyled'> &
     readonly alignOffset?: number | undefined;
     readonly collisionPadding?: number | undefined;
     readonly presentation?: MenuPresentation | undefined;
-    /** native bottom presentation에서 호출자가 합성한 safe-area inset. */
+    /** Safe-area inset composed by the caller for a native bottom presentation. */
     readonly bottomInset?: number | undefined;
-    /** native Modal 안에서 계산한 키보드 가림 높이. 0보다 크면 bottomInset보다 우선한다. */
+    /** Keyboard occlusion height measured inside a native Modal. Takes precedence over bottomInset when greater than 0. */
     readonly keyboardOverlap?: number | undefined;
     readonly size?: MenuTriggerSize | undefined;
     readonly variant?: MenuTriggerVariant | undefined;

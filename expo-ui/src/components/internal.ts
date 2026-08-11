@@ -1,19 +1,19 @@
 /**
- * (내부) 컴포넌트 공용 헬퍼 — 어떤 엔트리에서도 재export하지 않는다.
+ * (internal) Shared component helpers — no entry re-exports them.
  */
 import { Platform, StyleSheet } from 'react-native';
 import type { StyleProp, ViewStyle } from 'react-native';
 import type { SpacingKey, Theme, ElevationLevel } from '../theme/tokens';
 
 /**
- * 전 컴포넌트 공통 꼬리 — 설계 문서 §5.
- * `unstyled?: never` — 전신의 이관 잔재 prop을 직접 지정·`{...props}` 스프레드
- * 경유까지 컴파일 에러로 차단한다(§0 C 채택). 'prop 부재' 방식은 스프레드를
- * 통과시킴이 실측됐다.
+ * The tail shared by every component — design doc §5.
+ * `unstyled?: never` blocks the predecessor's migration-leftover prop as a compile
+ * error, whether specified directly or routed through a `{...props}` spread (§0 C,
+ * adopted). The "absent prop" approach was measured letting the spread through.
  */
 export type CommonProps = {
   style?: StyleProp<ViewStyle> | undefined;
-  /** 해석 없이 네이티브 요소에 전달 — NativeWind는 호스트 관심사(§5). */
+  /** Passed to the native element without interpretation — NativeWind is a host concern (§5). */
   className?: string | undefined;
   testID?: string | undefined;
   unstyled?: never;
@@ -24,17 +24,18 @@ export function mergeClassNames(...values: Array<string | undefined>): string {
 }
 
 /**
- * className을 타입 밖 prop으로 전달하는 브리지. NativeWind 호스트가 opt-in할 때만
- * 의미가 생긴다 — 전신에서 파일마다 3중 복제되던 헬퍼를 단일화(§0).
+ * The bridge that forwards className as an off-type prop. It only means anything
+ * once a NativeWind host opts in — this unifies a helper the predecessor
+ * triplicated in every file (§0).
  */
 export function nativeWindProps(className?: string | undefined): Record<string, unknown> {
   return className ? ({ className } as unknown as Record<string, unknown>) : {};
 }
 
 /**
- * 테마 파라미터화 스타일 팩토리 — 설계 문서 §3.5.
- * Theme은 깊은 동결로 정체성이 안정되므로 WeakMap 캐시가 성립한다.
- * 렌더마다 스타일 객체를 재생성하지 않으면서 토큰 관통을 달성한다.
+ * The theme-parameterized style factory — design doc §3.5.
+ * A Theme is deeply frozen, so its identity is stable and a WeakMap cache works.
+ * This achieves token flow-through without rebuilding style objects on every render.
  */
 export function themedStyles<T extends StyleSheet.NamedStyles<T>>(
   factory: (theme: Theme) => T,
@@ -49,12 +50,12 @@ export function themedStyles<T extends StyleSheet.NamedStyles<T>>(
   };
 }
 
-/** spacing prop 해석 — 토큰 키가 1급, 숫자는 Figma 실측 탈출구(§5.8). */
+/** Resolves a spacing prop — token keys are first class, numbers are the escape hatch for Figma measurements (§5.8). */
 export function resolveSpacing(theme: Theme, value: SpacingKey | number): number {
   return typeof value === 'number' ? value : theme.spacing[value];
 }
 
-/** (내부) #RGB/#RRGGBB에 불투명도를 얹은 rgba. 비-hex 입력은 그대로 반환. */
+/** (internal) rgba with opacity layered onto #RGB/#RRGGBB. Non-hex input is returned unchanged. */
 function rgbaFromHex(color: string, opacity: number): string {
   const match = /^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.exec(color);
   if (!match || match[1] === undefined) return color;
@@ -72,9 +73,10 @@ function rgbaFromHex(color: string, opacity: number): string {
 }
 
 /**
- * ElevationLevel → 그림자 스타일. 그림자색은 colors.shadow에서만 온다(§3.2).
- * 웹은 boxShadow 방출 — RNW 0.21이 shadow* props를 deprecated 처리(테스트 실측).
- * RN 타입에 boxShadow가 없어 캐스팅으로 통과(§11: DOM lib 금지, 캐스팅 한정).
+ * ElevationLevel to shadow style. Shadow color comes only from colors.shadow (§3.2).
+ * The web emits boxShadow — RNW 0.21 deprecated the shadow* props (measured in tests).
+ * boxShadow is absent from the RN types, so a cast gets it through (§11: no DOM lib,
+ * casts only).
  */
 export function elevationStyle(level: ElevationLevel, shadowColor: string): ViewStyle {
   if (Platform.OS === 'web') {

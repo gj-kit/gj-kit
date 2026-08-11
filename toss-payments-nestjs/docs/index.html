@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#0a0815" />
+    <meta name="description" content="@gj-kit/toss-payments를 NestJS DI, DynamicModule, rawBody 웹훅 경계로 안전하게 통합합니다." />
+    <meta property="og:title" content="@gj-kit/toss-payments-nestjs — A safer payment boundary for NestJS" />
+    <meta property="og:description" content="결제 플로우의 타입 안전성을 NestJS DI 경계까지 보존합니다." />
+    <title>@gj-kit/toss-payments-nestjs — Payment safety meets NestJS</title>
+    <link rel="stylesheet" href="./styles.css" />
+    <script defer src="./app.js"></script>
+  </head>
+  <body>
+    <div class="halo halo-violet"></div><div class="halo halo-orange"></div>
+    <header class="site-header">
+      <a class="brand" href="../" aria-label="GJ Kit product index"><span class="brand-mark">GJ</span><span>GJ KIT</span></a>
+      <nav aria-label="주요 탐색"><a href="#composition">Composition</a><a href="#webhook">Webhook boundary</a><a href="#start">Get started</a></nav>
+      <a class="header-github" href="https://github.com/gj-kit/gj-kit/tree/main/toss-payments-nestjs" target="_blank" rel="noreferrer">GitHub <span aria-hidden="true">↗</span></a>
+    </header>
+
+    <main>
+      <section class="hero" aria-labelledby="hero-title">
+        <div class="hero-copy">
+          <p class="eyebrow"><span class="pulse"></span> NestJS integration for @gj-kit/toss-payments</p>
+          <h1>DI에도<br /><em>결제의 원칙을.</em></h1>
+          <p class="hero-lede">검증을 빠뜨릴 수 없게 만든 결제 플로우를 NestJS의 자연스러운 조립 방식으로 가져옵니다. 명시적 토큰, DynamicModule, rawBody 경계까지 하나의 흐름으로.</p>
+          <div class="hero-actions"><a class="button button-primary" href="#start">Nest 앱에 연결하기 <span aria-hidden="true">→</span></a><a class="button button-quiet" href="https://github.com/gj-kit/gj-kit/blob/main/toss-payments-nestjs/README.md" target="_blank" rel="noreferrer">README 읽기 <span aria-hidden="true">↗</span></a></div>
+          <div class="signal-row"><span><i class="signal-dot"></i> Nest 10 · 11</span><span><i class="signal-dot"></i> Explicit injection</span><span><i class="signal-dot"></i> Dependencies 0</span></div>
+        </div>
+        <div class="hero-module" aria-label="NestJS DynamicModule 코드 예시">
+          <div class="module-top"><span class="nest-logo">N</span><span>app.module.ts</span><span class="module-ready"><b></b> module ready</span></div>
+          <pre><code><span class="c-decorator">@Module</span>({
+  <span class="c-prop">imports</span>: [
+    <span class="c-type">TossPaymentsModule</span>.<span class="c-fn">forRoot</span>(tossConfig),
+  ],
+})
+<span class="c-key">export class</span> <span class="c-type">AppModule</span> {}</code></pre>
+          <div class="module-signal"><span class="injected">TOSS_PAYMENTS</span><i></i><span class="injected">App services</span><i></i><span class="safe">type-safe flow</span></div>
+        </div>
+      </section>
+
+      <section class="promise-strip" aria-label="핵심 특징">
+        <div><span class="promise-number">1</span><span>전역 Symbol 토큰으로<br />ESM/CJS 이중 로드까지 대응</span></div>
+        <div><span class="promise-number">0</span><span><code>emitDecoratorMetadata</code><br />의존성</span></div>
+        <div><span class="promise-number">500</span><span>rawBody가 없을 때<br />숨기지 않는 설정 오류</span></div>
+        <div><span class="promise-word">DI</span><span>앱의 기존 저장소를<br />그대로 결제 플로우에 주입</span></div>
+      </section>
+
+      <section id="composition" class="section composition reveal">
+        <div class="section-heading">
+          <p class="eyebrow">Framework-native, not framework-shaped</p>
+          <h2>결제 로직은 코어에,<br />조립은 Nest에.</h2>
+          <p>이 패키지는 새 결제 로직을 만들지 않습니다. 코어 파사드를 한 번 조립해 <code>TOSS_PAYMENTS</code> 토큰에 바인딩하고, 앱 서비스가 타입을 보존한 채 받도록 합니다.</p>
+        </div>
+        <div class="composition-board">
+          <div class="board-rail"><span class="rail-label">APP LAYER</span><span>Config</span><i></i><span>Module</span><i></i><span>Service</span></div>
+          <div class="board-stage" aria-label="NestJS 결제 의존성 구성도">
+            <div class="node config-node"><span class="node-tag">01</span><b>defineTossPaymentsConfig</b><small>배선 정보를 const 타입으로 고정</small></div>
+            <div class="connector connector-a">↓</div>
+            <div class="node module-node"><span class="node-tag">02</span><b>TossPaymentsModule.forRoot</b><small>kit 생성 + 토큰 바인딩</small></div>
+            <div class="connector connector-b">↓</div>
+            <div class="node service-node"><span class="node-tag">03</span><b>@InjectTossPayments()</b><small>AppToss 타입 그대로 주입</small></div>
+            <div class="side-note"><span>keep the proof</span><p>저장소를 빼먹은 플로우는 서비스에서도 존재하지 않습니다.</p></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="section config-section reveal">
+        <div class="section-heading compact"><p class="eyebrow">Two ways to compose</p><h2>앱 구조에 맞게 선택하고,<br />안전성은 그대로 유지하세요.</h2></div>
+        <div class="config-workbench">
+          <div class="config-tabs" role="tablist" aria-label="NestJS 설정 방식">
+            <button class="config-tab active" role="tab" aria-selected="true" data-config="root"><span>01</span> forRoot</button>
+            <button class="config-tab" role="tab" aria-selected="false" data-config="async"><span>02</span> forRootAsync</button>
+          </div>
+          <div class="config-display">
+            <div class="config-copy"><p class="config-label" data-config-label>SYNCHRONOUS COMPOSITION</p><h3 data-config-title>config가 이미 있다면<br />한 번에 조립합니다.</h3><p data-config-description>앱 부팅 시 config를 고정하고, 기본 전역 모듈로 어느 서비스에서나 필요한 kit을 받습니다.</p><div class="config-points" data-config-points><span>글로벌 기본값</span><span>조건부 kit 타입 보존</span><span>가장 짧은 시작점</span></div></div>
+            <div class="code-card"><div class="code-card-head"><span data-config-file>app.module.ts</span><button class="copy-config" type="button">Copy</button></div><pre><code data-config-code></code></pre></div>
+          </div>
+        </div>
+      </section>
+
+      <section id="webhook" class="section webhook-section reveal">
+        <div class="webhook-hero">
+          <div><p class="eyebrow">The boundary that must not be soft</p><h2>웹훅은 JSON이 아니라,<br /><em>원본 바이트에서</em> 시작합니다.</h2><p>Nest의 기본 body-parser가 먼저 처리하면 서명과 secret 검증은 복구할 수 없습니다. 이 패키지는 rawBody 부재를 조용한 400이 아닌, 명확한 설정 오류로 바꿉니다.</p></div>
+          <div class="request-journey" aria-label="웹훅 rawBody 검증 흐름"><div class="journey-step"><span>01</span><b>Toss webhook</b><small>raw request bytes</small></div><i></i><div class="journey-step"><span>02</span><b>Nest rawBody</b><small>preserved at bootstrap</small></div><i></i><div class="journey-step safe-step"><span>03</span><b>toNestWebhookHandler</b><small>verify · dedupe · dispatch</small></div></div>
+        </div>
+        <div class="rawbody-lab">
+          <div class="lab-copy"><p class="lab-kicker">CONFIGURATION CHECK</p><h3>rawBody가 준비되었나요?</h3><p>아래 스위치는 핸들러가 받는 요청 상태를 보여 줍니다. 실제 앱에서는 bootstrap 한 줄이 이 경계를 만듭니다.</p><label class="toggle"><input type="checkbox" checked /><span></span><b>rawBody: true</b></label></div>
+          <div class="lab-result success" aria-live="polite"><div class="result-title"><span class="result-dot"></span><b>Protected request path</b></div><div class="request-line"><span>POST</span><code>/webhooks/toss</code><b>200</b></div><ul><li>원문 bytes가 verifier로 전달됩니다.</li><li>검증 → dedupe → 핸들러 디스패치를 코어에 위임합니다.</li><li>검증용 secret은 이벤트 객체에 남지 않습니다.</li></ul><code class="bootstrap-code">NestFactory.create(AppModule, { rawBody: true })</code></div>
+        </div>
+      </section>
+
+      <section id="start" class="section start-section reveal">
+        <div class="start-copy"><p class="eyebrow">Ready when your app is</p><h2>설정 하나로,<br />안전한 주입을.</h2><p>코어 패키지와 NestJS 통합 패키지를 함께 설치하세요. 다음에는 최소 <code>forRoot</code> 예제에서 앱의 주문 저장소를 연결하면 됩니다.</p><div class="resource-links"><a href="../toss-payments/">코어 패키지 살펴보기 <span>←</span></a><a href="https://github.com/gj-kit/gj-kit/blob/main/toss-payments-nestjs/README.md" target="_blank" rel="noreferrer">전체 가이드 <span>↗</span></a></div></div>
+        <div class="install-panel"><div class="install-tabs" role="tablist" aria-label="패키지 매니저"><button class="install-tab active" role="tab" aria-selected="true" data-package-manager="pnpm">pnpm</button><button class="install-tab" role="tab" aria-selected="false" data-package-manager="npm">npm</button><button class="install-tab" role="tab" aria-selected="false" data-package-manager="yarn">yarn</button></div><div class="install-command"><code data-install-command>pnpm add @gj-kit/toss-payments @gj-kit/toss-payments-nestjs</code><button class="copy-install" type="button" aria-label="설치 명령 복사">⧉</button></div><div class="install-note"><span>◎</span><p>Nest 앱의 <code>@nestjs/common</code>, <code>reflect-metadata</code>, <code>rxjs</code>는 peer로 공유합니다.</p></div><a class="button button-primary full" href="https://github.com/gj-kit/gj-kit/tree/main/toss-payments-nestjs" target="_blank" rel="noreferrer">소스에서 살펴보기 <span aria-hidden="true">↗</span></a></div>
+      </section>
+    </main>
+    <footer class="site-footer"><a class="brand" href="../"><span class="brand-mark">GJ</span><span>GJ KIT</span></a><p>MIT License · Not affiliated with Toss Payments or NestJS</p><a href="https://github.com/gj-kit/gj-kit" target="_blank" rel="noreferrer">GitHub ↗</a></footer>
+    <div class="toast" role="status" aria-live="polite">클립보드에 복사했어요.</div>
+  </body>
+</html>

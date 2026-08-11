@@ -1,0 +1,50 @@
+name: Deploy product pages
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'docs/index.html'
+      - 'toss-payments/docs/**'
+      - 'toss-payments-nestjs/docs/**'
+      - '.github/workflows/pages.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: github-pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure Pages
+        uses: actions/configure-pages@v5
+
+      - name: Assemble static site
+        run: |
+          mkdir -p _site/toss-payments _site/toss-payments-nestjs
+          cp docs/index.html _site/index.html
+          cp -R toss-payments/docs/. _site/toss-payments/
+          cp -R toss-payments-nestjs/docs/. _site/toss-payments-nestjs/
+          touch _site/.nojekyll
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

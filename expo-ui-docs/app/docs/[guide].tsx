@@ -25,6 +25,7 @@ import {
   SeoParagraph,
   SeoSection,
 } from '../../src/seo-page';
+import { getGuideDetail, guideDetailText } from '../../src/seo-guide-detail';
 import { useLocale } from '../../src/locale';
 import { siteStrings } from '../../src/site-strings';
 
@@ -58,10 +59,13 @@ export default function GuidePage(): ReactElement {
 
   const path = guideDocsPath(guide.slug);
   const text = guideText(guide, locale);
+  // 본문·섹션은 이 라우트에서만 import한다 — seo-guide-detail.ts 주석 참고.
+  const detailEntry = getGuideDetail(guide.slug);
+  const detail = detailEntry ? guideDetailText(detailEntry, locale) : undefined;
   const title = `${text.title} | GJ Kit Expo UI`;
-  const related = guide.relatedComponents
+  const related = (detailEntry?.relatedComponents ?? [])
     .map((reference) => getComponentSeoEntryByReference(reference))
-    .filter((entry) => entry !== undefined);
+    .filter((entry): entry is NonNullable<typeof entry> => entry !== undefined);
 
   return (
     <>
@@ -73,7 +77,7 @@ export default function GuidePage(): ReactElement {
         locale={locale}
         schemas={[
           webPageSchema({ path, title, description: text.description, locale }),
-          techArticleSchema({ path, headline: text.headline, description: text.description, about: text.title, locale }),
+          techArticleSchema({ path, headline: detail?.headline ?? text.title, description: text.description, about: text.title, locale }),
           breadcrumbSchema([
             { name: t.home, path: '/' },
             { name: t.docs, path: '/docs' },
@@ -88,9 +92,9 @@ export default function GuidePage(): ReactElement {
           { label: text.title },
         ]}
       >
-        <SeoPageHeading eyebrow="GUIDE" title={text.headline} description={text.summary} />
+        <SeoPageHeading eyebrow="GUIDE" title={detail?.headline ?? text.title} description={detail?.summary ?? text.description} />
 
-        {text.sections.map((section) => (
+        {(detail?.sections ?? []).map((section) => (
           <SeoSection key={section.title} title={section.title}>
             <SeoParagraph>{section.body}</SeoParagraph>
             {section.bullets ? <BulletList items={section.bullets} /> : null}

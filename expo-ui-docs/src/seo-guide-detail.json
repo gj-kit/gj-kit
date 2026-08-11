@@ -1,0 +1,336 @@
+{
+  "getting-started": {
+    "relatedComponents": [
+      "Button",
+      "Text",
+      "Surface"
+    ],
+    "en": {
+      "headline": "Build your first screen in an Expo or React Native project",
+      "summary": "GJ Kit Expo UI has only two required runtime peers: React and React Native. Build a theme with createTheme or createThemes, pass it to a root UiProvider, then import the components you need from the package root.",
+      "sections": [
+        {
+          "title": "Install the package",
+          "body": "Add the UI package with your package manager. The safe-area package is optional unless you use the insets subpath.",
+          "code": "pnpm add @gj-kit/expo-ui"
+        },
+        {
+          "title": "Create a complete theme",
+          "body": "Call createThemes from the Node-safe theme entry point. The light and dark overrides are applied on top of the shared overrides.",
+          "code": "import { createThemes } from '@gj-kit/expo-ui/theme';\n\nexport const themes = createThemes({\n  light: { colors: { primary: '#1769C2', primaryStrong: '#0E5CAD' } },\n  dark: { colors: { primary: '#5C9EEA', primaryStrong: '#6BAAF0' } },\n});"
+        },
+        {
+          "title": "The Provider and your first component",
+          "body": "Mount UiProvider at the app root so every component reads the current color scheme, strings, and icons from the same context.",
+          "bullets": [
+            "Pass a ThemePair to follow the system light/dark setting",
+            "Choose the default copy with koStrings or enStrings",
+            "Inject the icon library your app already uses through slots"
+          ],
+          "code": "<UiProvider theme={themes} strings={koStrings}>\n  <Button label=\"Get started\" onPress={start} />\n</UiProvider>"
+        }
+      ]
+    },
+    "ko": {
+      "headline": "Expo와 React Native 프로젝트에 첫 화면 구성하기",
+      "summary": "GJ Kit Expo UI의 필수 런타임 peer는 React와 React Native뿐입니다. 테마는 createTheme 또는 createThemes로 만들고 루트 UiProvider에 전달한 뒤, 필요한 컴포넌트를 패키지 루트에서 가져옵니다.",
+      "sections": [
+        {
+          "title": "패키지 설치",
+          "body": "사용 중인 패키지 매니저로 UI 패키지를 추가합니다. insets 서브패스를 쓰지 않는다면 safe-area 패키지는 필수가 아닙니다.",
+          "code": "pnpm add @gj-kit/expo-ui"
+        },
+        {
+          "title": "완전한 테마 만들기",
+          "body": "Node에서도 안전한 theme 엔트리에서 createThemes를 호출합니다. shared 오버라이드 뒤에 light와 dark 오버라이드가 적용됩니다.",
+          "code": "import { createThemes } from '@gj-kit/expo-ui/theme';\n\nexport const themes = createThemes({\n  light: { colors: { primary: '#1769C2', primaryStrong: '#0E5CAD' } },\n  dark: { colors: { primary: '#5C9EEA', primaryStrong: '#6BAAF0' } },\n});"
+        },
+        {
+          "title": "Provider와 첫 컴포넌트",
+          "body": "앱 루트에 UiProvider를 두면 컴포넌트가 현재 색상 스킴, 문자열과 아이콘을 같은 컨텍스트에서 읽습니다.",
+          "bullets": [
+            "ThemePair를 전달하면 시스템 라이트·다크 설정을 추종",
+            "koStrings 또는 enStrings로 기본 문구 선택",
+            "앱에서 이미 쓰는 아이콘 라이브러리를 slots로 주입"
+          ],
+          "code": "<UiProvider theme={themes} strings={koStrings}>\n  <Button label=\"시작하기\" onPress={start} />\n</UiProvider>"
+        }
+      ]
+    }
+  },
+  "theming": {
+    "relatedComponents": [
+      "Text",
+      "Button",
+      "Surface"
+    ],
+    "en": {
+      "headline": "A token system that finishes light and dark together",
+      "summary": "Every GJ Kit component style resolves against the active Theme. Theme and ThemePair are branded types that only the factories can produce, so a hand-assembled object with missing keys can never reach the Provider.",
+      "sections": [
+        {
+          "title": "Token groups and roles",
+          "body": "Roles name a purpose rather than a color. Status colors keep foreground, strong background, soft background, and on-color separate so contrast holds in both light and dark.",
+          "bullets": [
+            "31 color roles",
+            "spacing, radius, typography, elevation",
+            "control, input, and icon metrics plus tablet and desktop breakpoints"
+          ]
+        },
+        {
+          "title": "Generating a light/dark pair",
+          "body": "Put brand values common to both schemes in shared, and keep only the per-scheme differences in light and dark. The result is a ThemePair in which both schemes are fully populated.",
+          "code": "const themes = createThemes({\n  shared: { radius: { sm: 10 } },\n  dark: { colors: { primary: '#5C9EEA' } },\n});"
+        },
+        {
+          "title": "Owning the scheme, and consuming it outside React",
+          "body": "colorScheme on UiProvider accepts light, dark, or system, and components read only the single resolved theme through useTheme. Outside the React tree — navigation configuration, for example — use getActiveTheme and subscribeActiveTheme."
+        }
+      ]
+    },
+    "ko": {
+      "headline": "라이트·다크를 함께 완성하는 토큰 시스템",
+      "summary": "GJ Kit의 컴포넌트 스타일은 활성 Theme에서 해석됩니다. Theme와 ThemePair는 생성기를 거친 브랜드 타입이므로 일부 키가 빠진 손조립 객체가 Provider로 들어오는 상황을 막습니다.",
+      "sections": [
+        {
+          "title": "토큰 그룹과 역할",
+          "body": "색 이름보다 용도를 나타내는 role을 사용합니다. 상태 색은 전경, strong 배경, soft 배경, on-color를 분리해 라이트·다크 대비를 유지합니다.",
+          "bullets": [
+            "colors 31개 역할",
+            "spacing, radius, typography, elevation",
+            "control·input·icon 치수와 tablet·desktop breakpoint"
+          ]
+        },
+        {
+          "title": "라이트·다크 쌍 생성",
+          "body": "공통 브랜드 값은 shared에, 스킴별 차이만 light와 dark에 둡니다. 결과는 두 스킴이 모두 완성된 ThemePair입니다.",
+          "code": "const themes = createThemes({\n  shared: { radius: { sm: 10 } },\n  dark: { colors: { primary: '#5C9EEA' } },\n});"
+        },
+        {
+          "title": "스킴 소유와 비 React 소비",
+          "body": "UiProvider의 colorScheme은 light, dark, system을 받고 컴포넌트는 useTheme으로 해석된 단일 테마만 읽습니다. 내비게이션처럼 React 트리 밖에서는 getActiveTheme과 subscribeActiveTheme을 사용할 수 있습니다."
+        }
+      ]
+    }
+  },
+  "accessibility": {
+    "relatedComponents": [
+      "Checkbox",
+      "RadioGroup",
+      "Alert",
+      "ProgressBar"
+    ],
+    "en": {
+      "headline": "Designing types, native APIs, and ARIA together",
+      "summary": "Components that break silently when an accessibility name or state is missing use type unions to rule out the invalid combinations. On native they go through the React Native accessibility APIs; on web they emit the matching ARIA plus whatever keyboard interaction the pattern requires.",
+      "sections": [
+        {
+          "title": "Requiring names and semantics in the type",
+          "body": "IconButton requires accessibilityLabel, and Avatar forces a choice between alt and decorative. Checkbox and Switch likewise need either a visible label or an accessibility label.",
+          "bullets": [
+            "ProgressBar and RadioGroup require a label for what they describe",
+            "ListItem distinguishes static rows from button rows at the type level",
+            "Action objects require a label and a handler together"
+          ]
+        },
+        {
+          "title": "Keyboard and state on web",
+          "body": "Checkbox responds to Space; RadioGroup supports Space, the arrow keys, Home, and End. Accordion connects each header to its panel with aria-controls and aria-expanded."
+        },
+        {
+          "title": "How loudly to announce a change",
+          "body": "A static Alert defaults to live off. Reserve polite or assertive for asynchronous results that are newly inserted, and note that ProgressBar stops its traveling animation when the OS reduced-motion setting is enabled."
+        }
+      ]
+    },
+    "ko": {
+      "headline": "타입, 네이티브 API와 ARIA를 함께 설계하기",
+      "summary": "접근성 이름이나 상태가 누락되면 조용히 깨지는 컴포넌트는 타입 유니언으로 잘못된 조합을 제한합니다. 네이티브에서는 React Native 접근성 API를, 웹에서는 대응 ARIA와 필요한 키보드 상호작용을 제공합니다.",
+      "sections": [
+        {
+          "title": "이름과 의미를 타입으로 요구",
+          "body": "IconButton은 accessibilityLabel이 필수이고 Avatar는 alt와 decorative 중 하나를 선택합니다. Checkbox와 Switch도 보이는 label 또는 접근성 라벨이 있어야 합니다.",
+          "bullets": [
+            "ProgressBar와 RadioGroup의 대상 라벨은 필수",
+            "ListItem은 정적 행과 버튼 행을 타입으로 구분",
+            "액션 객체는 label과 handler를 함께 요구"
+          ]
+        },
+        {
+          "title": "웹 키보드와 상태",
+          "body": "Checkbox는 Space, RadioGroup은 Space·방향키·Home·End를 지원합니다. Accordion은 헤더와 패널을 aria-controls와 aria-expanded로 연결합니다."
+        },
+        {
+          "title": "변화를 알리는 강도",
+          "body": "정적인 Alert는 live off가 기본입니다. 새로 삽입된 비동기 결과에만 polite 또는 assertive를 선택하고, ProgressBar는 운영체제 모션 감소 설정에서 이동 애니메이션을 멈춥니다."
+        }
+      ]
+    }
+  },
+  "tailwind": {
+    "relatedComponents": [
+      "Text",
+      "Surface",
+      "ContentFrame"
+    ],
+    "en": {
+      "headline": "Deriving a utility preset from the runtime theme",
+      "summary": "GJ Kit does not require NativeWind as a runtime dependency, but it does forward className to compatible components. The preset derives colors, spacing, radii, typography, shadows, and breakpoints from an actual Theme, so a project never ends up with two competing sources of design truth.",
+      "sections": [
+        {
+          "title": "Use the Node-safe entry",
+          "body": "The app theme module that tailwind.config reads must import the generators from @gj-kit/expo-ui/theme, not from the package root.",
+          "code": "import { createTailwindPreset } from '@gj-kit/expo-ui/tailwind';\nimport { themes } from './src/theme';\n\nexport const preset = createTailwindPreset(themes.light);"
+        },
+        {
+          "title": "Generated utilities",
+          "body": "The default ui prefix exposes utilities named after the tokens they map to. Change the prefix option to match your project's naming conventions.",
+          "bullets": [
+            "bg-ui-primary and text-ui-title",
+            "p-ui-lg and rounded-ui-pill",
+            "shadow-ui-sm, plus the tablet and desktop screens"
+          ]
+        },
+        {
+          "title": "How className and style divide responsibility",
+          "body": "className is resolved in the consuming app where NativeWind is installed; GJ Kit passes it through. The className bridge and style are applied after the component's own token styles, which keeps per-screen adjustments possible."
+        }
+      ]
+    },
+    "ko": {
+      "headline": "런타임 테마에서 유틸리티 preset 파생하기",
+      "summary": "GJ Kit는 NativeWind를 런타임 의존성으로 요구하지 않지만 className을 호환 컴포넌트에 전달합니다. preset은 실제 Theme에서 색상, 간격, 라운드, 타이포그래피, 그림자와 breakpoint를 파생해 두 개의 디자인 진실이 생기지 않게 합니다.",
+      "sections": [
+        {
+          "title": "Node 안전 엔트리 사용",
+          "body": "tailwind.config가 읽는 앱 테마 모듈은 패키지 루트가 아니라 @gj-kit/expo-ui/theme에서 생성기를 가져와야 합니다.",
+          "code": "import { createTailwindPreset } from '@gj-kit/expo-ui/tailwind';\nimport { themes } from './src/theme';\n\nexport const preset = createTailwindPreset(themes.light);"
+        },
+        {
+          "title": "생성되는 유틸리티",
+          "body": "기본 ui 접두사로 의미 있는 토큰 이름을 노출합니다. prefix 옵션을 바꾸면 프로젝트 네이밍 규칙에 맞출 수 있습니다.",
+          "bullets": [
+            "bg-ui-primary와 text-ui-title",
+            "p-ui-lg와 rounded-ui-pill",
+            "shadow-ui-sm, tablet과 desktop 화면"
+          ]
+        },
+        {
+          "title": "className과 style의 역할",
+          "body": "className은 NativeWind가 설치된 소비 앱에서 해석되고 GJ Kit는 이를 패스스루합니다. 컴포넌트 토큰 스타일 뒤에 className 브리지와 style을 적용하므로 화면별 조정이 가능합니다."
+        }
+      ]
+    }
+  },
+  "insets-keyboard": {
+    "relatedComponents": [
+      "StickyActionBar",
+      "Dialog",
+      "TextField"
+    ],
+    "en": {
+      "headline": "Layouts that keep bottom actions and Modal inputs visible",
+      "summary": "The insets features live in a separate @gj-kit/expo-ui/insets subpath, so apps that do not use them never pull the safe-area peer into their base bundle. The hooks require react-native-safe-area-context; the pure functions can be tested without any peer installed.",
+      "sections": [
+        {
+          "title": "Adding safe area on top of design spacing",
+          "body": "useBottomInset returns 0 on web and the measured bottom inset on native. Feed it into the bottomInset of StickyActionBar, or into useBottomSheetPadding.",
+          "code": "const bottomInset = useBottomInset();\n\n<StickyActionBar bottomInset={bottomInset}>\n  <Button label=\"Done\" onPress={submit} />\n</StickyActionBar>"
+        },
+        {
+          "title": "Handling Modal keyboard overlap",
+          "body": "useModalKeyboardOverlap computes how much of a bottom sheet the keyboard covers inside an Android edge-to-edge Modal. When it returns a value, apply that value instead of the safe-area padding."
+        },
+        {
+          "title": "Pure calculations that reveal the focused input",
+          "body": "computeKeyboardRevealOffset derives the target offset from the input position, the current scroll offset, and the viewport and keyboard heights.",
+          "bullets": [
+            "nativeBottomInset and nativeBottomPadding are per-platform pure functions",
+            "Keyboard-avoidance animation and ScrollView control remain owned by the app",
+            "Install the optional peer only when you use the insets subpath"
+          ]
+        }
+      ]
+    },
+    "ko": {
+      "headline": "하단 액션과 Modal 입력을 가리지 않는 레이아웃",
+      "summary": "insets 기능은 별도 @gj-kit/expo-ui/insets 서브패스에 있어 사용하지 않는 앱의 기본 번들에 safe-area peer를 끌어들이지 않습니다. 훅은 react-native-safe-area-context가 필요하고 순수 함수는 peer 없이 테스트할 수 있습니다.",
+      "sections": [
+        {
+          "title": "Safe area를 디자인 여백에 더하기",
+          "body": "useBottomInset은 웹에서 0을, 네이티브에서 실측 하단 inset을 반환합니다. StickyActionBar의 bottomInset 또는 useBottomSheetPadding에 연결합니다.",
+          "code": "const bottomInset = useBottomInset();\n\n<StickyActionBar bottomInset={bottomInset}>\n  <Button label=\"완료\" onPress={submit} />\n</StickyActionBar>"
+        },
+        {
+          "title": "Modal 키보드 겹침 대응",
+          "body": "useModalKeyboardOverlap은 Android 엣지투엣지 Modal에서 하단 시트가 키보드에 가려지는 높이를 계산합니다. 반환값이 있으면 safe-area 패딩보다 우선해 적용합니다."
+        },
+        {
+          "title": "포커스 입력을 드러내는 순수 계산",
+          "body": "computeKeyboardRevealOffset은 입력 위치, 현재 스크롤, 뷰포트와 키보드 높이로 목표 오프셋을 계산합니다.",
+          "bullets": [
+            "nativeBottomInset과 nativeBottomPadding은 플랫폼별 순수 함수",
+            "키보드 회피 애니메이션과 ScrollView 제어는 앱이 소유",
+            "insets 서브패스를 쓸 때만 optional peer 설치"
+          ]
+        }
+      ]
+    }
+  },
+  "type-safety": {
+    "relatedComponents": [
+      "Button",
+      "ProgressBar",
+      "Accordion",
+      "RadioGroup"
+    ],
+    "en": {
+      "headline": "Rejecting invalid UI states before render",
+      "summary": "GJ Kit prefers APIs that can only express valid values over APIs that warn at runtime. Missing accessibility names, actions with no handler, invalid literal values, and mutually incompatible modes are all caught during type checking.",
+      "sections": [
+        {
+          "title": "Branded themes produced by the generators",
+          "body": "Only the return values of createTheme and createThemes can be passed as Theme and ThemePair to the Provider and the Tailwind preset. Hand-assembled objects with missing tokens are rejected."
+        },
+        {
+          "title": "Separating modes with discriminated unions",
+          "body": "Valid prop combinations are expressed as distinct types: determinate versus indeterminate for ProgressBar, single versus multiple for Accordion, and static rows versus button rows for ListItem.",
+          "code": "<ProgressBar accessibilityLabel=\"Sync\" value={null} />\n// Passing value={null} together with max is a type error"
+        },
+        {
+          "title": "Blocking typos and legacy meanings",
+          "body": "Tabs and RadioGroup use NoInfer to reject any value outside items, and the color of Text accepts only closed token keys. The removed unstyled prop and the redefined TextField style are declared as never, so errors also surface in code that migrates props by spreading.",
+          "bullets": [
+            "A missing IconButton accessibility name is rejected",
+            "A missing EmptyState action handler is rejected",
+            "A Button with neither label nor children is rejected"
+          ]
+        }
+      ]
+    },
+    "ko": {
+      "headline": "잘못된 UI 상태를 렌더 전에 차단하기",
+      "summary": "GJ Kit는 런타임 경고보다 올바른 값만 표현할 수 있는 API를 우선합니다. 접근성 이름 누락, 동작 없는 액션, 잘못된 리터럴 값과 서로 양립할 수 없는 모드를 타입 검사에서 발견합니다.",
+      "sections": [
+        {
+          "title": "생성기를 거친 브랜드 테마",
+          "body": "Theme과 ThemePair는 createTheme과 createThemes의 반환값만 Provider와 Tailwind preset에 전달할 수 있습니다. 누락된 토큰을 가진 손조립 객체는 거부됩니다."
+        },
+        {
+          "title": "판별 유니언으로 모드 분리",
+          "body": "ProgressBar의 determinate와 indeterminate, Accordion의 single과 multiple, ListItem의 정적 행과 버튼 행처럼 가능한 prop 조합을 별도 타입으로 표현합니다.",
+          "code": "<ProgressBar accessibilityLabel=\"동기화\" value={null} />\n// value={null}과 max의 동시 지정은 타입 오류"
+        },
+        {
+          "title": "오타와 레거시 의미 차단",
+          "body": "Tabs와 RadioGroup은 NoInfer로 items 밖의 value를 막고 Text의 color는 닫힌 토큰 키만 받습니다. 제거된 unstyled와 의미가 달라진 TextField style은 never로 선언해 스프레드 이관 오류도 드러냅니다.",
+          "bullets": [
+            "IconButton 접근성 이름 누락 차단",
+            "EmptyState action handler 누락 차단",
+            "Button label과 children 동시 부재 차단"
+          ]
+        }
+      ]
+    }
+  }
+}

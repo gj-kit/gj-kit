@@ -11,9 +11,10 @@
     "check:seo": "node scripts/check-seo.mjs",
     "check:links": "node scripts/check-link-styles.mjs",
     "generate:props": "node scripts/generate-props.mjs",
-    "verify": "pnpm run check:links && pnpm run check:locale && pnpm run generate:props && pnpm run typecheck && pnpm run generate:seo",
+    "verify": "pnpm run check:links && pnpm run check:locale && pnpm run generate:seo && pnpm run generate:props && pnpm run typecheck",
     "typecheck": "tsc --noEmit",
-    "check:locale": "node scripts/check-locale-strings.mjs"
+    "check:locale": "node scripts/check-locale-strings.mjs",
+    "generate:og": "node scripts/generate-og.mjs"
   },
   "dependencies": {
     "@gj-kit/expo-ui": "workspace:*",

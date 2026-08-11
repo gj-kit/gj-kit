@@ -1,0 +1,955 @@
+{
+  "publishedVersion": "0.4.2",
+  "components": [
+    {
+      "slug": "text",
+      "name": "Text",
+      "since": "0.1.0",
+      "related": [
+        "Section",
+        "Button",
+        "EmptyState"
+      ],
+      "en": {
+        "category": "Foundation",
+        "description": "A Text component that renders font size, line height, weight, and color consistently across Expo and React Native screens by resolving them from GJ Kit theme roles."
+      },
+      "ko": {
+        "category": "기초",
+        "description": "Expo와 React Native 화면의 글꼴 크기, 행간, 굵기와 색상을 GJ Kit 테마 역할로 일관되게 표현하는 Text 컴포넌트입니다."
+      }
+    },
+    {
+      "slug": "button",
+      "name": "Button",
+      "since": "0.1.0",
+      "related": [
+        "IconButton",
+        "ConfirmActionRow",
+        "StickyActionBar"
+      ],
+      "en": {
+        "category": "Actions",
+        "description": "An Expo and React Native button with primary, outline, destructive, and inverse variants, three sizes, and a loading state."
+      },
+      "ko": {
+        "category": "액션",
+        "description": "primary, outline, destructive, inverse 변형과 세 가지 크기, 로딩 상태를 제공하는 Expo·React Native 버튼입니다."
+      }
+    },
+    {
+      "slug": "icon-button",
+      "name": "IconButton",
+      "since": "0.1.0",
+      "related": [
+        "Button",
+        "Alert",
+        "Dialog"
+      ],
+      "en": {
+        "category": "Actions",
+        "description": "A React Native IconButton for icon-only actions, providing a required accessibility label, button variants, and loading and disabled states."
+      },
+      "ko": {
+        "category": "액션",
+        "description": "아이콘만 보이는 액션에 필수 접근성 라벨, 버튼 변형, 로딩과 비활성 상태를 제공하는 React Native IconButton입니다."
+      }
+    },
+    {
+      "slug": "chip",
+      "name": "Chip",
+      "since": "0.4.0",
+      "related": [
+        "Button",
+        "Checkbox",
+        "Badge"
+      ],
+      "en": {
+        "category": "Actions",
+        "description": "An Expo and React Native Chip that separates action, filter, and removable semantics through a discriminated union while keeping selection state and the remove action accessible."
+      },
+      "ko": {
+        "category": "액션",
+        "description": "action·filter·removable 의미를 판별 유니언으로 분리하고 선택 상태와 제거 액션의 접근성을 지키는 Expo·React Native Chip입니다."
+      }
+    },
+    {
+      "slug": "floating-action-button",
+      "name": "FloatingActionButton",
+      "since": "0.4.0",
+      "related": [
+        "IconButton",
+        "StickyActionBar",
+        "Button"
+      ],
+      "en": {
+        "category": "Actions",
+        "description": "An Expo and React Native FloatingActionButton with icon-only and extended presentations, three sizes, edge placements, and safe-area inset support."
+      },
+      "ko": {
+        "category": "액션",
+        "description": "아이콘 전용·확장형 표현, 세 가지 크기와 가장자리 배치, safe-area inset을 지원하는 Expo·React Native FloatingActionButton입니다."
+      }
+    },
+    {
+      "slug": "text-field",
+      "name": "TextField",
+      "since": "0.1.0",
+      "related": [
+        "SearchField",
+        "Text",
+        "ErrorState"
+      ],
+      "en": {
+        "category": "Inputs",
+        "description": "A theme-based Expo and React Native text input supporting a label, character counter, secondary action, helper text, and error state."
+      },
+      "ko": {
+        "category": "입력",
+        "description": "라벨, 글자 수, 보조 액션, 도움말과 오류 상태를 지원하는 테마 기반 Expo·React Native 텍스트 입력 컴포넌트입니다."
+      }
+    },
+    {
+      "slug": "search-field",
+      "name": "SearchField",
+      "since": "0.1.0",
+      "related": [
+        "TextField",
+        "EmptyState",
+        "ListItem"
+      ],
+      "en": {
+        "category": "Inputs",
+        "description": "An Expo SearchField that takes its search placeholder and icon from UiProvider, keeping search inputs consistent across the app."
+      },
+      "ko": {
+        "category": "입력",
+        "description": "검색 placeholder와 아이콘을 UiProvider에서 받아 앱 전반의 검색 입력을 간결하게 통일하는 Expo SearchField입니다."
+      }
+    },
+    {
+      "slug": "form-field",
+      "name": "FormField",
+      "since": "0.4.0",
+      "related": [
+        "TextField",
+        "RadioGroup",
+        "Checkbox"
+      ],
+      "en": {
+        "category": "Inputs",
+        "description": "An Expo and React Native FormField that passes label, helper text, error, and required-state accessibility relationships to any input control through a render prop."
+      },
+      "ko": {
+        "category": "입력",
+        "description": "render prop으로 입력 제어에 라벨, 도움말, 오류와 필수 상태의 접근성 관계를 전달하는 Expo·React Native FormField입니다."
+      }
+    },
+    {
+      "slug": "select",
+      "name": "Select",
+      "since": "0.4.0",
+      "related": [
+        "Menu",
+        "RadioGroup",
+        "FormField"
+      ],
+      "en": {
+        "category": "Inputs",
+        "description": "An Expo and React Native Select that preserves literal single values, with combobox and listbox keyboard navigation on the web and an adaptive radio selection surface on native."
+      },
+      "ko": {
+        "category": "입력",
+        "description": "리터럴 단일 값을 보존하고 웹 combobox·listbox 키보드 탐색과 네이티브 adaptive radio 선택면을 제공하는 Expo·React Native Select입니다."
+      }
+    },
+    {
+      "slug": "tabs",
+      "name": "Tabs",
+      "since": "0.1.0",
+      "related": [
+        "Section",
+        "ContentFrame",
+        "Accordion"
+      ],
+      "en": {
+        "category": "Navigation",
+        "description": "A tab component for Expo and React Native that preserves literal value types and offers two presentations, segmented and underline."
+      },
+      "ko": {
+        "category": "탐색",
+        "description": "리터럴 value 타입을 보존하며 segmented·underline 두 표현을 제공하는 Expo와 React Native용 탭 컴포넌트입니다."
+      }
+    },
+    {
+      "slug": "link",
+      "name": "Link",
+      "since": "0.4.0",
+      "related": [
+        "Button",
+        "ListItem",
+        "Tabs"
+      ],
+      "en": {
+        "category": "Navigation",
+        "description": "An Expo and React Native Link that brings real web anchors, native Linking, and router onPress flows under a single mutually exclusive contract."
+      },
+      "ko": {
+        "category": "탐색",
+        "description": "웹의 실제 anchor와 네이티브 Linking, 라우터 onPress 흐름을 하나의 상호 배타적 계약으로 제공하는 Expo·React Native Link입니다."
+      }
+    },
+    {
+      "slug": "collapsible",
+      "name": "Collapsible",
+      "since": "0.4.0",
+      "related": [
+        "Accordion",
+        "Tabs",
+        "Divider"
+      ],
+      "en": {
+        "category": "Navigation",
+        "description": "An Expo and React Native Collapsible that ties a required title to its content through controlled open state and heading, expanded, and controls relationships."
+      },
+      "ko": {
+        "category": "탐색",
+        "description": "필수 title과 content를 controlled open 상태, heading·expanded·controls 관계로 연결하는 Expo·React Native Collapsible입니다."
+      }
+    },
+    {
+      "slug": "selection-indicator",
+      "name": "SelectionIndicator",
+      "since": "0.1.0",
+      "related": [
+        "SelectableRow",
+        "SelectAllRow",
+        "Checkbox"
+      ],
+      "en": {
+        "category": "Selection",
+        "description": "A circular selection indicator that supports 16, 18, 20, and 24 sizes along with a custom check mark."
+      },
+      "ko": {
+        "category": "선택",
+        "description": "16·18·20·24 크기와 사용자 지정 체크 마크를 지원하는 원형 선택 표시 컴포넌트입니다."
+      }
+    },
+    {
+      "slug": "selectable-row",
+      "name": "SelectableRow",
+      "since": "0.1.0",
+      "related": [
+        "SelectionIndicator",
+        "SelectAllRow",
+        "ListItem"
+      ],
+      "en": {
+        "category": "Selection",
+        "description": "A React Native selection row that combines a selection indicator with arbitrary row content and exposes selected and disabled state."
+      },
+      "ko": {
+        "category": "선택",
+        "description": "선택 표시와 임의의 행 콘텐츠를 결합하고 selected·disabled 상태를 노출하는 React Native 선택 행입니다."
+      }
+    },
+    {
+      "slug": "select-all-row",
+      "name": "SelectAllRow",
+      "since": "0.1.0",
+      "related": [
+        "SelectableRow",
+        "SelectionIndicator",
+        "Checkbox"
+      ],
+      "en": {
+        "category": "Selection",
+        "description": "An Expo and React Native selection control row that switches between the select-all and deselect-all label based on the current state."
+      },
+      "ko": {
+        "category": "선택",
+        "description": "현재 상태에 따라 전체 선택·전체 해제 라벨을 자동 전환하는 Expo·React Native 선택 제어 행입니다."
+      }
+    },
+    {
+      "slug": "checkbox",
+      "name": "Checkbox",
+      "since": "0.3.0",
+      "related": [
+        "Switch",
+        "RadioGroup",
+        "SelectAllRow"
+      ],
+      "en": {
+        "category": "Inputs",
+        "description": "A cross-platform Checkbox that requires either a visible label or an accessibility label, and supports the mixed state as well as Space key input on the web."
+      },
+      "ko": {
+        "category": "입력",
+        "description": "보이는 라벨 또는 접근성 라벨을 필수로 요구하고 mixed 상태와 웹 Space 입력을 지원하는 크로스플랫폼 Checkbox입니다."
+      }
+    },
+    {
+      "slug": "switch",
+      "name": "Switch",
+      "since": "0.3.0",
+      "related": [
+        "Checkbox",
+        "RadioGroup",
+        "ListItem"
+      ],
+      "en": {
+        "category": "Inputs",
+        "description": "A settings toggle for iOS, Android, and Web that wraps the built-in React Native Switch with token-based theming and a required label contract."
+      },
+      "ko": {
+        "category": "입력",
+        "description": "React Native 기본 Switch를 토큰 테마와 필수 라벨 계약으로 감싼 iOS·Android·Web 설정 토글입니다."
+      }
+    },
+    {
+      "slug": "radio-group",
+      "name": "RadioGroup",
+      "since": "0.3.0",
+      "related": [
+        "Checkbox",
+        "Switch",
+        "Tabs"
+      ],
+      "en": {
+        "category": "Inputs",
+        "description": "An Expo and React Native RadioGroup that constrains the single selected value at the type level and provides arrow key, Home, and End keyboard navigation."
+      },
+      "ko": {
+        "category": "입력",
+        "description": "단일 선택 값을 타입으로 제한하고 방향키·Home·End 키보드 탐색을 제공하는 Expo·React Native RadioGroup입니다."
+      }
+    },
+    {
+      "slug": "slider",
+      "name": "Slider",
+      "since": "0.4.0",
+      "related": [
+        "RadioGroup",
+        "ProgressBar",
+        "ToggleGroup"
+      ],
+      "en": {
+        "category": "Inputs",
+        "description": "A dependency-free Expo and React Native Slider that separates a single number from a two-thumb range at the type level and supports keyboard input, accessibility actions, and RTL coordinates."
+      },
+      "ko": {
+        "category": "입력",
+        "description": "단일 숫자와 두 thumb 범위를 타입으로 분리하고 키보드·접근성 액션·RTL 좌표를 지원하는 무의존 Expo·React Native Slider입니다."
+      }
+    },
+    {
+      "slug": "toggle-group",
+      "name": "ToggleGroup",
+      "since": "0.4.0",
+      "related": [
+        "Tabs",
+        "RadioGroup",
+        "Slider"
+      ],
+      "en": {
+        "category": "Selection",
+        "description": "An Expo and React Native ToggleGroup that gives a set of toggle buttons inside a toolbar controlled single or multiple state, roving focus, and arrow key navigation."
+      },
+      "ko": {
+        "category": "선택",
+        "description": "toolbar 안의 toggle button 집합에서 single·multiple controlled 상태, roving focus와 방향키 탐색을 제공하는 Expo·React Native ToggleGroup입니다."
+      }
+    },
+    {
+      "slug": "surface",
+      "name": "Surface",
+      "since": "0.1.0",
+      "related": [
+        "Section",
+        "ContentFrame",
+        "DialogPanel"
+      ],
+      "en": {
+        "category": "Layout",
+        "description": "A React Native Surface that builds the background, border, padding, radius, and elevation of cards and panels from theme tokens."
+      },
+      "ko": {
+        "category": "레이아웃",
+        "description": "카드와 패널의 배경, 테두리, 여백, 라운드와 elevation을 테마 토큰으로 구성하는 React Native Surface입니다."
+      }
+    },
+    {
+      "slug": "card",
+      "name": "Card",
+      "since": "0.4.0",
+      "related": [
+        "Surface",
+        "ListItem",
+        "Section"
+      ],
+      "en": {
+        "category": "Layout",
+        "description": "A static Expo and React Native Card with outlined, elevated, and filled surfaces, separate outer and inner layout styles, and token-based padding and radius."
+      },
+      "ko": {
+        "category": "레이아웃",
+        "description": "outlined·elevated·filled 표면과 외부·내부 레이아웃 분리, 토큰 패딩·라운드를 제공하는 정적 Expo·React Native Card입니다."
+      }
+    },
+    {
+      "slug": "aspect-ratio",
+      "name": "AspectRatio",
+      "since": "0.4.0",
+      "related": [
+        "Card",
+        "Surface",
+        "Skeleton"
+      ],
+      "en": {
+        "category": "Layout",
+        "description": "A layout primitive that holds the width/height ratio of media slots such as images, video, and maps through the React Native aspectRatio style."
+      },
+      "ko": {
+        "category": "레이아웃",
+        "description": "이미지·영상·지도 등 미디어 슬롯의 width/height 비율을 React Native aspectRatio 스타일로 유지하는 레이아웃 프리미티브입니다."
+      }
+    },
+    {
+      "slug": "content-frame",
+      "name": "ContentFrame",
+      "since": "0.1.0",
+      "related": [
+        "Surface",
+        "Section",
+        "StickyActionBar"
+      ],
+      "en": {
+        "category": "Layout",
+        "description": "An Expo and React Native layout frame that manages maximum content width and responsive padding in one place."
+      },
+      "ko": {
+        "category": "레이아웃",
+        "description": "최대 콘텐츠 폭과 반응형 여백을 한곳에서 관리하는 Expo·React Native 레이아웃 프레임입니다."
+      }
+    },
+    {
+      "slug": "section",
+      "name": "Section",
+      "since": "0.1.0",
+      "related": [
+        "Text",
+        "ContentFrame",
+        "Surface"
+      ],
+      "en": {
+        "category": "Layout",
+        "description": "A React Native Section component that arranges the title, subtitle, actions, and body spacing of a content area according to theme rules."
+      },
+      "ko": {
+        "category": "레이아웃",
+        "description": "콘텐츠 구역의 title, subtitle, actions와 본문 간격을 테마 규칙으로 정리하는 React Native Section 컴포넌트입니다."
+      }
+    },
+    {
+      "slug": "sticky-action-bar",
+      "name": "StickyActionBar",
+      "since": "0.1.0",
+      "related": [
+        "Button",
+        "ContentFrame",
+        "ConfirmActionRow"
+      ],
+      "en": {
+        "category": "Layout",
+        "description": "A screen action container that renders as a sticky bottom bar on the web and composes safe-area padding on native."
+      },
+      "ko": {
+        "category": "레이아웃",
+        "description": "웹에서는 sticky 하단 바, 네이티브에서는 safe-area 패딩을 합성할 수 있는 화면 액션 컨테이너입니다."
+      }
+    },
+    {
+      "slug": "skeleton",
+      "name": "Skeleton",
+      "since": "0.1.0",
+      "related": [
+        "Spinner",
+        "EmptyState",
+        "Surface"
+      ],
+      "en": {
+        "category": "Feedback",
+        "description": "A React Native Skeleton that takes per-screen width, height, and aspectRatio through style and uses theme radius tokens and the shared loading string."
+      },
+      "ko": {
+        "category": "피드백",
+        "description": "화면별 width, height, aspectRatio를 style로 조합하고 테마 라운드와 로딩 문구를 사용하는 React Native Skeleton입니다."
+      }
+    },
+    {
+      "slug": "empty-state",
+      "name": "EmptyState",
+      "since": "0.1.0",
+      "related": [
+        "ErrorState",
+        "Button",
+        "Skeleton"
+      ],
+      "en": {
+        "category": "Feedback",
+        "description": "An Expo and React Native state component that gives empty lists and first-run screens a title, description, icon, and a working action."
+      },
+      "ko": {
+        "category": "피드백",
+        "description": "빈 목록과 첫 사용 화면에 제목, 설명, 아이콘과 유효한 액션을 제공하는 Expo·React Native 상태 컴포넌트입니다."
+      }
+    },
+    {
+      "slug": "error-state",
+      "name": "ErrorState",
+      "since": "0.1.0",
+      "related": [
+        "EmptyState",
+        "Alert",
+        "Button"
+      ],
+      "en": {
+        "category": "Feedback",
+        "description": "A React Native error state component that renders a consistent error title, message, icon, and optional retry button."
+      },
+      "ko": {
+        "category": "피드백",
+        "description": "오류 제목, 안내 문구, 아이콘과 선택적 재시도 버튼을 일관되게 제공하는 React Native 오류 상태 컴포넌트입니다."
+      }
+    },
+    {
+      "slug": "toast",
+      "name": "Toast",
+      "since": "0.1.0",
+      "related": [
+        "Alert",
+        "Badge",
+        "ErrorState"
+      ],
+      "en": {
+        "category": "Feedback",
+        "description": "An Expo and React Native Toast that reports success, error, info, and warning outcomes using theme colors and Provider icons."
+      },
+      "ko": {
+        "category": "피드백",
+        "description": "success, error, info, warning 결과를 테마 색상과 Provider 아이콘으로 알리는 Expo·React Native Toast입니다."
+      }
+    },
+    {
+      "slug": "toast-viewport",
+      "name": "ToastViewport",
+      "since": "0.4.0",
+      "related": [
+        "Toast",
+        "Alert",
+        "Button"
+      ],
+      "en": {
+        "category": "Feedback",
+        "description": "An Expo and React Native ToastViewport that pairs with useToastQueue to provide FIFO ordering, maxVisible and maxQueued limits, dedupe, pause and resume, live regions, and action and close buttons."
+      },
+      "ko": {
+        "category": "피드백",
+        "description": "useToastQueue와 연결해 FIFO, maxVisible·maxQueued, dedupe, pause·resume, live region과 action·close를 제공하는 Expo·React Native ToastViewport입니다."
+      }
+    },
+    {
+      "slug": "badge",
+      "name": "Badge",
+      "since": "0.3.0",
+      "related": [
+        "Alert",
+        "Toast",
+        "ListItem"
+      ],
+      "en": {
+        "category": "Status",
+        "description": "An Expo and React Native Badge component offering neutral, info, success, warning, and error states in sm and md sizes."
+      },
+      "ko": {
+        "category": "상태",
+        "description": "neutral, info, success, warning, error 상태와 sm·md 크기를 제공하는 Expo·React Native Badge 컴포넌트입니다."
+      }
+    },
+    {
+      "slug": "alert",
+      "name": "Alert",
+      "since": "0.3.0",
+      "related": [
+        "Badge",
+        "Toast",
+        "ErrorState"
+      ],
+      "en": {
+        "category": "Status",
+        "description": "An Alert that combines title, body, action, and dismiss for info, success, warning, and error messages while keeping live region behavior explicit."
+      },
+      "ko": {
+        "category": "상태",
+        "description": "info, success, warning, error 안내에 제목·본문·액션·닫기를 조합하고 live region을 명시적으로 제어하는 Alert입니다."
+      }
+    },
+    {
+      "slug": "spinner",
+      "name": "Spinner",
+      "since": "0.3.0",
+      "related": [
+        "ProgressBar",
+        "Skeleton",
+        "Button"
+      ],
+      "en": {
+        "category": "Progress",
+        "description": "An Expo and React Native Spinner that uses theme icon sizes and color roles and supplies a default loading accessibility label."
+      },
+      "ko": {
+        "category": "진행",
+        "description": "테마 아이콘 크기와 color role을 사용하고 기본 로딩 접근성 라벨을 제공하는 Expo·React Native Spinner입니다."
+      }
+    },
+    {
+      "slug": "progress-bar",
+      "name": "ProgressBar",
+      "since": "0.3.0",
+      "related": [
+        "Spinner",
+        "Toast",
+        "Alert"
+      ],
+      "en": {
+        "category": "Progress",
+        "description": "A React Native ProgressBar supporting value and max based progress, unknown progress, reduced motion, and accessibility values."
+      },
+      "ko": {
+        "category": "진행",
+        "description": "value와 max 기반 진행률, 알 수 없는 진행 상태, 모션 감소와 접근성 값을 지원하는 React Native ProgressBar입니다."
+      }
+    },
+    {
+      "slug": "avatar",
+      "name": "Avatar",
+      "since": "0.3.0",
+      "related": [
+        "ListItem",
+        "Badge",
+        "Surface"
+      ],
+      "en": {
+        "category": "Display",
+        "description": "An Expo and React Native Avatar with profile images, Unicode-safe initials fallback, sm, md, and lg sizes, and an explicit decorative flag."
+      },
+      "ko": {
+        "category": "표시",
+        "description": "프로필 이미지, 유니코드 초성 폴백, sm·md·lg 크기와 명시적 장식 여부를 제공하는 Expo·React Native Avatar입니다."
+      }
+    },
+    {
+      "slug": "divider",
+      "name": "Divider",
+      "since": "0.3.0",
+      "related": [
+        "ListItem",
+        "Section",
+        "Surface"
+      ],
+      "en": {
+        "category": "Layout",
+        "description": "A Divider offering horizontal and vertical rules, theme colors, thickness, inset, and spacing, with the separator role exposed only when you opt in."
+      },
+      "ko": {
+        "category": "레이아웃",
+        "description": "가로·세로 선, 테마 색상, 두께, inset과 spacing을 제공하고 separator 의미를 선택적으로 노출하는 Divider입니다."
+      }
+    },
+    {
+      "slug": "list-item",
+      "name": "ListItem",
+      "since": "0.3.0",
+      "related": [
+        "Avatar",
+        "Badge",
+        "Divider"
+      ],
+      "en": {
+        "category": "Display",
+        "description": "A ListItem that composes title, description, leading, and trailing across three sizes, and splits the static and interactive contracts at the type level."
+      },
+      "ko": {
+        "category": "표시",
+        "description": "title, description, leading, trailing과 세 가지 크기를 조합하고 정적·인터랙티브 계약을 타입으로 나누는 ListItem입니다."
+      }
+    },
+    {
+      "slug": "data-table",
+      "name": "DataTable",
+      "since": "0.4.0",
+      "related": [
+        "ListItem",
+        "Checkbox",
+        "Skeleton"
+      ],
+      "en": {
+        "category": "Data",
+        "description": "An Expo and React Native DataTable with a real HTML table on web, a native list, controlled sorting and multi-selection, and explicit loading, error, and refreshing states."
+      },
+      "ko": {
+        "category": "데이터",
+        "description": "실제 HTML table, 네이티브 list, controlled 정렬·다중 선택과 명시적 로딩·오류·갱신 상태를 제공하는 Expo·React Native DataTable입니다."
+      }
+    },
+    {
+      "slug": "pagination",
+      "name": "Pagination",
+      "since": "0.4.0",
+      "related": [
+        "DataTable",
+        "ListItem",
+        "Button"
+      ],
+      "en": {
+        "category": "Navigation",
+        "description": "An Expo and React Native Pagination with 1-based numbered items and pages, opaque cursor navigation, semantic web navigation markup, and an adaptive native presentation."
+      },
+      "ko": {
+        "category": "탐색",
+        "description": "1-based numbered items·pages와 opaque cursor 탐색, semantic web navigation과 네이티브 adaptive 표현을 제공하는 Expo·React Native Pagination입니다."
+      }
+    },
+    {
+      "slug": "accordion",
+      "name": "Accordion",
+      "since": "0.3.0",
+      "related": [
+        "Tabs",
+        "Section",
+        "Divider"
+      ],
+      "en": {
+        "category": "Navigation",
+        "description": "An Expo and React Native Accordion with controlled single and multiple modes, header-to-panel ARIA relationships, and keyboard interaction."
+      },
+      "ko": {
+        "category": "탐색",
+        "description": "controlled single·multiple 모드와 헤더·패널 ARIA 관계, 키보드 상호작용을 제공하는 Expo·React Native Accordion입니다."
+      }
+    },
+    {
+      "slug": "dialog",
+      "name": "Dialog",
+      "since": "0.1.0",
+      "related": [
+        "DialogPanel",
+        "ConfirmActionRow",
+        "Alert"
+      ],
+      "en": {
+        "category": "Overlay",
+        "description": "A minimal Dialog component that supplies a React Native Modal and a dismissible backdrop while leaving panel, action, and keyboard policy to the app."
+      },
+      "ko": {
+        "category": "오버레이",
+        "description": "React Native Modal과 dismiss 가능한 백드롭을 제공하면서 패널·액션·키보드 정책을 앱에 맡기는 최소 Dialog 컴포넌트입니다."
+      }
+    },
+    {
+      "slug": "dialog-panel",
+      "name": "DialogPanel",
+      "since": "0.1.0",
+      "related": [
+        "Dialog",
+        "ConfirmActionRow",
+        "Surface"
+      ],
+      "en": {
+        "category": "Overlay",
+        "description": "A React Native dialog panel that arranges title, description, leading, children, and footer inside a surface capped at 550 wide."
+      },
+      "ko": {
+        "category": "오버레이",
+        "description": "최대 폭 550의 표면 안에 title, description, leading, children과 footer를 정렬하는 React Native 다이얼로그 패널입니다."
+      }
+    },
+    {
+      "slug": "action-sheet",
+      "name": "ActionSheet",
+      "since": "0.4.0",
+      "related": [
+        "Dialog",
+        "Button",
+        "StickyActionBar"
+      ],
+      "en": {
+        "category": "Overlay",
+        "description": "An Expo and React Native ActionSheet that presents at the bottom on mobile and centered on wide screens, with literal action values plus cancel, busy, and safe-area contracts."
+      },
+      "ko": {
+        "category": "오버레이",
+        "description": "모바일에서는 하단, 넓은 화면에서는 중앙에 표시하고 리터럴 액션 값·취소·busy·safe-area 계약을 제공하는 Expo·React Native ActionSheet입니다."
+      }
+    },
+    {
+      "slug": "sheet",
+      "name": "Sheet",
+      "since": "0.4.0",
+      "related": [
+        "Dialog",
+        "ActionSheet",
+        "StickyActionBar"
+      ],
+      "en": {
+        "category": "Overlay",
+        "description": "An Expo and React Native Sheet that presents rich body content, a pinned header and footer, and explicit scroll ownership as a bottom sheet on mobile and a logical side panel on wide screens."
+      },
+      "ko": {
+        "category": "오버레이",
+        "description": "rich body와 고정 header·footer, 명시적 스크롤 소유권을 모바일 bottom·넓은 화면 logical side panel로 제공하는 Expo·React Native Sheet입니다."
+      }
+    },
+    {
+      "slug": "popover",
+      "name": "Popover",
+      "since": "0.4.0",
+      "related": [
+        "Tooltip",
+        "Menu",
+        "Dialog"
+      ],
+      "en": {
+        "category": "Overlay",
+        "description": "An Expo and React Native Popover with controlled open state, a component-owned trigger, title, and close control, and web non-modal plus native adaptive presentation."
+      },
+      "ko": {
+        "category": "오버레이",
+        "description": "controlled open 상태, 컴포넌트가 소유하는 trigger·title·close와 웹 non-modal·네이티브 adaptive 표현을 제공하는 Expo·React Native Popover입니다."
+      }
+    },
+    {
+      "slug": "tooltip",
+      "name": "Tooltip",
+      "since": "0.4.0",
+      "related": [
+        "IconButton",
+        "Popover",
+        "Button"
+      ],
+      "en": {
+        "category": "Overlay",
+        "description": "An Expo and React Native Tooltip that owns its 44px icon action and delivers a short supporting description as a visual tooltip on web and as accessibilityHint on native."
+      },
+      "ko": {
+        "category": "오버레이",
+        "description": "44px 아이콘 액션을 직접 소유하고 웹 시각 tooltip·네이티브 accessibilityHint로 짧은 보조 설명을 전달하는 Expo·React Native Tooltip입니다."
+      }
+    },
+    {
+      "slug": "menu",
+      "name": "Menu",
+      "since": "0.4.0",
+      "related": [
+        "Select",
+        "ActionSheet",
+        "Dialog"
+      ],
+      "en": {
+        "category": "Overlay",
+        "description": "An Expo and React Native Menu that pairs web menuitem keyboard navigation with a native adaptive action surface under the same literal value contract."
+      },
+      "ko": {
+        "category": "오버레이",
+        "description": "웹 menuitem 키보드 탐색과 네이티브 adaptive action surface를 같은 리터럴 값 계약으로 제공하는 Expo·React Native Menu입니다."
+      }
+    },
+    {
+      "slug": "confirm-action-row",
+      "name": "ConfirmActionRow",
+      "since": "0.1.0",
+      "related": [
+        "Dialog",
+        "DialogPanel",
+        "Button"
+      ],
+      "en": {
+        "category": "Actions",
+        "description": "An Expo and React Native confirmation action row with cancel and confirm buttons, a destructive variant, and mutually exclusive loading on both sides."
+      },
+      "ko": {
+        "category": "액션",
+        "description": "취소·확인 버튼, destructive 변형과 양쪽 로딩 상호 배제를 제공하는 Expo·React Native 확인 액션 행입니다."
+      }
+    }
+  ],
+  "guides": [
+    {
+      "slug": "getting-started",
+      "en": {
+        "title": "Getting Started with Expo and React Native UI",
+        "description": "The minimum setup needed to go from installing @gj-kit/expo-ui to creating a theme, mounting UiProvider, and rendering your first Button."
+      },
+      "ko": {
+        "title": "Expo·React Native UI 시작하기",
+        "description": "@gj-kit/expo-ui 설치부터 테마 생성, UiProvider 연결, 첫 Button 렌더링까지 필요한 최소 설정을 안내합니다."
+      }
+    },
+    {
+      "slug": "theming",
+      "en": {
+        "title": "Expo and React Native Theming and Design Tokens",
+        "description": "How to extend the 31 color roles along with spacing, radius, typography, elevation, metrics, and breakpoints safely through createThemes."
+      },
+      "ko": {
+        "title": "Expo·React Native 테마와 디자인 토큰",
+        "description": "31개 color role과 spacing, radius, typography, elevation, metrics, breakpoints를 createThemes로 안전하게 확장하는 방법입니다."
+      }
+    },
+    {
+      "slug": "accessibility",
+      "en": {
+        "title": "Accessible React Native Components",
+        "description": "How GJ Kit components handle icon button labels, form control state, live regions, keyboard interaction, and reduced motion."
+      },
+      "ko": {
+        "title": "React Native 접근성 컴포넌트",
+        "description": "아이콘 버튼 라벨, form control 상태, live region, 키보드 조작과 모션 감소를 GJ Kit 컴포넌트에서 적용하는 방법입니다."
+      }
+    },
+    {
+      "slug": "tailwind",
+      "en": {
+        "title": "React Native Tailwind and NativeWind Integration",
+        "description": "How to generate token-based utilities with createTailwindPreset and the tailwind subpath, which never imports react-native."
+      },
+      "ko": {
+        "title": "React Native Tailwind·NativeWind 연동",
+        "description": "react-native를 불러오지 않는 tailwind 서브패스와 createTailwindPreset으로 토큰 기반 유틸리티를 만드는 방법입니다."
+      }
+    },
+    {
+      "slug": "insets-keyboard",
+      "en": {
+        "title": "Expo Safe Area and Keyboard Insets",
+        "description": "How to compose bottom spacing on Expo screens with useBottomInset, useBottomSheetPadding, useModalKeyboardOverlap, and pure calculation functions."
+      },
+      "ko": {
+        "title": "Expo Safe Area와 키보드 Insets",
+        "description": "useBottomInset, useBottomSheetPadding, useModalKeyboardOverlap과 순수 계산 함수로 Expo 화면의 하단 여백을 합성하는 방법입니다."
+      }
+    },
+    {
+      "slug": "type-safety",
+      "en": {
+        "title": "Type-safe React Native Component APIs",
+        "description": "The principles behind turning UI misuse into compile errors in GJ Kit: branded themes, discriminated unions, NoInfer, and never props."
+      },
+      "ko": {
+        "title": "타입 안전 React Native 컴포넌트 API",
+        "description": "브랜드 테마, 판별 유니언, NoInfer와 never prop으로 GJ Kit가 UI 오용을 컴파일 오류로 바꾸는 원칙을 설명합니다."
+      }
+    }
+  ]
+}

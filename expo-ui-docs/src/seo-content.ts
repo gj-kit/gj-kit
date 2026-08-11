@@ -1,15 +1,16 @@
-import catalogJson from './seo-catalog.json';
+import catalogJson from './seo-catalog-index.json';
 import type { Locale } from './locale';
 
-/** 로케일마다 달라지는 컴포넌트 본문. */
+/**
+ * 목록·검색·네비게이션에 필요한 가벼운 부분만 여기 있다. 상세 본문(headline,
+ * summary, features, accessibility, snippet)은 seo-component-detail.ts에,
+ * 가이드 본문은 seo-guide-detail.ts에 있고 각각 그 라우트에서만 import한다.
+ * 손으로 쓰는 정본은 여전히 seo-catalog.json 하나이며, generate-seo.mjs가
+ * 여기서 쓰는 세 파일을 파생시킨다.
+ */
 export type ComponentSeoText = {
   readonly category: string;
-  readonly headline: string;
   readonly description: string;
-  readonly summary: string;
-  readonly features: readonly string[];
-  readonly accessibility: string;
-  readonly snippet: string;
 };
 
 export type ComponentSeoEntry = {
@@ -21,24 +22,13 @@ export type ComponentSeoEntry = {
   readonly en: ComponentSeoText;
 };
 
-export type GuideSection = {
-  readonly title: string;
-  readonly body: string;
-  readonly bullets?: readonly string[] | undefined;
-  readonly code?: string | undefined;
-};
-
 export type GuideSeoText = {
   readonly title: string;
-  readonly headline: string;
   readonly description: string;
-  readonly summary: string;
-  readonly sections: readonly GuideSection[];
 };
 
 export type GuideSeoEntry = {
   readonly slug: string;
-  readonly relatedComponents: readonly string[];
   readonly ko: GuideSeoText;
   readonly en: GuideSeoText;
 };

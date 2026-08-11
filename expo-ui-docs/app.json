@@ -13,7 +13,12 @@
       "output": "static"
     },
     "extra": {
-      "router": {},
+      "router": {
+        "asyncRoutes": {
+          "web": true,
+          "default": false
+        }
+      },
       "eas": {
         "projectId": "1a83427e-f59d-4e98-9390-6a659ce217d5"
       }

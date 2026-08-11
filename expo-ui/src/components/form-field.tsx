@@ -1,9 +1,10 @@
 /**
- * FormField — 보이는 필드 설명과 임의의 제어를 접근성 ID 계약으로 연결한다.
+ * FormField — connects a visible field description to an arbitrary control through
+ * an accessibility ID contract.
  *
- * 자식을 clone하지 않고 render prop으로 필요한 제어 prop을 넘긴다. 따라서
- * TextInput뿐 아니라 앱이 소유한 선택기·복합 제어도 prop의 적용 위치를 직접
- * 결정할 수 있다.
+ * It passes the control props through a render prop instead of cloning the child,
+ * so a TextInput — or an app-owned picker or composite control — decides for
+ * itself where each prop lands.
  */
 import { useId } from 'react';
 import type { ReactElement, ReactNode } from 'react';
@@ -15,9 +16,9 @@ import { useTheme } from './provider';
 import { roleTextStyle } from './text';
 
 /**
- * FormField의 render prop이 제어에 전달하는 접근성 연결 정보.
- * `aria-*`는 RNW에서만 런타임 객체에 포함되며, DOM 타입을 src에 들이지 않기
- * 위해 이 좁은 공개 타입으로만 표현한다.
+ * The accessibility wiring a FormField render prop hands to its control.
+ * `aria-*` only appears on the runtime object under RNW; this narrow public type
+ * expresses it without bringing DOM types into src.
  */
 export interface FormFieldControlProps {
   nativeID: string;
@@ -35,7 +36,7 @@ type FormFieldBaseProps = {
   label: string;
   children: (controlProps: FormFieldControlProps) => ReactElement;
   helperText?: string | undefined;
-  /** 지정 시 helperText보다 우선하며 polite live region으로 알린다. */
+  /** When set, it takes precedence over helperText and is announced through a polite live region. */
   error?: string | undefined;
   labelAccessory?: ReactNode | undefined;
   style?: StyleProp<ViewStyle> | undefined;
@@ -55,7 +56,7 @@ type OptionalFormFieldProps = {
 
 type RequiredFormFieldProps = {
   required: true;
-  /** iOS VoiceOver에도 필수 상태가 포함되도록 한 현지화된 전체 제어 이름. */
+  /** A localized, complete control name so that iOS VoiceOver also announces the required state. */
   requiredAccessibilityLabel: string;
 };
 

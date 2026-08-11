@@ -1,9 +1,10 @@
 /**
- * 루트 엔트리의 플랫폼 공용 공개 표면 — 앱 코드의 단일 import 지점.
+ * The platform-shared public surface of the root entry — the single import point
+ * for app code.
  *
- * 공개 표면은 설계 문서 §3~§5의 시그니처가 전부다. brand.ts와 (내부) 헬퍼
- * (internal.ts, useIcons, roleTextStyle, buttonPalette, renderIconSlot,
- * resetActiveThemeForTest)는 재export하지 않는다.
+ * The public surface is exactly the signatures in design doc §3–§5. brand.ts and
+ * the (internal) helpers (internal.ts, useIcons, roleTextStyle, buttonPalette,
+ * renderIconSlot, resetActiveThemeForTest) are not re-exported.
  */
 
 // ─── 테마 ("./theme" 전체 재export — 단, 앱 테마 모듈은 './theme' 직접 import 권장 §3.7) ───

@@ -1,6 +1,7 @@
 /**
- * Accordion — 단일/복수 펼침 상태를 타입으로 분리한 controlled disclosure.
- * 헤더·패널 연결과 펼침 상태를 네이티브 접근성 및 웹 ARIA 양쪽에 노출한다.
+ * Accordion — a controlled disclosure whose single and multiple expansion states
+ * are separated by type. Exposes the header/panel relationship and the expanded
+ * state to both native accessibility and web ARIA.
  */
 import { createElement, useId } from 'react';
 import type { ReactElement, ReactNode } from 'react';
@@ -29,7 +30,7 @@ type AccordionBaseProps<T extends string> = {
   items: readonly AccordionItem<T>[];
   disabled?: boolean | undefined;
   renderIndicator?: ((props: AccordionIndicatorRenderProps) => ReactNode) | undefined;
-  /** 웹 heading level. 기본 3. */
+  /** Web heading level. Defaults to 3. */
   headingLevel?: 1 | 2 | 3 | 4 | 5 | 6 | undefined;
   style?: StyleProp<ViewStyle> | undefined;
   itemStyle?: StyleProp<ViewStyle> | undefined;
@@ -46,7 +47,7 @@ export type AccordionProps<T extends string> = AccordionBaseProps<T> &
         type?: 'single' | undefined;
         value: NoInfer<T> | null;
         onValueChange: (value: T | null) => void;
-        /** false면 열린 마지막 항목을 닫을 수 없다. 기본 true. */
+        /** When false, the last open item cannot be closed. Defaults to true. */
         collapsible?: boolean | undefined;
       }
     | {

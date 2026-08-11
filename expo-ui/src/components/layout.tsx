@@ -1,8 +1,8 @@
 /**
- * Surface / ContentFrame / Section / StickyActionBar — 설계 문서 §5.8.
+ * Surface / ContentFrame / Section / StickyActionBar — design doc §5.8.
  *
- * boolean 스위치(padded/elevated)를 토큰 키 prop으로 교체 — padding/elevation
- * 값이 실제로 토큰에서 온다는 것을 API가 증명한다.
+ * Boolean switches (padded/elevated) were replaced by token-key props, so the API
+ * itself proves the padding and elevation values really come from tokens.
  */
 import type { ReactElement, ReactNode } from 'react';
 import { Platform, Text as RNText, View } from 'react-native';
@@ -15,13 +15,13 @@ import { roleTextStyle } from './text';
 
 export interface SurfaceProps extends Omit<CommonProps, 'unstyled'> {
   children?: ReactNode | undefined;
-  /** 기본 'lg'. 숫자는 Figma 실측 탈출구. */
+  /** Defaults to 'lg'. Numbers are the escape hatch for Figma measurements. */
   padding?: SpacingKey | number | undefined;
-  /** 기본 'sm'. */
+  /** Defaults to 'sm'. */
   radius?: RadiusKey | undefined;
-  /** 기본 'none'. */
+  /** Defaults to 'none'. */
   elevation?: ElevationKey | undefined;
-  /** 기본 true. */
+  /** Defaults to true. */
   bordered?: boolean | undefined;
   unstyled?: never;
 }
@@ -60,9 +60,9 @@ export function Surface({
 
 export interface ContentFrameProps extends Omit<CommonProps, 'unstyled'> {
   children?: ReactNode | undefined;
-  /** 기본 1040 — 전신 계승. */
+  /** Defaults to 1040 — inherited from the predecessor. */
   maxWidth?: number | undefined;
-  /** 기본 'xl'. */
+  /** Defaults to 'xl'. */
   padding?: SpacingKey | number | undefined;
   topPadding?: SpacingKey | number | undefined;
   bottomPadding?: SpacingKey | number | undefined;
@@ -76,7 +76,7 @@ const getFrameStyles = themedStyles((_theme: Theme) => ({
   frame: { alignSelf: 'stretch' as const, width: '100%' as const },
 }));
 
-/** 내비게이션 무관 콘텐츠 폭 제한 프레임 — 셸(ScreenShell 등)이 조합한다. */
+/** A navigation-agnostic content width frame — a shell such as ScreenShell composes it. */
 export function ContentFrame({
   children,
   maxWidth = CONTENT_FRAME_DEFAULT_MAX_WIDTH,
@@ -119,7 +119,7 @@ export interface SectionProps extends Omit<CommonProps, 'unstyled'> {
   /** typography.caption + textMuted. */
   subtitle?: string | undefined;
   actions?: ReactNode | undefined;
-  /** 기본 'md'. */
+  /** Defaults to 'md'. */
   gap?: SpacingKey | number | undefined;
   unstyled?: never;
 }
@@ -190,8 +190,9 @@ export function Section({
 export interface StickyActionBarProps extends Omit<CommonProps, 'unstyled'> {
   children?: ReactNode | undefined;
   /**
-   * './insets'의 useBottomInset() 반환값을 꽂는 자리. 라이브러리가 직접 재지
-   * 않는 이유: safe-area peer를 "."에 끌어들이지 않기 위해(§7). 기본 0.
+   * Where the return value of useBottomInset() from './insets' goes. The library
+   * does not measure it directly so the safe-area peer is never pulled into "."
+   * (§7). Defaults to 0.
    */
   bottomInset?: number | undefined;
   unstyled?: never;
@@ -205,7 +206,7 @@ const getBarStyles = themedStyles((theme: Theme) => ({
   },
 }));
 
-/** 키보드 회피는 호스트 소유 — 이 컴포넌트는 시각·웹 sticky·inset 패딩만 제공한다. */
+/** Keyboard avoidance belongs to the host — this component only provides the visuals, web sticky behavior, and inset padding. */
 export function StickyActionBar({
   children,
   bottomInset = 0,

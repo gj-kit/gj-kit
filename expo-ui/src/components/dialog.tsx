@@ -51,7 +51,7 @@ import { roleTextStyle } from './text';
 import { Button, IconButton } from './button';
 import type { ButtonVariant } from './button';
 
-/** 기존 DialogPanel 시각 계약. ActionSheet도 모바일에서는 이 폭 안에서 100%를 쓴다. */
+/** The existing DialogPanel visual contract. ActionSheet also uses 100% within this width on mobile. */
 const DIALOG_MAX_WIDTH = 550;
 const EMPTY_OVERLAY_STACK_SNAPSHOT: OverlayStackSnapshot = Object.freeze({
   entries: Object.freeze([]),
@@ -98,9 +98,9 @@ export interface DialogPanelProps extends Omit<CommonProps, 'unstyled'> {
   leading?: ReactNode | undefined;
   footer?: ReactNode | undefined;
   titleStyle?: StyleProp<TextStyle> | undefined;
-  /** Dialog 안에서는 기본 true. 독립 사용 시 닫기 동작이 없으므로 렌더하지 않는다. */
+  /** Defaults to true inside a Dialog. Standalone there is no dismiss behavior, so it is not rendered. */
   showCloseButton?: boolean | undefined;
-  /** 기본 strings.close. */
+  /** Defaults to strings.close. */
   closeAccessibilityLabel?: string | undefined;
   closeButtonTestID?: string | undefined;
   unstyled?: never;
@@ -149,7 +149,7 @@ const getStyles = themedStyles((theme: Theme) => ({
   actionButton: { flex: 1 },
 }));
 
-/** icons.close가 없어도 닫기 어포던스가 사라지지 않는 텍스트 폴백. */
+/** The text fallback that keeps the dismiss affordance from disappearing when icons.close is absent. */
 function closeGlyph(iconProps: IconRenderProps): ReactElement {
   return (
     <RNText
@@ -171,7 +171,7 @@ function assertOptionalNonEmptyString(value: string | undefined, label: string):
   if (value !== undefined) assertNonEmptyString(value, label);
 }
 
-/** Modal 내부의 시각적 패널. Dialog context가 있을 때만 닫기 버튼을 만든다. */
+/** The visual panel inside a Modal. It only creates a close button when a Dialog context exists. */
 export function DialogPanel({
   children,
   title,
@@ -270,20 +270,20 @@ interface DialogBaseProps {
   visible: boolean;
   /** A no-argument legacy handler remains assignable to this details callback. */
   onDismiss: (details: DialogDismissDetails) => void;
-  /** 기본 true. */
+  /** Defaults to true. */
   dismissOnBackdrop?: boolean | undefined;
-  /** 백드롭, Escape/Back, 접근성 escape, 패널 닫기 버튼을 모두 차단한다. */
+  /** Blocks the backdrop, Escape/Back, the accessibility escape, and the panel's close button alike. */
   dismissDisabled?: boolean | undefined;
-  /** 기존 기본값 'fade'. */
+  /** The existing default of 'fade'. */
   animationType?: NonNullable<ModalProps['animationType']> | undefined;
-  /** 지정했을 때만 onShow 후 best-effort focus. RNW의 기본 focus trap은 그대로 둔다. */
+  /** Best-effort focus after onShow, only when specified. RNW's own focus trap is left alone. */
   initialFocusRef?: DialogFocusRef | undefined;
-  /** 실제 modal exit 완료 후 best-effort focus. RNW의 기본 복원과 경쟁하지 않는다. */
+  /** Best-effort focus after the modal exit actually completes. It does not race RNW's own restoration. */
   finalFocusRef?: DialogFocusRef | undefined;
   overlayId?: string | undefined;
   overlayStyle?: StyleProp<ViewStyle> | undefined;
   contentStyle?: StyleProp<ViewStyle> | undefined;
-  /** inline presentation의 외곽 레이아웃 전용. contentStyle은 두 presentation에서 동일하다. */
+  /** The outer layout of the inline presentation only. contentStyle is identical across both presentations. */
   inlineStyle?: StyleProp<ViewStyle> | undefined;
   testID?: string | undefined;
   unstyled?: never;
@@ -311,7 +311,7 @@ type ArbitraryModalDialogProps = {
 };
 
 type ArbitraryInlineDialogProps = {
-  /** 레이아웃 합성 전용. portal, backdrop, dialog role, trap, Escape/Back 의미가 없다. */
+  /** Layout composition only. It carries no portal, backdrop, dialog role, trap, or Escape/Back semantics. */
   presentation: 'inline';
   children: NonNullable<ReactNode>;
   accessibilityLabel?: never;
@@ -682,16 +682,16 @@ export function Dialog({
 export interface ConfirmActionRowProps extends Omit<CommonProps, 'unstyled'> {
   onCancel: () => void;
   onConfirm: () => void;
-  /** 기본 strings.cancel. */
+  /** Defaults to strings.cancel. */
   cancelLabel?: string | undefined;
-  /** 기본 strings.confirm. */
+  /** Defaults to strings.confirm. */
   confirmLabel?: string | undefined;
-  /** 기본 'secondary'. */
+  /** Defaults to 'secondary'. */
   cancelVariant?: ButtonVariant | undefined;
-  /** 기본 'primary'. destructive가 true면 'destructive'. */
+  /** Defaults to 'primary', or to 'destructive' when destructive is true. */
   confirmVariant?: ButtonVariant | undefined;
   destructive?: boolean | undefined;
-  /** confirm 로딩 — cancel 자동 disabled. */
+  /** Confirm is loading — cancel is disabled automatically. */
   loading?: boolean | undefined;
   cancelLoading?: boolean | undefined;
   unstyled?: never;

@@ -1,8 +1,8 @@
 /**
- * SelectionIndicator / SelectableRow / SelectAllRow — 설계 문서 §5.7.
+ * SelectionIndicator / SelectableRow / SelectAllRow — design doc §5.7.
  *
- * SelectionSize 리터럴 유니언 유지 — 호스트의 사이즈→클래스 맵이 총망라됨을
- * 타입이 보장한다(§0 기각: C의 유니언 폐지).
+ * The SelectionSize literal union stays — the type guarantees a host's
+ * size-to-class map is exhaustive (§0 rejected: dropping the union in C).
  */
 import type { ReactElement, ReactNode } from 'react';
 import { Pressable, Text as RNText, View } from 'react-native';
@@ -17,7 +17,7 @@ import { useIcons, useStrings, useTheme } from './provider';
 export type SelectionSize = 16 | 18 | 20 | 24;
 
 const SELECTION_DEFAULT_SIZE: SelectionSize = 24;
-/** 마크 크기 비율·최소값 — 전신 실측 보존. */
+/** The mark size ratio and minimum — the predecessor's measured values, preserved. */
 const SELECTION_MARK_RATIO = 0.58;
 const SELECTION_MARK_MIN = 10;
 
@@ -25,7 +25,7 @@ export interface SelectionIndicatorProps extends Omit<CommonProps, 'unstyled'> {
   selected: boolean;
   showUncheckedMark?: boolean | undefined;
   size?: SelectionSize | undefined;
-  /** 기본 icons.check → ✓ 텍스트 글리프 폴백(§4.2). */
+  /** Defaults to icons.check, falling back to a ✓ text glyph (§4.2). */
   renderMark?: RenderIcon | undefined;
   unstyled?: never;
 }
@@ -148,12 +148,12 @@ export interface SelectAllRowProps extends Omit<CommonProps, 'unstyled'> {
   selected: boolean;
   onPress: () => void;
   disabled?: boolean | undefined;
-  /** 구 showUncheckedCheck 정리(§5.7). */
+  /** Cleans up the former showUncheckedCheck (§5.7). */
   showUncheckedMark?: boolean | undefined;
   checkSize?: SelectionSize | undefined;
-  /** 기본 strings.selectAll(§4.1). */
+  /** Defaults to strings.selectAll (§4.1). */
   selectLabel?: string | undefined;
-  /** 기본 strings.deselectAll. */
+  /** Defaults to strings.deselectAll. */
   deselectLabel?: string | undefined;
   renderMark?: RenderIcon | undefined;
   labelStyle?: StyleProp<TextStyle> | undefined;

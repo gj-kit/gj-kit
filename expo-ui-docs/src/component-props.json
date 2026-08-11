@@ -11,13 +11,13 @@
         "name": "color",
         "type": "keyof ThemeColors",
         "required": false,
-        "description": "닫힌 유니언 — 오타는 컴파일 에러, raw 색은 style 탈출구로(§0). 기본 'text'."
+        "description": "A closed union — typos are compile errors and raw colors go through the style escape hatch (§0). Defaults to 'text'."
       },
       {
         "name": "role",
         "type": "TextRole",
         "required": false,
-        "description": "기본 'body' — fontSize/lineHeight/fontWeight/fontFamily 전부 토큰이 결정."
+        "description": "Defaults to 'body' — fontSize, lineHeight, fontWeight, and fontFamily are all decided by tokens."
       },
       {
         "name": "style",
@@ -44,7 +44,7 @@
         "name": "className",
         "type": "string",
         "required": false,
-        "description": "해석 없이 네이티브 요소에 전달 — NativeWind는 호스트 관심사(§5)."
+        "description": "Passed to the native element without interpretation — NativeWind is a host concern (§5)."
       },
       {
         "name": "disabled",
@@ -55,13 +55,13 @@
         "name": "icon",
         "type": "ReactNode | RenderIcon",
         "required": false,
-        "description": "정적 노드 또는 렌더 함수 — 전신 icon/renderIcon/iconColor 3종 통합(§5.2)."
+        "description": "A static node or a render function — unifies the predecessor's icon, renderIcon, and iconColor trio (§5.2)."
       },
       {
         "name": "iconSize",
         "type": "number",
         "required": false,
-        "description": "기본 metrics.icon.md."
+        "description": "Defaults to metrics.icon.md."
       },
       {
         "name": "label",
@@ -88,7 +88,7 @@
         "name": "maxFontSizeMultiplier",
         "type": "number",
         "required": false,
-        "description": "고정 높이 버튼의 라벨 클리핑 방지. 기본 metrics.maxFontScale."
+        "description": "Prevents label clipping in a fixed-height button. Defaults to metrics.maxFontScale."
       },
       {
         "name": "onPress",
@@ -124,7 +124,7 @@
         "name": "accessibilityLabel",
         "type": "string",
         "required": true,
-        "description": "필수 — 아이콘 단독 버튼의 스크린리더 공백 방지(§6 ②)."
+        "description": "Required — prevents a screen reader blank on an icon-only button (§6 ②)."
       },
       {
         "name": "icon",
@@ -155,7 +155,7 @@
         "name": "size",
         "type": "number",
         "required": false,
-        "description": "지름. 기본 40 — 마크 크기는 자동 산출(size × 0.48)."
+        "description": "The diameter. Defaults to 40 — the mark size is derived automatically (size × 0.48)."
       },
       {
         "name": "style",
@@ -191,7 +191,7 @@
         "name": "className",
         "type": "string",
         "required": false,
-        "description": "해석 없이 네이티브 요소에 전달 — NativeWind는 호스트 관심사(§5)."
+        "description": "Passed to the native element without interpretation — NativeWind is a host concern (§5)."
       },
       {
         "name": "disabled",
@@ -212,7 +212,7 @@
         "name": "leading",
         "type": "ReactNode | RenderIcon",
         "required": false,
-        "description": "장식 아이콘. filter가 선택됐고 leading이 없으면 Provider check 아이콘을 쓴다."
+        "description": "A decorative icon. A selected filter with no leading uses the Provider's check icon."
       },
       {
         "name": "onPress",
@@ -236,7 +236,7 @@
         "name": "removeAccessibilityLabel",
         "type": "string",
         "required": false,
-        "description": "제거 버튼은 보이는 값 라벨과 다른 동작이므로 별도 접근성 이름이 필수다.",
+        "description": "The remove button does something different from the visible value label, so a separate accessible name is required.",
         "conditional": true
       },
       {
@@ -249,7 +249,7 @@
         "name": "size",
         "type": "ChipSize",
         "required": false,
-        "description": "기본 'md'."
+        "description": "Defaults to 'md'."
       },
       {
         "name": "style",
@@ -265,7 +265,7 @@
         "name": "variant",
         "type": "ChipVariant",
         "required": false,
-        "description": "기본 'filled'."
+        "description": "Defaults to 'filled'."
       }
     ]
   },
@@ -281,13 +281,13 @@
         "name": "accessibilityLabel",
         "type": "string",
         "required": false,
-        "description": "아이콘만 보일 때 동작 이름은 필수다."
+        "description": "When only an icon is visible, the action name is required."
       },
       {
         "name": "bottomInset",
         "type": "number",
         "required": false,
-        "description": "safe-area 훅 결과를 전달한다. 기본 0."
+        "description": "Pass the result of a safe-area hook. Defaults to 0."
       },
       {
         "name": "className",
@@ -329,19 +329,19 @@
         "name": "offset",
         "type": "number | keyof ThemeSpacing",
         "required": false,
-        "description": "화면 가장자리 여백. 기본 'xl'."
+        "description": "The margin from the screen edge. Defaults to 'xl'."
       },
       {
         "name": "placement",
         "type": "FABPlacement",
         "required": false,
-        "description": "RTL을 따르는 논리 배치. 기본 'bottom-end'."
+        "description": "Logical placement that follows RTL. Defaults to 'bottom-end'."
       },
       {
         "name": "size",
         "type": "FABSize",
         "required": false,
-        "description": "기본 'md'."
+        "description": "Defaults to 'md'."
       },
       {
         "name": "style",
@@ -357,7 +357,7 @@
         "name": "variant",
         "type": "FABVariant",
         "required": false,
-        "description": "기본 'primary'."
+        "description": "Defaults to 'primary'."
       }
     ]
   },
@@ -368,7 +368,7 @@
         "name": "aria-describedby",
         "type": "string",
         "required": false,
-        "description": "React Native core 타입에 아직 없는 RNW 필드 관계를 좁게 지원한다."
+        "description": "Narrowly supports the RNW field relationships that the React Native core types do not have yet."
       },
       {
         "name": "aria-errormessage",
@@ -414,7 +414,7 @@
         "name": "error",
         "type": "string",
         "required": false,
-        "description": "지정 시 보더/헬퍼가 danger 계열 — helperText보다 우선(§6 기각 표: 상호배제 강제 안 함)."
+        "description": "When set, the border and helper turn danger-toned and it takes precedence over helperText (§6 rejection table: mutual exclusion is not enforced)."
       },
       {
         "name": "helperClassName",
@@ -492,19 +492,19 @@
         "name": "leading",
         "type": "ReactNode",
         "required": false,
-        "description": "기본 icons.search 렌더(§4.2)."
+        "description": "Renders icons.search by default (§4.2)."
       },
       {
         "name": "placeholder",
         "type": "string",
         "required": false,
-        "description": "기본 strings.searchPlaceholder(§4.1)."
+        "description": "Defaults to strings.searchPlaceholder (§4.1)."
       },
       {
         "name": "style",
         "type": "StyleProp<ViewStyle>",
         "required": false,
-        "description": "컨테이너(pill)."
+        "description": "The container (pill)."
       },
       {
         "name": "testID",
@@ -536,7 +536,7 @@
         "name": "error",
         "type": "string",
         "required": false,
-        "description": "지정 시 helperText보다 우선하며 polite live region으로 알린다."
+        "description": "When set, it takes precedence over helperText and is announced through a polite live region."
       },
       {
         "name": "helperClassName",
@@ -577,7 +577,7 @@
         "name": "requiredAccessibilityLabel",
         "type": "string",
         "required": false,
-        "description": "iOS VoiceOver에도 필수 상태가 포함되도록 한 현지화된 전체 제어 이름.",
+        "description": "A localized, complete control name so that iOS VoiceOver also announces the required state.",
         "conditional": true
       },
       {
@@ -619,7 +619,7 @@
         "name": "placeholder",
         "type": "string",
         "required": true,
-        "description": "value가 null일 때 trigger에 표시한다."
+        "description": "Shown on the trigger when value is null."
       },
       {
         "name": "value",
@@ -640,7 +640,7 @@
         "name": "bottomInset",
         "type": "number",
         "required": false,
-        "description": "native bottom presentation에서 호출자가 합성한 safe-area inset."
+        "description": "Safe-area inset composed by the caller for a native bottom presentation."
       },
       {
         "name": "busy",
@@ -651,7 +651,7 @@
         "name": "className",
         "type": "string",
         "required": false,
-        "description": "해석 없이 네이티브 요소에 전달 — NativeWind는 호스트 관심사(§5)."
+        "description": "Passed to the native element without interpretation — NativeWind is a host concern (§5)."
       },
       {
         "name": "collisionPadding",
@@ -727,7 +727,7 @@
         "name": "keyboardOverlap",
         "type": "number",
         "required": false,
-        "description": "native Modal 안에서 계산한 키보드 가림 높이. 0보다 크면 bottomInset보다 우선한다."
+        "description": "Keyboard occlusion height measured inside a native Modal. Takes precedence over bottomInset when greater than 0."
       },
       {
         "name": "label",
@@ -814,7 +814,7 @@
         "name": "accessibilityLabel",
         "type": "string",
         "required": true,
-        "description": "tablist의 접근성 이름."
+        "description": "The accessible name of the tablist."
       },
       {
         "name": "items",
@@ -830,7 +830,7 @@
         "name": "panels",
         "type": "Readonly<Record<NoInfer<T>, NonNullable<ReactNode>>>",
         "required": true,
-        "description": "value마다 대응하는 panel. 키 누락·오타는 타입 오류다."
+        "description": "The panel matching each value. A missing key or a typo is a type error."
       },
       {
         "name": "value",
@@ -851,7 +851,7 @@
         "name": "panelMountStrategy",
         "type": "'keep-mounted' | 'active-only'",
         "required": false,
-        "description": "기본 keep-mounted."
+        "description": "Defaults to keep-mounted."
       },
       {
         "name": "panelStyle",
@@ -872,7 +872,7 @@
         "name": "variant",
         "type": "'segmented' | 'underline'",
         "required": false,
-        "description": "기본 'segmented'."
+        "description": "Defaults to 'segmented'."
       }
     ]
   },
@@ -904,7 +904,7 @@
         "name": "onOpenError",
         "type": "(error: unknown) => void",
         "required": false,
-        "description": "네이티브에서 Linking.openURL이 실패했을 때 호출한다."
+        "description": "Called when Linking.openURL fails on native."
       },
       {
         "name": "onPress",
@@ -936,13 +936,13 @@
         "name": "underline",
         "type": "boolean",
         "required": false,
-        "description": "기본 true."
+        "description": "Defaults to true."
       },
       {
         "name": "variant",
         "type": "LinkVariant",
         "required": false,
-        "description": "기본 'primary'."
+        "description": "Defaults to 'primary'."
       }
     ]
   },
@@ -978,7 +978,7 @@
         "name": "className",
         "type": "string",
         "required": false,
-        "description": "해석 없이 네이티브 요소에 전달 — NativeWind는 호스트 관심사(§5)."
+        "description": "Passed to the native element without interpretation — NativeWind is a host concern (§5)."
       },
       {
         "name": "contentStyle",
@@ -994,7 +994,7 @@
         "name": "headingLevel",
         "type": "1 | 2 | 3 | 4 | 5 | 6",
         "required": false,
-        "description": "웹 heading level. 기본 3."
+        "description": "Web heading level. Defaults to 3."
       },
       {
         "name": "style",
@@ -1030,13 +1030,13 @@
         "name": "className",
         "type": "string",
         "required": false,
-        "description": "해석 없이 네이티브 요소에 전달 — NativeWind는 호스트 관심사(§5)."
+        "description": "Passed to the native element without interpretation — NativeWind is a host concern (§5)."
       },
       {
         "name": "renderMark",
         "type": "RenderIcon",
         "required": false,
-        "description": "기본 icons.check → ✓ 텍스트 글리프 폴백(§4.2)."
+        "description": "Defaults to icons.check, falling back to a ✓ text glyph (§4.2)."
       },
       {
         "name": "showUncheckedMark",
@@ -1087,7 +1087,7 @@
         "name": "className",
         "type": "string",
         "required": false,
-        "description": "해석 없이 네이티브 요소에 전달 — NativeWind는 호스트 관심사(§5)."
+        "description": "Passed to the native element without interpretation — NativeWind is a host concern (§5)."
       },
       {
         "name": "disabled",
@@ -1138,13 +1138,13 @@
         "name": "className",
         "type": "string",
         "required": false,
-        "description": "해석 없이 네이티브 요소에 전달 — NativeWind는 호스트 관심사(§5)."
+        "description": "Passed to the native element without interpretation — NativeWind is a host concern (§5)."
       },
       {
         "name": "deselectLabel",
         "type": "string",
         "required": false,
-        "description": "기본 strings.deselectAll."
+        "description": "Defaults to strings.deselectAll."
       },
       {
         "name": "disabled",
@@ -1170,13 +1170,13 @@
         "name": "selectLabel",
         "type": "string",
         "required": false,
-        "description": "기본 strings.selectAll(§4.1)."
+        "description": "Defaults to strings.selectAll (§4.1)."
       },
       {
         "name": "showUncheckedMark",
         "type": "boolean",
         "required": false,
-        "description": "구 showUncheckedCheck 정리(§5.7)."
+        "description": "Cleans up the former showUncheckedCheck (§5.7)."
       },
       {
         "name": "style",
@@ -1197,7 +1197,7 @@
         "name": "checked",
         "type": "boolean | 'mixed'",
         "required": true,
-        "description": "`mixed`는 select-all 같은 부분 선택 상태다. 사용자 입력 결과는 항상 boolean."
+        "description": "`mixed` is a partial selection state such as select-all. The result of user input is always a boolean."
       },
       {
         "name": "onCheckedChange",
@@ -1213,7 +1213,7 @@
         "name": "className",
         "type": "string",
         "required": false,
-        "description": "해석 없이 네이티브 요소에 전달 — NativeWind는 호스트 관심사(§5)."
+        "description": "Passed to the native element without interpretation — NativeWind is a host concern (§5)."
       },
       {
         "name": "description",
@@ -1235,7 +1235,7 @@
         "name": "renderMark",
         "type": "RenderIcon",
         "required": false,
-        "description": "check/minus Provider 아이콘보다 우선하는 단일 마크 슬롯."
+        "description": "A single mark slot that takes precedence over the check and minus Provider icons."
       },
       {
         "name": "size",
@@ -1276,7 +1276,7 @@
         "name": "className",
         "type": "string",
         "required": false,
-        "description": "해석 없이 네이티브 요소에 전달 — NativeWind는 호스트 관심사(§5)."
+        "description": "Passed to the native element without interpretation — NativeWind is a host concern (§5)."
       },
       {
         "name": "description",
@@ -1338,7 +1338,7 @@
         "name": "className",
         "type": "string",
         "required": false,
-        "description": "해석 없이 네이티브 요소에 전달 — NativeWind는 호스트 관심사(§5)."
+        "description": "Passed to the native element without interpretation — NativeWind is a host concern (§5)."
       },
       {
         "name": "orientation",
@@ -1388,7 +1388,7 @@
         "name": "className",
         "type": "string",
         "required": false,
-        "description": "해석 없이 네이티브 요소에 전달 — NativeWind는 호스트 관심사(§5)."
+        "description": "Passed to the native element without interpretation — NativeWind is a host concern (§5)."
       },
       {
         "name": "direction",
@@ -1496,7 +1496,7 @@
         "name": "accessibilityLabel",
         "type": "string",
         "required": true,
-        "description": "toolbar의 안정적인 접근성 이름."
+        "description": "A stable accessible name for the toolbar."
       },
       {
         "name": "items",
@@ -1522,13 +1522,13 @@
         "name": "allowEmpty",
         "type": "boolean",
         "required": false,
-        "description": "활성 항목을 다시 눌러 null로 만들 수 있는지 여부. 기본 true."
+        "description": "Whether pressing the active item again can clear it to null. Defaults to true."
       },
       {
         "name": "className",
         "type": "string",
         "required": false,
-        "description": "해석 없이 네이티브 요소에 전달 — NativeWind는 호스트 관심사(§5)."
+        "description": "Passed to the native element without interpretation — NativeWind is a host concern (§5)."
       },
       {
         "name": "disabled",
@@ -1559,7 +1559,7 @@
         "name": "loop",
         "type": "boolean",
         "required": false,
-        "description": "방향키가 끝에서 반대편으로 순환하는지 여부. 기본 true."
+        "description": "Whether the arrow keys wrap from one end to the other. Defaults to true."
       },
       {
         "name": "orientation",
@@ -1595,7 +1595,7 @@
         "name": "bordered",
         "type": "boolean",
         "required": false,
-        "description": "기본 true."
+        "description": "Defaults to true."
       },
       {
         "name": "children",
@@ -1606,25 +1606,25 @@
         "name": "className",
         "type": "string",
         "required": false,
-        "description": "해석 없이 네이티브 요소에 전달 — NativeWind는 호스트 관심사(§5)."
+        "description": "Passed to the native element without interpretation — NativeWind is a host concern (§5)."
       },
       {
         "name": "elevation",
         "type": "keyof ThemeElevation",
         "required": false,
-        "description": "기본 'none'."
+        "description": "Defaults to 'none'."
       },
       {
         "name": "padding",
         "type": "number | keyof ThemeSpacing",
         "required": false,
-        "description": "기본 'lg'. 숫자는 Figma 실측 탈출구."
+        "description": "Defaults to 'lg'. Numbers are the escape hatch for Figma measurements."
       },
       {
         "name": "radius",
         "type": "keyof ThemeRadius",
         "required": false,
-        "description": "기본 'sm'."
+        "description": "Defaults to 'sm'."
       },
       {
         "name": "style",
@@ -1650,25 +1650,25 @@
         "name": "className",
         "type": "string",
         "required": false,
-        "description": "해석 없이 네이티브 요소에 전달 — NativeWind는 호스트 관심사(§5)."
+        "description": "Passed to the native element without interpretation — NativeWind is a host concern (§5)."
       },
       {
         "name": "contentStyle",
         "type": "StyleProp<ViewStyle>",
         "required": false,
-        "description": "자식 정렬과 간격처럼 내부 콘텐츠 레이아웃에 적용한다."
+        "description": "Applies to the inner content layout, such as child alignment and spacing."
       },
       {
         "name": "padding",
         "type": "number | keyof ThemeSpacing",
         "required": false,
-        "description": "기본 'lg'. 숫자는 실측 탈출구."
+        "description": "Defaults to 'lg'. Numbers are the escape hatch for measured values."
       },
       {
         "name": "radius",
         "type": "keyof ThemeRadius",
         "required": false,
-        "description": "기본 'md'."
+        "description": "Defaults to 'md'."
       },
       {
         "name": "style",
@@ -1684,7 +1684,7 @@
         "name": "variant",
         "type": "CardVariant",
         "required": false,
-        "description": "기본 'outlined'."
+        "description": "Defaults to 'outlined'."
       }
     ]
   },
@@ -1695,19 +1695,19 @@
         "name": "ratio",
         "type": "number",
         "required": true,
-        "description": "width / height. 0보다 큰 유한수만 허용한다."
+        "description": "width / height. Only finite numbers greater than 0 are allowed."
       },
       {
         "name": "children",
         "type": "NonNullable<ReactNode>",
         "required": false,
-        "description": "생략할 수 있지만 전달한다면 null/undefined가 아닌 노드여야 한다."
+        "description": "It can be omitted, but if you pass it, it has to be a node — not null or undefined."
       },
       {
         "name": "className",
         "type": "string",
         "required": false,
-        "description": "해석 없이 네이티브 요소에 전달 — NativeWind는 호스트 관심사(§5)."
+        "description": "Passed to the native element without interpretation — NativeWind is a host concern (§5)."
       },
       {
         "name": "style",
@@ -1743,19 +1743,19 @@
         "name": "className",
         "type": "string",
         "required": false,
-        "description": "해석 없이 네이티브 요소에 전달 — NativeWind는 호스트 관심사(§5)."
+        "description": "Passed to the native element without interpretation — NativeWind is a host concern (§5)."
       },
       {
         "name": "maxWidth",
         "type": "number",
         "required": false,
-        "description": "기본 1040 — 전신 계승."
+        "description": "Defaults to 1040 — inherited from the predecessor."
       },
       {
         "name": "padding",
         "type": "number | keyof ThemeSpacing",
         "required": false,
-        "description": "기본 'xl'."
+        "description": "Defaults to 'xl'."
       },
       {
         "name": "style",
@@ -1791,13 +1791,13 @@
         "name": "className",
         "type": "string",
         "required": false,
-        "description": "해석 없이 네이티브 요소에 전달 — NativeWind는 호스트 관심사(§5)."
+        "description": "Passed to the native element without interpretation — NativeWind is a host concern (§5)."
       },
       {
         "name": "gap",
         "type": "number | keyof ThemeSpacing",
         "required": false,
-        "description": "기본 'md'."
+        "description": "Defaults to 'md'."
       },
       {
         "name": "style",
@@ -1830,7 +1830,7 @@
         "name": "bottomInset",
         "type": "number",
         "required": false,
-        "description": "'./insets'의 useBottomInset() 반환값을 꽂는 자리. 라이브러리가 직접 재지\n않는 이유: safe-area peer를 \".\"에 끌어들이지 않기 위해(§7). 기본 0."
+        "description": "Where the return value of useBottomInset() from './insets' goes. The library\ndoes not measure it directly so the safe-area peer is never pulled into \".\"\n(§7). Defaults to 0."
       },
       {
         "name": "children",
@@ -1841,7 +1841,7 @@
         "name": "className",
         "type": "string",
         "required": false,
-        "description": "해석 없이 네이티브 요소에 전달 — NativeWind는 호스트 관심사(§5)."
+        "description": "Passed to the native element without interpretation — NativeWind is a host concern (§5)."
       },
       {
         "name": "style",
@@ -1862,19 +1862,19 @@
         "name": "accessibilityLabel",
         "type": "string",
         "required": false,
-        "description": "기본 strings.loading."
+        "description": "Defaults to strings.loading."
       },
       {
         "name": "className",
         "type": "string",
         "required": false,
-        "description": "해석 없이 네이티브 요소에 전달 — NativeWind는 호스트 관심사(§5)."
+        "description": "Passed to the native element without interpretation — NativeWind is a host concern (§5)."
       },
       {
         "name": "radius",
         "type": "keyof ThemeRadius",
         "required": false,
-        "description": "기본 'sm'."
+        "description": "Defaults to 'sm'."
       },
       {
         "name": "style",
@@ -1895,7 +1895,7 @@
         "name": "action",
         "type": "{ readonly label: string; readonly onPress: () => void; }",
         "required": false,
-        "description": "label 없이 onPress 없는 죽은 버튼을 구조로 차단(§6 ⑨ — C의 action 객체)."
+        "description": "Structurally blocks a dead button with no label and no onPress (§6 ⑨ — the action object from C)."
       },
       {
         "name": "body",
@@ -1906,19 +1906,19 @@
         "name": "className",
         "type": "string",
         "required": false,
-        "description": "해석 없이 네이티브 요소에 전달 — NativeWind는 호스트 관심사(§5)."
+        "description": "Passed to the native element without interpretation — NativeWind is a host concern (§5)."
       },
       {
         "name": "leading",
         "type": "ReactNode",
         "required": false,
-        "description": "기본 icons.empty."
+        "description": "Defaults to icons.empty."
       },
       {
         "name": "maxFontSizeMultiplier",
         "type": "number",
         "required": false,
-        "description": "기본 metrics.maxFontScale."
+        "description": "Defaults to metrics.maxFontScale."
       },
       {
         "name": "style",
@@ -1934,7 +1934,7 @@
         "name": "title",
         "type": "string",
         "required": false,
-        "description": "기본 strings.emptyTitle."
+        "description": "Defaults to strings.emptyTitle."
       }
     ]
   },
@@ -1945,13 +1945,13 @@
         "name": "className",
         "type": "string",
         "required": false,
-        "description": "해석 없이 네이티브 요소에 전달 — NativeWind는 호스트 관심사(§5)."
+        "description": "Passed to the native element without interpretation — NativeWind is a host concern (§5)."
       },
       {
         "name": "leading",
         "type": "ReactNode",
         "required": false,
-        "description": "기본 icons.error."
+        "description": "Defaults to icons.error."
       },
       {
         "name": "maxFontSizeMultiplier",
@@ -1962,19 +1962,19 @@
         "name": "message",
         "type": "string",
         "required": false,
-        "description": "기본 strings.errorBody."
+        "description": "Defaults to strings.errorBody."
       },
       {
         "name": "onRetry",
         "type": "() => void",
         "required": false,
-        "description": "있을 때만 버튼 렌더 — 죽은 버튼 불가(§5.10)."
+        "description": "Renders the button only when present — no dead buttons (§5.10)."
       },
       {
         "name": "retryLabel",
         "type": "string",
         "required": false,
-        "description": "기본 strings.retry."
+        "description": "Defaults to strings.retry."
       },
       {
         "name": "style",
@@ -1990,7 +1990,7 @@
         "name": "title",
         "type": "string",
         "required": false,
-        "description": "기본 strings.errorTitle."
+        "description": "Defaults to strings.errorTitle."
       }
     ]
   },
@@ -2006,7 +2006,7 @@
         "name": "bottomOffset",
         "type": "number",
         "required": false,
-        "description": "하단 거리(순수 수치). 기본 96. safe-area 합성은 useBottomInset()과 조합(§7).\n구 bottomOffset!==96 레거시 스타일 분기는 삭제됐다 — 값은 위치에만 쓰인다."
+        "description": "Distance from the bottom as a plain number. Defaults to 96. Compose it with\nuseBottomInset() for safe-area handling (§7). The legacy bottomOffset!==96\nstyle branch is gone — the value only affects position."
       },
       {
         "name": "className",
@@ -2022,7 +2022,7 @@
         "name": "leading",
         "type": "ReactNode",
         "required": false,
-        "description": "기본 icons.toast[variant]."
+        "description": "Defaults to icons.toast[variant]."
       },
       {
         "name": "testID",
@@ -2033,7 +2033,7 @@
         "name": "variant",
         "type": "ToastVariant",
         "required": false,
-        "description": "기본 'error'."
+        "description": "Defaults to 'error'."
       }
     ]
   },
@@ -2064,19 +2064,19 @@
         "name": "className",
         "type": "string",
         "required": false,
-        "description": "해석 없이 네이티브 요소에 전달 — NativeWind는 호스트 관심사(§5)."
+        "description": "Passed to the native element without interpretation — NativeWind is a host concern (§5)."
       },
       {
         "name": "offset",
         "type": "number",
         "required": false,
-        "description": "화면 가장자리와의 거리. 기본 spacing.xl."
+        "description": "The distance from the screen edge. Defaults to spacing.xl."
       },
       {
         "name": "placement",
         "type": "ToastViewportPlacement",
         "required": false,
-        "description": "기본 'bottom'."
+        "description": "Defaults to 'bottom'."
       },
       {
         "name": "style",
@@ -2102,7 +2102,7 @@
         "name": "className",
         "type": "string",
         "required": false,
-        "description": "해석 없이 네이티브 요소에 전달 — NativeWind는 호스트 관심사(§5)."
+        "description": "Passed to the native element without interpretation — NativeWind is a host concern (§5)."
       },
       {
         "name": "labelClassName",
@@ -2118,13 +2118,13 @@
         "name": "leading",
         "type": "ReactNode | RenderIcon",
         "required": false,
-        "description": "정적 노드 또는 색·크기를 받는 아이콘 렌더 함수."
+        "description": "A static node, or an icon render function that receives color and size."
       },
       {
         "name": "size",
         "type": "BadgeSize",
         "required": false,
-        "description": "기본 'md'."
+        "description": "Defaults to 'md'."
       },
       {
         "name": "style",
@@ -2140,7 +2140,7 @@
         "name": "variant",
         "type": "StatusVariant",
         "required": false,
-        "description": "기본 'neutral'."
+        "description": "Defaults to 'neutral'."
       }
     ]
   },
@@ -2161,31 +2161,31 @@
         "name": "className",
         "type": "string",
         "required": false,
-        "description": "해석 없이 네이티브 요소에 전달 — NativeWind는 호스트 관심사(§5)."
+        "description": "Passed to the native element without interpretation — NativeWind is a host concern (§5)."
       },
       {
         "name": "dismissAccessibilityLabel",
         "type": "string",
         "required": false,
-        "description": "기본 strings.close."
+        "description": "Defaults to strings.close."
       },
       {
         "name": "leading",
         "type": "ReactNode | RenderIcon",
         "required": false,
-        "description": "미지정 시 icons.toast[variant]."
+        "description": "Falls back to icons.toast[variant]."
       },
       {
         "name": "live",
         "type": "AlertLive",
         "required": false,
-        "description": "기본 'off'. 동적으로 삽입·갱신되는 알림에만 opt-in한다."
+        "description": "Defaults to 'off'. Opt in only for notices that are inserted or updated dynamically."
       },
       {
         "name": "onDismiss",
         "type": "() => void",
         "required": false,
-        "description": "있을 때만 닫기 버튼을 렌더한다."
+        "description": "Renders the close button only when present."
       },
       {
         "name": "style",
@@ -2207,7 +2207,7 @@
         "name": "variant",
         "type": "'warning' | 'success' | 'info' | 'error'",
         "required": false,
-        "description": "기본 'info'. neutral은 알림 의도가 아니므로 허용하지 않는다."
+        "description": "Defaults to 'info'. neutral is not allowed because it carries no notification intent."
       }
     ]
   },
@@ -2218,25 +2218,25 @@
         "name": "accessibilityLabel",
         "type": "string",
         "required": false,
-        "description": "기본 strings.loading."
+        "description": "Defaults to strings.loading."
       },
       {
         "name": "className",
         "type": "string",
         "required": false,
-        "description": "해석 없이 네이티브 요소에 전달 — NativeWind는 호스트 관심사(§5)."
+        "description": "Passed to the native element without interpretation — NativeWind is a host concern (§5)."
       },
       {
         "name": "color",
         "type": "keyof ThemeColors",
         "required": false,
-        "description": "기본 'primary'."
+        "description": "Defaults to 'primary'."
       },
       {
         "name": "size",
         "type": "ProgressSize",
         "required": false,
-        "description": "기본 'md'."
+        "description": "Defaults to 'md'."
       },
       {
         "name": "style",
@@ -2257,7 +2257,7 @@
         "name": "accessibilityLabel",
         "type": "string",
         "required": true,
-        "description": "스크린리더에 진행 대상이 무엇인지 전달한다."
+        "description": "Tells a screen reader what is making progress."
       },
       {
         "name": "value",
@@ -2273,7 +2273,7 @@
         "name": "className",
         "type": "string",
         "required": false,
-        "description": "해석 없이 네이티브 요소에 전달 — NativeWind는 호스트 관심사(§5)."
+        "description": "Passed to the native element without interpretation — NativeWind is a host concern (§5)."
       },
       {
         "name": "indicatorClassName",
@@ -2289,7 +2289,7 @@
         "name": "max",
         "type": "number",
         "required": false,
-        "description": "유한한 양수만 사용하며, 그 외 값은 100으로 정규화한다."
+        "description": "Only finite positive numbers are used; anything else is normalized to 100."
       },
       {
         "name": "size",
@@ -2320,20 +2320,20 @@
         "name": "name",
         "type": "string",
         "required": true,
-        "description": "이름은 이미지 미지정·로드 실패 시 초성을 만드는 데 쓴다."
+        "description": "The name is used to build initials when no image is given or the image fails to load."
       },
       {
         "name": "alt",
         "type": "string",
         "required": false,
-        "description": "프로필 이미지가 전달하는 의미. 장식이 아니면 필수다.",
+        "description": "What the profile image conveys. Required unless it is decorative.",
         "conditional": true
       },
       {
         "name": "className",
         "type": "string",
         "required": false,
-        "description": "해석 없이 네이티브 요소에 전달 — NativeWind는 호스트 관심사(§5)."
+        "description": "Passed to the native element without interpretation — NativeWind is a host concern (§5)."
       },
       {
         "name": "decorative",
@@ -2344,13 +2344,13 @@
         "name": "fallback",
         "type": "ReactNode",
         "required": false,
-        "description": "미지정 시 name에서 초성을 만든다."
+        "description": "Builds initials from name when omitted."
       },
       {
         "name": "imageProps",
         "type": "AvatarImageProps",
         "required": false,
-        "description": "소스·스타일·접근성을 제외한 RN Image prop. onError는 내부 폴백과 병합된다."
+        "description": "RN Image props apart from source, style, and accessibility. onError is merged with the internal fallback."
       },
       {
         "name": "imageStyle",
@@ -2386,25 +2386,25 @@
         "name": "className",
         "type": "string",
         "required": false,
-        "description": "해석 없이 네이티브 요소에 전달 — NativeWind는 호스트 관심사(§5)."
+        "description": "Passed to the native element without interpretation — NativeWind is a host concern (§5)."
       },
       {
         "name": "color",
         "type": "keyof ThemeColors",
         "required": false,
-        "description": "테마 color role만 허용. 기본 'line'."
+        "description": "Theme color roles only. Defaults to 'line'."
       },
       {
         "name": "decorative",
         "type": "boolean",
         "required": false,
-        "description": "기본 true. false면 separator 의미론을 발행한다."
+        "description": "Defaults to true. When false it emits separator semantics."
       },
       {
         "name": "inset",
         "type": "number | keyof ThemeSpacing",
         "required": false,
-        "description": "선의 시작·끝 축 여백. 토큰 키가 1급, 숫자는 실측 탈출구."
+        "description": "The start and end margins along the line's axis. Token keys are first class, numbers are the escape hatch for measured values."
       },
       {
         "name": "orientation",
@@ -2415,7 +2415,7 @@
         "name": "spacing",
         "type": "number | keyof ThemeSpacing",
         "required": false,
-        "description": "선과 인접 콘텐츠 사이 여백. 토큰 키가 1급, 숫자는 실측 탈출구."
+        "description": "The gap between the line and the adjacent content. Token keys are first class, numbers are the escape hatch for measured values."
       },
       {
         "name": "style",
@@ -2431,7 +2431,7 @@
         "name": "thickness",
         "type": "number",
         "required": false,
-        "description": "기본 StyleSheet.hairlineWidth."
+        "description": "Defaults to StyleSheet.hairlineWidth."
       }
     ]
   },
@@ -2457,7 +2457,7 @@
         "name": "className",
         "type": "string",
         "required": false,
-        "description": "해석 없이 네이티브 요소에 전달 — NativeWind는 호스트 관심사(§5)."
+        "description": "Passed to the native element without interpretation — NativeWind is a host concern (§5)."
       },
       {
         "name": "description",
@@ -2573,7 +2573,7 @@
         "name": "className",
         "type": "string",
         "required": false,
-        "description": "해석 없이 네이티브 요소에 전달 — NativeWind는 호스트 관심사(§5)."
+        "description": "Passed to the native element without interpretation — NativeWind is a host concern (§5)."
       },
       {
         "name": "description",
@@ -2713,7 +2713,7 @@
         "name": "className",
         "type": "string",
         "required": false,
-        "description": "해석 없이 네이티브 요소에 전달 — NativeWind는 호스트 관심사(§5)."
+        "description": "Passed to the native element without interpretation — NativeWind is a host concern (§5)."
       },
       {
         "name": "controlClassName",
@@ -2887,7 +2887,7 @@
         "name": "collapsible",
         "type": "boolean",
         "required": false,
-        "description": "false면 열린 마지막 항목을 닫을 수 없다. 기본 true."
+        "description": "When false, the last open item cannot be closed. Defaults to true."
       },
       {
         "name": "contentStyle",
@@ -2908,7 +2908,7 @@
         "name": "headingLevel",
         "type": "1 | 2 | 3 | 4 | 5 | 6",
         "required": false,
-        "description": "웹 heading level. 기본 3."
+        "description": "Web heading level. Defaults to 3."
       },
       {
         "name": "itemStyle",
@@ -2966,7 +2966,7 @@
         "name": "animationType",
         "type": "NonNullable<'none' | 'slide' | 'fade' | undefined>",
         "required": false,
-        "description": "기존 기본값 'fade'."
+        "description": "The existing default of 'fade'."
       },
       {
         "name": "contentStyle",
@@ -2977,31 +2977,31 @@
         "name": "dismissDisabled",
         "type": "boolean",
         "required": false,
-        "description": "백드롭, Escape/Back, 접근성 escape, 패널 닫기 버튼을 모두 차단한다."
+        "description": "Blocks the backdrop, Escape/Back, the accessibility escape, and the panel's close button alike."
       },
       {
         "name": "dismissOnBackdrop",
         "type": "boolean",
         "required": false,
-        "description": "기본 true."
+        "description": "Defaults to true."
       },
       {
         "name": "finalFocusRef",
         "type": "DialogFocusRef",
         "required": false,
-        "description": "실제 modal exit 완료 후 best-effort focus. RNW의 기본 복원과 경쟁하지 않는다."
+        "description": "Best-effort focus after the modal exit actually completes. It does not race RNW's own restoration."
       },
       {
         "name": "initialFocusRef",
         "type": "DialogFocusRef",
         "required": false,
-        "description": "지정했을 때만 onShow 후 best-effort focus. RNW의 기본 focus trap은 그대로 둔다."
+        "description": "Best-effort focus after onShow, only when specified. RNW's own focus trap is left alone."
       },
       {
         "name": "inlineStyle",
         "type": "StyleProp<ViewStyle>",
         "required": false,
-        "description": "inline presentation의 외곽 레이아웃 전용. contentStyle은 두 presentation에서 동일하다."
+        "description": "The outer layout of the inline presentation only. contentStyle is identical across both presentations."
       },
       {
         "name": "overlayId",
@@ -3042,13 +3042,13 @@
         "name": "className",
         "type": "string",
         "required": false,
-        "description": "해석 없이 네이티브 요소에 전달 — NativeWind는 호스트 관심사(§5)."
+        "description": "Passed to the native element without interpretation — NativeWind is a host concern (§5)."
       },
       {
         "name": "closeAccessibilityLabel",
         "type": "string",
         "required": false,
-        "description": "기본 strings.close."
+        "description": "Defaults to strings.close."
       },
       {
         "name": "closeButtonTestID",
@@ -3074,7 +3074,7 @@
         "name": "showCloseButton",
         "type": "boolean",
         "required": false,
-        "description": "Dialog 안에서는 기본 true. 독립 사용 시 닫기 동작이 없으므로 렌더하지 않는다."
+        "description": "Defaults to true inside a Dialog. Standalone there is no dismiss behavior, so it is not rendered."
       },
       {
         "name": "style",
@@ -3136,19 +3136,19 @@
         "name": "busy",
         "type": "boolean",
         "required": false,
-        "description": "Async transition 동안 모든 action과 dismissal을 막고 busy state를 노출한다."
+        "description": "Blocks every action and dismissal during an async transition and exposes the busy state."
       },
       {
         "name": "cancelLabel",
         "type": "string",
         "required": false,
-        "description": "기본 strings.cancel."
+        "description": "Defaults to strings.cancel."
       },
       {
         "name": "className",
         "type": "string",
         "required": false,
-        "description": "해석 없이 네이티브 요소에 전달 — NativeWind는 호스트 관심사(§5)."
+        "description": "Passed to the native element without interpretation — NativeWind is a host concern (§5)."
       },
       {
         "name": "description",
@@ -3239,13 +3239,13 @@
         "name": "className",
         "type": "string",
         "required": false,
-        "description": "해석 없이 네이티브 요소에 전달 — NativeWind는 호스트 관심사(§5)."
+        "description": "Passed to the native element without interpretation — NativeWind is a host concern (§5)."
       },
       {
         "name": "closeAccessibilityLabel",
         "type": "string",
         "required": false,
-        "description": "기본 strings.close."
+        "description": "Defaults to strings.close."
       },
       {
         "name": "contentContainerClassName",
@@ -3266,13 +3266,13 @@
         "name": "dismissDisabled",
         "type": "boolean",
         "required": false,
-        "description": "backdrop, Escape/Back, accessibility escape, and close action을 모두 차단한다."
+        "description": "Blocks the backdrop, Escape/Back, the accessibility escape, and the close action alike."
       },
       {
         "name": "dismissOnBackdrop",
         "type": "boolean",
         "required": false,
-        "description": "기본 true."
+        "description": "Defaults to true."
       },
       {
         "name": "finalFocusRef",
@@ -3303,7 +3303,7 @@
         "name": "keyboardOverlap",
         "type": "number",
         "required": false,
-        "description": "0보다 크면 bottom safe-area inset을 대체한다."
+        "description": "Replaces the bottom safe-area inset when greater than 0."
       },
       {
         "name": "leading",
@@ -3405,7 +3405,7 @@
         "name": "className",
         "type": "string",
         "required": false,
-        "description": "해석 없이 네이티브 요소에 전달 — NativeWind는 호스트 관심사(§5)."
+        "description": "Passed to the native element without interpretation — NativeWind is a host concern (§5)."
       },
       {
         "name": "closeAccessibilityLabel",
@@ -3566,7 +3566,7 @@
         "name": "className",
         "type": "string",
         "required": false,
-        "description": "해석 없이 네이티브 요소에 전달 — NativeWind는 호스트 관심사(§5)."
+        "description": "Passed to the native element without interpretation — NativeWind is a host concern (§5)."
       },
       {
         "name": "closeDelayMs",
@@ -3676,13 +3676,13 @@
         "name": "triggerLabel",
         "type": "string",
         "required": true,
-        "description": "시각 라벨이자 기본 접근성 이름."
+        "description": "Both the visible label and the default accessible name."
       },
       {
         "name": "accessibilityLabel",
         "type": "string",
         "required": false,
-        "description": "menu landmark 이름. 기본 triggerLabel."
+        "description": "The menu landmark name. Defaults to triggerLabel."
       },
       {
         "name": "alignOffset",
@@ -3693,19 +3693,19 @@
         "name": "bottomInset",
         "type": "number",
         "required": false,
-        "description": "native bottom presentation에서 호출자가 합성한 safe-area inset."
+        "description": "Safe-area inset composed by the caller for a native bottom presentation."
       },
       {
         "name": "busy",
         "type": "boolean",
         "required": false,
-        "description": "선택은 막되 이미 열린 메뉴의 dismiss는 허용한다."
+        "description": "Blocks selection while still allowing an already open menu to dismiss."
       },
       {
         "name": "className",
         "type": "string",
         "required": false,
-        "description": "해석 없이 네이티브 요소에 전달 — NativeWind는 호스트 관심사(§5)."
+        "description": "Passed to the native element without interpretation — NativeWind is a host concern (§5)."
       },
       {
         "name": "collisionPadding",
@@ -3736,7 +3736,7 @@
         "name": "dismissDisabled",
         "type": "boolean",
         "required": false,
-        "description": "outside/Escape/Back/접근성 escape를 막는다."
+        "description": "Blocks outside presses, Escape, Back, and the accessibility escape."
       },
       {
         "name": "iconOnly",
@@ -3767,7 +3767,7 @@
         "name": "keyboardOverlap",
         "type": "number",
         "required": false,
-        "description": "native Modal 안에서 계산한 키보드 가림 높이. 0보다 크면 bottomInset보다 우선한다."
+        "description": "Keyboard occlusion height measured inside a native Modal. Takes precedence over bottomInset when greater than 0."
       },
       {
         "name": "placement",
@@ -3848,7 +3848,7 @@
         "name": "cancelLabel",
         "type": "string",
         "required": false,
-        "description": "기본 strings.cancel."
+        "description": "Defaults to strings.cancel."
       },
       {
         "name": "cancelLoading",
@@ -3859,25 +3859,25 @@
         "name": "cancelVariant",
         "type": "ButtonVariant",
         "required": false,
-        "description": "기본 'secondary'."
+        "description": "Defaults to 'secondary'."
       },
       {
         "name": "className",
         "type": "string",
         "required": false,
-        "description": "해석 없이 네이티브 요소에 전달 — NativeWind는 호스트 관심사(§5)."
+        "description": "Passed to the native element without interpretation — NativeWind is a host concern (§5)."
       },
       {
         "name": "confirmLabel",
         "type": "string",
         "required": false,
-        "description": "기본 strings.confirm."
+        "description": "Defaults to strings.confirm."
       },
       {
         "name": "confirmVariant",
         "type": "ButtonVariant",
         "required": false,
-        "description": "기본 'primary'. destructive가 true면 'destructive'."
+        "description": "Defaults to 'primary', or to 'destructive' when destructive is true."
       },
       {
         "name": "destructive",
@@ -3888,7 +3888,7 @@
         "name": "loading",
         "type": "boolean",
         "required": false,
-        "description": "confirm 로딩 — cancel 자동 disabled."
+        "description": "Confirm is loading — cancel is disabled automatically."
       },
       {
         "name": "style",

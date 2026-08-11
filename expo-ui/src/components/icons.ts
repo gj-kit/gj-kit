@@ -1,38 +1,39 @@
 /**
- * 아이콘 주입 체계 — 설계 문서 §4.2.
+ * The icon injection system — design doc §4.2.
  *
- * 런타임 의존성 0의 핵심: 아이콘 구현은 항상 호스트가 공급하고, 라이브러리는
- * 색·크기만 계산해 넘긴다. 컴포넌트별 renderMark/leading props가 개별
- * 오버라이드 — UiIcons는 Provider 1회 주입의 기본값 계층이다.
+ * The heart of having zero runtime dependencies: the host always supplies the icon
+ * implementation and the library only computes color and size before handing it
+ * over. Per-component renderMark and leading props are the individual override;
+ * UiIcons is the default layer injected once at the Provider.
  */
 import type { ReactNode } from 'react';
 
 export type IconRenderProps = { readonly color: string; readonly size: number };
 export type RenderIcon = (props: IconRenderProps) => ReactNode;
 
-/** Toast 변형 — 이름 보존(88 콜사이트, §0 기각: C의 intent 개명). */
+/** The Toast variants — name preserved across 88 call sites (§0 rejected: renaming to intent in C). */
 export type ToastVariant = 'error' | 'success' | 'info' | 'warning';
 
 export interface UiIcons {
-  /** SelectionIndicator/SelectAllRow 마크. 폴백: ✓ 텍스트 글리프. */
+  /** The SelectionIndicator and SelectAllRow mark. Falls back to a ✓ text glyph. */
   readonly check?: RenderIcon | undefined;
-  /** Checkbox mixed 상태. 폴백: − 텍스트 글리프. */
+  /** The Checkbox mixed state. Falls back to a − text glyph. */
   readonly minus?: RenderIcon | undefined;
-  /** Accordion 펼침 어포던스. 폴백: 텍스트 글리프. */
+  /** The Accordion expansion affordance. Falls back to a text glyph. */
   readonly chevronDown?: RenderIcon | undefined;
-  /** SearchField leading. 폴백: 미표시. */
+  /** The SearchField leading slot. Falls back to rendering nothing. */
   readonly search?: RenderIcon | undefined;
-  /** EmptyState leading. 폴백: 미표시. */
+  /** The EmptyState leading slot. Falls back to rendering nothing. */
   readonly empty?: RenderIcon | undefined;
-  /** ErrorState leading. 폴백: 미표시. */
+  /** The ErrorState leading slot. Falls back to rendering nothing. */
   readonly error?: RenderIcon | undefined;
-  /** Alert 등 닫기 어포던스. */
+  /** The dismiss affordance for Alert and friends. */
   readonly close?: RenderIcon | undefined;
-  /** Toast leading — variant별. 폴백: 미표시. 키 레벨도 | undefined — EOP 소비자의 조건부 조립 허용. */
+  /** The Toast leading slot, per variant. Falls back to rendering nothing. Key level is | undefined too, so an EOP consumer can assemble conditionally. */
   readonly toast?: { readonly [V in ToastVariant]?: RenderIcon | undefined } | undefined;
 }
 
-/** (내부) 정적 노드/렌더 함수 겸용 슬롯 해석. */
+/** (internal) Resolves a slot that accepts either a static node or a render function. */
 export function renderIconSlot(
   icon: ReactNode | RenderIcon | undefined,
   props: IconRenderProps,

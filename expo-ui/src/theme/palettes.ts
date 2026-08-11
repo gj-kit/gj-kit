@@ -1,9 +1,10 @@
 /**
- * 내장 팔레트 데이터 — 설계 문서 §3.6.
+ * The built-in palette data — design doc §3.6.
  *
- * 라이트는 전신 tokens.json 값 계승(+상태 팔레트·shadow 확장). 다크는 설계 문서 제안값.
- * 색 이외 토큰(spacing/radius/typography/elevation/metrics/breakpoints)은
- * 스킴 공유가 기본이다 — 전신과 동일한 모델.
+ * Light inherits the predecessor's tokens.json values, extended with the status
+ * palettes and shadow. Dark uses the values proposed in the design doc. Non-color
+ * tokens (spacing/radius/typography/elevation/metrics/breakpoints) are shared
+ * across schemes by default — the same model as the predecessor.
  */
 import type {
   ThemeColors,
@@ -83,7 +84,7 @@ export const darkColors: ThemeColors = {
   shadow: '#000000',
 };
 
-/** 4px 그리드 — 전신 계승. */
+/** A 4px grid — inherited from the predecessor. */
 export const baseSpacing: ThemeSpacing = {
   none: 0,
   xs: 4,
@@ -104,10 +105,12 @@ export const baseRadius: ThemeRadius = {
 };
 
 /**
- * fontSize 6종(caption~heading)은 전신 tokens.json 계승, tab은 전신 underline 탭
- * 실측(16/'600')의 롤 승격. lineHeight/weight는 대표 사용처의 하드코딩 실측값을
- * 롤로 정규화한 값 — 롤에 정확히 대응하지 않던 사용처(EmptyState 제목 16/22 등)는
- * 가장 가까운 롤로 흡수되며, 그 시각 델타 목록은 설계 문서 §10.3에 기록되어 있다.
+ * The six fontSize values (caption through heading) are inherited from the
+ * predecessor's tokens.json; tab promotes the measured underline-tab pair
+ * (16/'600') into a role. lineHeight and weight normalize the hardcoded values
+ * measured at representative call sites into roles — call sites that did not map
+ * exactly onto a role (the EmptyState title at 16/22, for instance) were absorbed
+ * into the nearest one, and design doc §10.3 records the resulting visual deltas.
  */
 export const baseTypography: ThemeTypography = {
   caption: { fontSize: 12, lineHeight: 16, fontWeight: '400' },
@@ -120,8 +123,9 @@ export const baseTypography: ThemeTypography = {
 };
 
 /**
- * Android elevation은 전신 tokens.json 계승. iOS shadow 3속성은 전신 컴포넌트의
- * 하드코딩 실측값(Surface 0.07/8/2, StickyActionBar·Toast 0.12/16/4)을 레벨로 승격.
+ * Android elevation is inherited from the predecessor's tokens.json. The three
+ * iOS shadow properties promote the hardcoded values measured in the predecessor
+ * components (Surface 0.07/8/2, StickyActionBar and Toast 0.12/16/4) into levels.
  */
 export const baseElevation: ThemeElevation = {
   none: { elevation: 0, shadowOpacity: 0, shadowRadius: 0, shadowOffsetY: 0 },
@@ -130,7 +134,7 @@ export const baseElevation: ThemeElevation = {
   lg: { elevation: 8, shadowOpacity: 0.16, shadowRadius: 24, shadowOffsetY: 8 },
 };
 
-/** 전신의 buttonSizes minHeight(36/44/52)·input 48·iconSize 18·폰트 캡 1.25 승격. */
+/** Promotes the predecessor's buttonSizes minHeight (36/44/52), input 48, iconSize 18, and the 1.25 font cap. */
 export const baseMetrics: ThemeMetrics = {
   control: { sm: 36, md: 44, lg: 52 },
   input: 48,

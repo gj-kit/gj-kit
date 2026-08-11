@@ -1,8 +1,10 @@
 /**
- * ToggleGroup — 화면이나 tabpanel을 바꾸지 않는 즉시 상태 선택.
+ * ToggleGroup — immediate state selection that changes neither the screen nor a
+ * tabpanel.
  *
- * Tabs는 tablist/tabpanel 관계를 소유한다. ToggleGroup은 굵게, 정렬, 필터처럼
- * 독립적인 toggle button 집합만 소유하며 single/multiple 상태를 타입으로 분리한다.
+ * Tabs owns the tablist/tabpanel relationship. ToggleGroup owns only an
+ * independent set of toggle buttons — bold, alignment, filters — and separates
+ * the single and multiple states by type.
  */
 import { useRef, useState } from 'react';
 import type { ReactElement, ReactNode } from 'react';
@@ -43,13 +45,13 @@ export type ToggleGroupItem<T extends string> = ToggleGroupItemBase<T> &
 
 type ToggleGroupBaseProps<T extends string> = Omit<CommonProps, 'unstyled'> & {
   readonly items: readonly ToggleGroupItem<T>[];
-  /** toolbar의 안정적인 접근성 이름. */
+  /** A stable accessible name for the toolbar. */
   readonly accessibilityLabel: string;
   readonly orientation?: ToggleGroupOrientation | undefined;
   readonly variant?: ToggleGroupVariant | undefined;
   readonly size?: ToggleGroupSize | undefined;
   readonly disabled?: boolean | undefined;
-  /** 방향키가 끝에서 반대편으로 순환하는지 여부. 기본 true. */
+  /** Whether the arrow keys wrap from one end to the other. Defaults to true. */
   readonly loop?: boolean | undefined;
   readonly itemStyle?: StyleProp<ViewStyle> | undefined;
   readonly itemClassName?: string | undefined;
@@ -62,7 +64,7 @@ type SingleToggleGroupProps<T extends string> = ToggleGroupBaseProps<T> & {
   readonly selectionMode: 'single';
   readonly value: NoInfer<T> | null;
   readonly onValueChange: (value: T | null) => void;
-  /** 활성 항목을 다시 눌러 null로 만들 수 있는지 여부. 기본 true. */
+  /** Whether pressing the active item again can clear it to null. Defaults to true. */
   readonly allowEmpty?: boolean | undefined;
 };
 

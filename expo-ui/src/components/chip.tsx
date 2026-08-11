@@ -1,9 +1,10 @@
 /**
- * Chip — 짧은 액션, 토글 필터, 제거 가능한 값을 하나의 시각 언어로 표현한다.
+ * Chip — short actions, toggle filters, and removable values in one visual language.
  *
- * Chip 자체에는 단일 ARIA 패턴이 없다. 그래서 kind가 의미와 콜백을 함께 고정한다:
- * action은 버튼, filter는 이름이 바뀌지 않는 토글 버튼, removable은 정적 값과
- * 별도의 제거 버튼이다. removable의 Pressable을 컨테이너 안에 중첩하지 않는다.
+ * A chip has no single ARIA pattern of its own, so kind pins the semantics and
+ * the callback together: action is a button, filter is a toggle button whose name
+ * does not change, and removable is a static value plus a separate remove button.
+ * The removable Pressable is never nested inside the container.
  */
 import type { ReactElement, ReactNode } from 'react';
 import { Platform, Pressable, StyleSheet, Text as RNText, View } from 'react-native';
@@ -24,11 +25,11 @@ export type ChipSize = 'sm' | 'md';
 type ChipBaseProps = Omit<CommonProps, 'unstyled'> & {
   kind: ChipKind;
   label: string;
-  /** 기본 'filled'. */
+  /** Defaults to 'filled'. */
   variant?: ChipVariant | undefined;
-  /** 기본 'md'. */
+  /** Defaults to 'md'. */
   size?: ChipSize | undefined;
-  /** 장식 아이콘. filter가 선택됐고 leading이 없으면 Provider check 아이콘을 쓴다. */
+  /** A decorative icon. A selected filter with no leading uses the Provider's check icon. */
   leading?: ReactNode | RenderIcon | undefined;
   disabled?: boolean | undefined;
   labelStyle?: StyleProp<TextStyle> | undefined;
@@ -57,7 +58,7 @@ export type FilterChipProps = ChipBaseProps & {
 export type RemovableChipProps = ChipBaseProps & {
   kind: 'removable';
   onRemove: () => void;
-  /** 제거 버튼은 보이는 값 라벨과 다른 동작이므로 별도 접근성 이름이 필수다. */
+  /** The remove button does something different from the visible value label, so a separate accessible name is required. */
   removeAccessibilityLabel: string;
   onPress?: never;
   selected?: never;

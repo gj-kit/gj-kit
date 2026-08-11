@@ -1,43 +1,46 @@
 /**
- * safe-area·키보드 훅 — 설계 문서 §7.
+ * Safe-area and keyboard hooks — design doc §7.
  *
- * react-native-safe-area-context(optional peer)는 이 모듈에만 존재한다.
- * "./insets"를 import하지 않는 앱은 peer 미설치여도 번들·타입 모두 무결하고,
- * peer 없이 import하면 번들 시점 resolve 실패로 조기 발각된다(런타임 마법 없음).
+ * react-native-safe-area-context (an optional peer) exists only in this module.
+ * An app that never imports "./insets" keeps both its bundle and its types intact
+ * without the peer installed, and importing it without the peer fails to resolve
+ * at bundle time — caught early, with no runtime magic.
  */
 import { useEffect, useState } from 'react';
 import { Keyboard, Platform } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { nativeBottomInset, nativeBottomPadding } from './safeArea';
 
-/** 하단 safe-area inset(web 0). StickyActionBar bottomInset·Toast bottomOffset 합성용. */
+/** The bottom safe-area inset (0 on the web). For composing StickyActionBar bottomInset and Toast bottomOffset. */
 export function useBottomInset(): number {
   return nativeBottomInset(useSafeAreaInsets().bottom);
 }
 
 /**
- * 하단 앵커 서피스(바텀시트, 고정 바, 하단 버튼 행)의 paddingBottom.
- * 규칙은 하나: 디자인 여백 + 실제 하단 inset. inset 0 환경(웹, 3버튼 내비로
- * 창이 내비 위에서 끝나는 경우)에서는 자동으로 디자인 여백만 남는다.
- * 하단 앵커 서피스는 insets를 손으로 조합하지 말고 반드시 이 훅을 쓸 것.
+ * The paddingBottom for a bottom-anchored surface: bottom sheets, fixed bars, and
+ * bottom button rows. One rule: design padding plus the real bottom inset. Where
+ * the inset is 0 (the web, or three-button navigation with the window stopping
+ * above the bar) only the design padding remains, automatically. Always use this
+ * hook for bottom-anchored surfaces instead of composing insets by hand.
  */
 export function useBottomSheetPadding(designPadding: number): number {
   return nativeBottomPadding(designPadding, useSafeAreaInsets().bottom);
 }
 
 /**
- * 별도 네이티브 윈도우(`<Modal>`) 안 하단 앵커 시트가 키보드에 가려지는 높이.
- * 시트 컨테이너의 paddingBottom으로 그대로 적용한다.
+ * How much of a bottom-anchored sheet inside a separate native window (`<Modal>`)
+ * the keyboard covers. Apply it directly as the sheet container's paddingBottom.
  *
- * KeyboardAvoidingView는 여기서 못 쓴다 — Android 엣지투엣지(+
- * statusBarTranslucent) Modal 윈도우는 키보드가 열려도 리사이즈되지 않고,
- * KAV의 프레임 계산도 이 윈도우에서 어긋나 "height"/"padding" 어느 behavior로도
- * 시트가 들리지 않는다(memorylog2 앨범 기록 업로드 시트에서 재현·확정).
- * 그래서 키보드 이벤트를 직접 구독한다.
+ * KeyboardAvoidingView cannot be used here. An Android edge-to-edge Modal window
+ * (with statusBarTranslucent) does not resize when the keyboard opens, and KAV's
+ * frame math is off inside that window as well, so neither the "height" nor the
+ * "padding" behavior lifts the sheet (reproduced and confirmed in the memorylog2
+ * album record upload sheet). Hence the direct subscription to keyboard events.
  *
- * Android 키보드 이벤트는 시스템 내비 inset 위에서 잰 IME 높이를 보고하는데
- * 엣지투엣지 Modal 윈도우는 내비 아래까지 내려가므로 insets.bottom을 더해야
- * 실제 가림 높이가 된다. iOS는 전체 가림 높이를 그대로 보고한다.
+ * Android keyboard events report the IME height measured above the system
+ * navigation inset, but an edge-to-edge Modal window extends below the navigation
+ * bar, so insets.bottom has to be added to get the real occlusion. iOS reports the
+ * full occlusion as is.
  */
 export function useModalKeyboardOverlap(): number {
   const insets = useSafeAreaInsets();

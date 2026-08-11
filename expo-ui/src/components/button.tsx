@@ -1,8 +1,9 @@
 /**
- * Button / IconButton — 설계 문서 §5.2, §5.3.
+ * Button / IconButton — design doc §5.2, §5.3.
  *
- * 치수는 metrics.control, 서체는 typography, 색은 colors, 라운드는 radius —
- * 스타일 시트에 디자인 리터럴 없음(token-guard 강제, §1 불변식 1).
+ * Dimensions come from metrics.control, type from typography, color from colors,
+ * and corners from radius — no design literal in the stylesheet (enforced by
+ * token-guard, §1 invariant 1).
  */
 import type { ReactElement, ReactNode } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text as RNText } from 'react-native';
@@ -14,7 +15,7 @@ import { renderIconSlot } from './icons';
 import type { RenderIcon } from './icons';
 import { useTheme } from './provider';
 
-/** 'dark' → 'inverse' 개명 — 다크 테마에서 "dark" 변형이 밝아지는 의미 역전 해소(§5.2). */
+/** Renamed from 'dark' to 'inverse' — resolves the inverted meaning of a "dark" variant getting lighter in the dark theme (§5.2). */
 export type ButtonVariant =
   | 'primary'
   | 'primary-outline'
@@ -31,7 +32,7 @@ type ButtonPalette = {
   textColor: string;
 };
 
-/** (내부) variant×disabled → 색 해석. 전신 buttonPalette 계승 — 전부 토큰 유래. */
+/** (internal) variant × disabled to resolved colors. Inherited from the predecessor's buttonPalette — all token-derived. */
 export function buttonPalette(variant: ButtonVariant, disabled: boolean, theme: Theme): ButtonPalette {
   if (disabled) {
     return {
@@ -73,8 +74,9 @@ export function buttonPalette(variant: ButtonVariant, disabled: boolean, theme: 
 }
 
 /**
- * (내부) 사이즈별 치수 — 전신 buttonSizes(36/44/52, fontSize 13/14/15)의 토큰화.
- * fontSize는 label(13)/button(14)/body(15) 롤에서, 굵기는 button 롤에서 온다.
+ * (internal) Per-size dimensions — the tokenized form of the predecessor's
+ * buttonSizes (36/44/52, fontSize 13/14/15). fontSize comes from the
+ * label(13)/button(14)/body(15) roles and the weight from the button role.
  */
 function buttonDimensions(theme: Theme, size: ButtonSize) {
   const fontSize = {
@@ -98,11 +100,11 @@ type ButtonOwnProps = {
   size?: ButtonSize | undefined;
   disabled?: boolean | undefined;
   loading?: boolean | undefined;
-  /** 정적 노드 또는 렌더 함수 — 전신 icon/renderIcon/iconColor 3종 통합(§5.2). */
+  /** A static node or a render function — unifies the predecessor's icon, renderIcon, and iconColor trio (§5.2). */
   icon?: ReactNode | RenderIcon | undefined;
-  /** 기본 metrics.icon.md. */
+  /** Defaults to metrics.icon.md. */
   iconSize?: number | undefined;
-  /** 고정 높이 버튼의 라벨 클리핑 방지. 기본 metrics.maxFontScale. */
+  /** Prevents label clipping in a fixed-height button. Defaults to metrics.maxFontScale. */
   maxFontSizeMultiplier?: number | undefined;
   accessibilityLabel?: string | undefined;
   labelStyle?: StyleProp<TextStyle> | undefined;
@@ -110,10 +112,12 @@ type ButtonOwnProps = {
 } & CommonProps;
 
 /**
- * label 또는 children 중 하나는 필수 — 내용 없는 버튼은 컴파일 에러(§6 ③).
- * children은 NonNullable — `children={maybeUndefined}`로 내용·a11y 라벨이 모두
- * 비는 우회를 좁힌다(적대적 리뷰 확정 발견). 빈 문자열 등 런타임 공백까지는
- * 타입으로 막을 수 없다(§6 ③ 경계). 아이콘 단독은 IconButton.
+ * Exactly one of label or children is required — a button with no content is a
+ * compile error (§6 ③). children is NonNullable, which narrows the
+ * `children={maybeUndefined}` workaround that would leave both the content and the
+ * a11y name empty (an adversarial-review finding). Runtime blanks such as an empty
+ * string are beyond what types can catch (§6 ③, boundary). For an icon alone, use
+ * IconButton.
  */
 export type ButtonProps = ButtonOwnProps &
   (
@@ -225,12 +229,12 @@ export function Button(props: ButtonProps): ReactElement {
 }
 
 export interface IconButtonProps {
-  /** 필수 — 아이콘 단독 버튼의 스크린리더 공백 방지(§6 ②). */
+  /** Required — prevents a screen reader blank on an icon-only button (§6 ②). */
   accessibilityLabel: string;
   icon: ReactNode | RenderIcon;
   onPress?: (() => void) | undefined;
   variant?: ButtonVariant | undefined;
-  /** 지름. 기본 40 — 마크 크기는 자동 산출(size × 0.48). */
+  /** The diameter. Defaults to 40 — the mark size is derived automatically (size × 0.48). */
   size?: number | undefined;
   disabled?: boolean | undefined;
   loading?: boolean | undefined;

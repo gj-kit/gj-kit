@@ -1,9 +1,10 @@
 /**
- * TextField / SearchField — 설계 문서 §5.4, §5.5.
+ * TextField / SearchField — design doc §5.4, §5.5.
  *
- * TextField의 `style?: never`는 의도된 차단 장치다 — 전신에서 style은 "입력
- * 스타일"이었으므로, 의미가 바뀐 채 조용히 이관되는 사고를 컴파일 에러로
- * 표면화한다(§0). 컨테이너는 containerStyle, 입력은 inputStyle.
+ * TextField's `style?: never` is a deliberate blocker. In the predecessor, style
+ * meant "input style", so this surfaces as a compile error any migration that
+ * would quietly carry the prop over with a changed meaning (§0). The container
+ * takes containerStyle and the input takes inputStyle.
  */
 import { useId } from 'react';
 import type { ReactElement, ReactNode } from 'react';
@@ -17,12 +18,12 @@ import { roleTextStyle } from './text';
 
 export interface TextFieldProps extends Omit<TextInputProps, 'style'> {
   label?: string | undefined;
-  /** 지정 시 보더/헬퍼가 danger 계열 — helperText보다 우선(§6 기각 표: 상호배제 강제 안 함). */
+  /** When set, the border and helper turn danger-toned and it takes precedence over helperText (§6 rejection table: mutual exclusion is not enforced). */
   error?: string | undefined;
   helperText?: string | undefined;
   counter?: string | undefined;
   labelAccessory?: ReactNode | undefined;
-  /** 구 라이브러리의 style(=입력 스타일) 의미 변경 차단 — containerStyle/inputStyle 사용(§5.4). */
+  /** Blocks the meaning change of the old library's style (which meant input style) — use containerStyle and inputStyle (§5.4). */
   style?: never;
   containerStyle?: StyleProp<ViewStyle> | undefined;
   inputStyle?: StyleProp<TextStyle> | undefined;
@@ -34,7 +35,7 @@ export interface TextFieldProps extends Omit<TextInputProps, 'style'> {
   labelClassName?: string | undefined;
   counterClassName?: string | undefined;
   helperClassName?: string | undefined;
-  /** React Native core 타입에 아직 없는 RNW 필드 관계를 좁게 지원한다. */
+  /** Narrowly supports the RNW field relationships that the React Native core types do not have yet. */
   'aria-describedby'?: string | undefined;
   'aria-errormessage'?: string | undefined;
   'aria-invalid'?: boolean | undefined;
@@ -43,7 +44,7 @@ export interface TextFieldProps extends Omit<TextInputProps, 'style'> {
   unstyled?: never;
 }
 
-/** 멀티라인 기본 높이 — 입력 2행 + 여백. 토큰에 대응 개념이 없어 상수로 명명(§3.8 예외). */
+/** The default multiline height — two rows of input plus padding. No token concept corresponds to it, so it is named as a constant (§3.8 exception). */
 const MULTILINE_MIN_HEIGHT_FACTOR = 2;
 
 function sanitizeId(value: string): string {
@@ -236,13 +237,13 @@ export interface SearchFieldProps
     TextInputProps,
     'value' | 'onChangeText' | 'onSubmitEditing' | 'autoFocus' | 'returnKeyType'
   > {
-  /** 기본 strings.searchPlaceholder(§4.1). */
+  /** Defaults to strings.searchPlaceholder (§4.1). */
   placeholder?: string | undefined;
-  /** 기본 icons.search 렌더(§4.2). */
+  /** Renders icons.search by default (§4.2). */
   leading?: ReactNode | undefined;
   inputStyle?: StyleProp<TextStyle> | undefined;
   inputClassName?: string | undefined;
-  /** 컨테이너(pill). */
+  /** The container (pill). */
   style?: StyleProp<ViewStyle> | undefined;
   className?: string | undefined;
   testID?: string | undefined;

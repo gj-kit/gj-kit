@@ -1,9 +1,10 @@
 /**
- * Text — 설계 문서 §5.1 (신규).
+ * Text — design doc §5.1 (new).
  *
- * typography 토큰의 직접 소비자. 전신엔 텍스트 프리미티브가 없어 앱이
- * `text-[13px] font-bold` 류를 수백 곳에 복제했다. RN Text를 가리는 이름은
- * 업계 관행(Paper/Tamagui) — 필요 시 `import { Text as RNText }`.
+ * The direct consumer of the typography tokens. The predecessor had no text
+ * primitive, so the app duplicated things like `text-[13px] font-bold` in hundreds
+ * of places. Shadowing RN's Text is industry practice (Paper, Tamagui) — reach for
+ * `import { Text as RNText }` when you need the original.
  */
 import type { ReactElement } from 'react';
 import { Text as RNText } from 'react-native';
@@ -14,16 +15,16 @@ import { useTheme } from './provider';
 
 // RN Text의 aria `role` prop을 가린다 — 접근성 롤은 accessibilityRole로 지정.
 export interface TextProps extends Omit<RNTextProps, 'style' | 'role'> {
-  /** 기본 'body' — fontSize/lineHeight/fontWeight/fontFamily 전부 토큰이 결정. */
+  /** Defaults to 'body' — fontSize, lineHeight, fontWeight, and fontFamily are all decided by tokens. */
   role?: TextRole | undefined;
-  /** 닫힌 유니언 — 오타는 컴파일 에러, raw 색은 style 탈출구로(§0). 기본 'text'. */
+  /** A closed union — typos are compile errors and raw colors go through the style escape hatch (§0). Defaults to 'text'. */
   color?: ColorKey | undefined;
   style?: StyleProp<TextStyle> | undefined;
   className?: string | undefined;
   unstyled?: never;
 }
 
-/** (내부) role → 토큰 텍스트 스타일. Text 밖(Button 라벨 등)에서도 재사용. */
+/** (internal) Role to token text style. Reused outside Text as well, e.g. for a Button label. */
 export function roleTextStyle(theme: Theme, role: TextRole): TextStyle {
   const spec = theme.typography[role];
   return {

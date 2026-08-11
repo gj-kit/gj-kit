@@ -58,7 +58,7 @@ export type SelectProps<T extends string> = Omit<CommonProps, 'unstyled'> &
       open: boolean,
       details: SelectOpenChangeDetails<NoInfer<T>>,
     ) => void;
-    /** value가 null일 때 trigger에 표시한다. */
+    /** Shown on the trigger when value is null. */
     readonly placeholder: string;
     readonly description?: string | undefined;
     readonly error?: string | undefined;
@@ -72,9 +72,9 @@ export type SelectProps<T extends string> = Omit<CommonProps, 'unstyled'> &
     readonly alignOffset?: number | undefined;
     readonly collisionPadding?: number | undefined;
     readonly presentation?: SelectPresentation | undefined;
-    /** native bottom presentation에서 호출자가 합성한 safe-area inset. */
+    /** Safe-area inset composed by the caller for a native bottom presentation. */
     readonly bottomInset?: number | undefined;
-    /** native Modal 안에서 계산한 키보드 가림 높이. 0보다 크면 bottomInset보다 우선한다. */
+    /** Keyboard occlusion height measured inside a native Modal. Takes precedence over bottomInset when greater than 0. */
     readonly keyboardOverlap?: number | undefined;
     readonly size?: SelectSize | undefined;
     readonly leading?: ReactNode | RenderIcon | undefined;

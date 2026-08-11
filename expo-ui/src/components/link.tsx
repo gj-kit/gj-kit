@@ -1,8 +1,10 @@
 /**
- * Link — 문서/화면 이동을 버튼 액션과 구분하는 텍스트 프리미티브.
+ * Link — the text primitive that separates document and screen navigation from a
+ * button action.
  *
- * href 분기는 웹에서 실제 <a>를 렌더하고 네이티브에서는 Linking을 사용한다.
- * 라우터가 소유하는 onPress 분기는 link 역할과 Enter 전용 키보드 동작을 제공한다.
+ * The href branch renders a real <a> on the web and uses Linking on native. The
+ * router-owned onPress branch provides the link role and Enter-only keyboard
+ * behavior.
  */
 import type { ReactElement } from 'react';
 import { Linking, Platform, Text as RNText } from 'react-native';
@@ -17,9 +19,9 @@ export type LinkTarget = '_self' | '_blank';
 
 type LinkBaseProps = {
   children: string;
-  /** 기본 'primary'. */
+  /** Defaults to 'primary'. */
   variant?: LinkVariant | undefined;
-  /** 기본 true. */
+  /** Defaults to true. */
   underline?: boolean | undefined;
   accessibilityLabel?: string | undefined;
   style?: StyleProp<TextStyle> | undefined;
@@ -32,7 +34,7 @@ export type DestinationLinkProps = LinkBaseProps & {
   href: string;
   target?: LinkTarget | undefined;
   rel?: string | undefined;
-  /** 네이티브에서 Linking.openURL이 실패했을 때 호출한다. */
+  /** Called when Linking.openURL fails on native. */
   onOpenError?: ((error: unknown) => void) | undefined;
   onPress?: never;
 };
@@ -80,7 +82,7 @@ function linkColor(theme: Theme, variant: LinkVariant): string {
   }
 }
 
-/** _blank는 소비자가 rel을 지정해도 opener·referrer 격리를 항상 보존한다. */
+/** _blank always preserves opener and referrer isolation, even when the consumer specifies rel. */
 function resolveRel(target: LinkTarget | undefined, rel: string | undefined): string | undefined {
   if (target !== '_blank') return rel;
 

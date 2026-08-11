@@ -59,13 +59,13 @@ export interface ActionSheetProps<T extends string> extends Omit<CommonProps, 'u
   /** Dynamic arrays may be empty; the safe cancel action still renders. */
   items: readonly ActionSheetItem<T>[];
   onDismiss: (details: ActionSheetDismissDetails<NoInfer<T>>) => void;
-  /** 기본 strings.cancel. */
+  /** Defaults to strings.cancel. */
   cancelLabel?: string | undefined;
   presentation?: ActionSheetPresentation | undefined;
   animationType?: NonNullable<ModalProps['animationType']> | undefined;
   dismissOnBackdrop?: boolean | undefined;
   dismissDisabled?: boolean | undefined;
-  /** Async transition 동안 모든 action과 dismissal을 막고 busy state를 노출한다. */
+  /** Blocks every action and dismissal during an async transition and exposes the busy state. */
   busy?: boolean | undefined;
   bottomInset?: number | undefined;
   keyboardOverlap?: number | undefined;

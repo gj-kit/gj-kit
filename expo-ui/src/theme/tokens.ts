@@ -1,16 +1,18 @@
 /**
- * 토큰 타입 — 설계 문서 §3.2.
+ * The token types — design doc §3.2.
  *
- * 이 폴더(src/theme)는 react·react-native를 import하지 않는다(entry-guard 테스트가
- * 강제). tailwind.config(Node 평가)와 비-React 코드가 안전하게 로드하기 위함이다.
+ * This folder (src/theme) imports neither react nor react-native (an entry-guard
+ * test enforces it), so that tailwind.config (evaluated by Node) and other
+ * non-React code can load it safely.
  */
 import type { Brand } from './brand';
 
 export type ColorScheme = 'light' | 'dark';
 
 /**
- * 색상 롤 — 기본 표면/브랜드에 상태별 strong·soft·on-color 쌍을 더한 31롤.
- * 상태 컴포넌트가 raw 색이나 다른 의미의 토큰(onPrimary 등)을 빌리지 않게 한다.
+ * The color roles — 31 of them: the base surface and brand roles plus a strong,
+ * soft, and on-color trio per status. They keep status components from borrowing a
+ * raw color or a token that means something else (onPrimary and friends).
  */
 export interface ThemeColors {
   readonly background: string;
@@ -19,9 +21,9 @@ export interface ThemeColors {
   readonly text: string;
   readonly textMuted: string;
   readonly textSubtle: string;
-  /** 언더라인 탭의 활성 라벨·인디케이터 색. */
+  /** The active label and indicator color of an underline tab. */
   readonly tabActive: string;
-  /** 언더라인 탭의 비활성 라벨 색. */
+  /** The inactive label color of an underline tab. */
   readonly tabInactive: string;
   readonly line: string;
   readonly primary: string;
@@ -46,8 +48,9 @@ export interface ThemeColors {
   readonly onInfo: string;
   readonly overlay: string;
   /**
-   * 모든 그림자의 색 — §0 채택 맵. 전신은 그림자색을 colors.text로 유용해
-   * 다크 테마에서 밝은 그림자가 지는 구조적 결함이 있었다.
+   * The color of every shadow — the map adopted in §0. The predecessor borrowed
+   * colors.text for shadows, a structural defect that produced light shadows in
+   * the dark theme.
    */
   readonly shadow: string;
 }
@@ -72,8 +75,9 @@ export interface ThemeRadius {
 }
 
 /**
- * 전신 typography는 fontSize 숫자뿐이라 weight·lineHeight가 컴포넌트에
- * 하드코딩됐다 — 롤당 완전한 텍스트 스타일로 확장한다(§3.2).
+ * The predecessor's typography was only a fontSize number, so weight and
+ * lineHeight were hardcoded in components — this expands it into a complete text
+ * style per role (§3.2).
  */
 export type FontWeight = '400' | '500' | '600' | '700' | '800';
 
@@ -91,25 +95,27 @@ export interface ThemeTypography {
   readonly title: TypeRole;
   readonly heading: TypeRole;
   /**
-   * 내비게이션 탭 라벨(underline Tabs) 전용 롤 — 전신의 16px/'600'은 다른 어떤
-   * 롤과도 일치하지 않아 롤로 승격했다(적대적 리뷰 확정 발견 반영). 탭 전용
-   * 색 토큰(tabActive/tabInactive)을 유지한 §0 결정과 같은 원리.
+   * The role reserved for navigation tab labels in underline Tabs. The 16px/'600'
+   * pair inherited from the predecessor matches no other role, so it was promoted
+   * to a role of its own (an adversarial-review finding). Same principle as the
+   * §0 decision to keep tab-only color tokens (tabActive/tabInactive).
    */
   readonly tab: TypeRole;
-  /** 앱 커스텀 폰트 패밀리. 미지정 시 시스템 폰트. */
+  /** The app's custom font family. Falls back to the system font when omitted. */
   readonly fontFamily?: string | undefined;
 }
 
 /**
- * 전신 elevation은 Android elevation 숫자뿐이라 iOS shadow 4속성이 컴포넌트에
- * 흩어져 있었다 — 플랫폼 완전한 그림자 스펙으로 확장한다(§3.2).
+ * The predecessor's elevation was only an Android elevation number, so the four
+ * iOS shadow properties were scattered across components — this expands it into a
+ * platform-complete shadow spec (§3.2).
  */
 export interface ElevationLevel {
   /** Android elevation. */
   readonly elevation: number;
   readonly shadowOpacity: number;
   readonly shadowRadius: number;
-  /** shadowOffset.height — width는 0 고정. */
+  /** shadowOffset.height — width is fixed at 0. */
   readonly shadowOffsetY: number;
 }
 
@@ -121,9 +127,10 @@ export interface ThemeElevation {
 }
 
 /**
- * 컴포넌트 치수 토큰 — §0 채택 맵(A). 전신의 buttonSizes(36/44/52), input
- * minHeight 48, 아이콘 크기, EMPTY_STATE_MAX_FONT_SIZE_MULTIPLIER 상수가
- * 모듈 리터럴로 흩어져 있던 것을 토큰으로 수렴한다.
+ * Component dimension tokens — the map adopted in §0 (A). It converges what used to
+ * be scattered module literals: the predecessor's buttonSizes (36/44/52), the input
+ * minHeight of 48, the icon sizes, and the
+ * EMPTY_STATE_MAX_FONT_SIZE_MULTIPLIER constant.
  */
 export interface ThemeMetrics {
   readonly control: { readonly sm: number; readonly md: number; readonly lg: number };
@@ -147,22 +154,23 @@ export interface ThemeTokens {
   readonly breakpoints: ThemeBreakpoints;
 }
 
-/** 해석 완료된 단일 스킴 테마. 브랜드 — createTheme 경유로만 존재(§3.3). 깊은 동결. */
+/** A resolved single-scheme theme. Branded — it exists only through createTheme (§3.3). Deeply frozen. */
 export interface Theme extends ThemeTokens, Brand<'Theme'> {
   readonly scheme: ColorScheme;
 }
 
-/** 라이트/다크 쌍 — 양 스킴 완전성을 타입이 보장한다(§3.3). createThemes 경유로만 존재. */
+/** A light/dark pair — the type guarantees both schemes are complete (§3.3). It exists only through createThemes. */
 export interface ThemePair extends Brand<'ThemePair'> {
   readonly light: Theme;
   readonly dark: Theme;
 }
 
 /**
- * 2단 부분 오버라이드(그룹→키). typography role은 TypeRole 통째 교체 —
- * 3단 DeepPartial은 병합 규칙 암기 비용이 이득을 넘어 기각됐다(§11).
- * 키 레벨도 `| undefined` — EOP 소비자가 조건부로 오버라이드를 조립할 수 있다
- * (undefined 값은 병합에서 스킵된다).
+ * Two-level partial overrides (group then key). A typography role is replaced
+ * whole as a TypeRole — three-level DeepPartial was rejected because the cost of
+ * memorizing the merge rules outweighed the benefit (§11).
+ * Key level is `| undefined` as well, so an EOP consumer can assemble overrides
+ * conditionally (undefined values are skipped during the merge).
  */
 export type ThemeOverrides = {
   readonly [G in keyof ThemeTokens]?:

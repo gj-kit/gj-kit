@@ -28,8 +28,9 @@ const EMPTY_SNAPSHOT: OverlayPortalSnapshot = Object.freeze({
 });
 
 /**
- * Provider 인스턴스마다 하나씩 만드는 portal registry.
- * 모듈 전역 상태가 아니므로 여러 앱 root·중첩 native Modal scope가 서로 격리된다.
+ * A portal registry created once per Provider instance.
+ * It is not module-global state, so multiple app roots and nested native Modal
+ * scopes stay isolated from one another.
  */
 export function createOverlayPortalStore(): OverlayPortalStore {
   const listeners = new Set<() => void>();

@@ -1,4 +1,4 @@
-/** Card — 관련 콘텐츠를 하나의 표면으로 묶는 정적 컨테이너. */
+/** Card — a static container that groups related content onto one surface. */
 import type { ReactElement, ReactNode } from 'react';
 import { StyleSheet, View } from 'react-native';
 import type { StyleProp, ViewStyle } from 'react-native';
@@ -16,13 +16,13 @@ export type CardVariant = 'outlined' | 'elevated' | 'filled';
 
 export type CardProps = Omit<CommonProps, 'unstyled'> & {
   children: NonNullable<ReactNode>;
-  /** 기본 'outlined'. */
+  /** Defaults to 'outlined'. */
   variant?: CardVariant | undefined;
-  /** 기본 'lg'. 숫자는 실측 탈출구. */
+  /** Defaults to 'lg'. Numbers are the escape hatch for measured values. */
   padding?: SpacingKey | number | undefined;
-  /** 기본 'md'. */
+  /** Defaults to 'md'. */
   radius?: RadiusKey | undefined;
-  /** 자식 정렬과 간격처럼 내부 콘텐츠 레이아웃에 적용한다. */
+  /** Applies to the inner content layout, such as child alignment and spacing. */
   contentStyle?: StyleProp<ViewStyle> | undefined;
   unstyled?: never;
 };

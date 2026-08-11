@@ -1,45 +1,46 @@
 /**
- * 문구 주입 체계 — 설계 문서 §4.1.
+ * The string injection system — design doc §4.1.
  *
- * 우선순위: 개별 prop > Provider strings > 내장 en.
- * Partial<UiStrings>는 의도적으로 받지 않는다 — 라이브러리가 키를 추가하면
- * 손조립 번들 소비자에게 컴파일 에러로 표면화된다(누락 키가 조용히 영어로
- * 새는 것 방지). 커스텀은 `{ ...koStrings, retry: '다시 시도' }` 스프레드로.
+ * Precedence: an individual prop, then Provider strings, then the built-in en.
+ * Partial<UiStrings> is deliberately not accepted — when the library adds a key,
+ * consumers of a hand-assembled bundle see a compile error instead of a missing
+ * key quietly leaking through in English. Customize by spreading:
+ * `{ ...koStrings, retry: '다시 시도' }`.
  */
 export interface UiStrings {
-  /** Skeleton 접근성 라벨. */
+  /** The Skeleton accessibility label. */
   readonly loading: string;
-  /** EmptyState 기본 제목. */
+  /** The default EmptyState title. */
   readonly emptyTitle: string;
-  /** ErrorState 기본 제목. */
+  /** The default ErrorState title. */
   readonly errorTitle: string;
-  /** ErrorState 기본 본문. */
+  /** The default ErrorState body. */
   readonly errorBody: string;
-  /** ErrorState 재시도 버튼. */
+  /** The ErrorState retry button. */
   readonly retry: string;
-  /** SelectAllRow 미선택 라벨. */
+  /** The SelectAllRow unselected label. */
   readonly selectAll: string;
-  /** SelectAllRow 선택 해제 라벨. */
+  /** The SelectAllRow deselect label. */
   readonly deselectAll: string;
-  /** ConfirmActionRow 취소. */
+  /** ConfirmActionRow cancel. */
   readonly cancel: string;
-  /** ConfirmActionRow 확인. */
+  /** ConfirmActionRow confirm. */
   readonly confirm: string;
-  /** Dialog 백드롭 접근성 라벨. */
+  /** The Dialog backdrop accessibility label. */
   readonly close: string;
-  /** SearchField 기본 플레이스홀더. */
+  /** The default SearchField placeholder. */
   readonly searchPlaceholder: string;
-  /** Combobox 검색 결과 없음 상태. */
+  /** The combobox no-results state. */
   readonly noResults: string;
-  /** DataTable compact sort control의 오름차순 상태. */
+  /** The ascending state of the DataTable compact sort control. */
   readonly sortAscending: string;
-  /** DataTable compact sort control의 내림차순 상태. */
+  /** The descending state of the DataTable compact sort control. */
   readonly sortDescending: string;
-  /** DataTable compact sort control의 미정렬 상태. */
+  /** The unsorted state of the DataTable compact sort control. */
   readonly sortUnsorted: string;
-  /** Pagination 이전 이동 control. */
+  /** The Pagination previous control. */
   readonly previousPage: string;
-  /** Pagination 다음 이동 control. */
+  /** The Pagination next control. */
   readonly nextPage: string;
 }
 

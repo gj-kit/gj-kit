@@ -1,9 +1,10 @@
 /**
- * 테마 생성 — 설계 문서 §3.3.
+ * Theme creation — design doc §3.3.
  *
- * Theme/ThemePair 브랜드 부여의 유일한 경로. 부분 오버라이드(2단) → 깊은 병합 →
- * 깊은 동결 → 브랜드 각인. 동결로 정체성이 안정되므로 컴포넌트의
- * WeakMap 스타일 캐시(§3.5)가 성립한다.
+ * The only path that imprints the Theme/ThemePair brand. Two-level partial
+ * overrides, then a deep merge, then a deep freeze, then the brand imprint.
+ * Freezing keeps identity stable, which is what makes the components' WeakMap
+ * style cache (§3.5) work.
  */
 import { stamp } from './brand';
 import {
@@ -40,7 +41,7 @@ function baseTokens(scheme: ColorScheme): ThemeTokens {
   };
 }
 
-/** (내부) 2단 병합 — 그룹 내 키만 덮고, undefined 값은 건너뛴다(EOP 대응). */
+/** (internal) The two-level merge — overwrites keys within a group and skips undefined values (for EOP). */
 function mergeTokens(base: ThemeTokens, overrides?: ThemeOverrides): ThemeTokens {
   if (!overrides) return base;
   const next: Record<string, unknown> = { ...base };
@@ -59,9 +60,11 @@ function mergeTokens(base: ThemeTokens, overrides?: ThemeOverrides): ThemeTokens
 }
 
 /**
- * 부분 오버라이드로 새 Theme 생성. base의 모든 키가 채워진 완전한 테마가 보장된다.
+ * Creates a new Theme from partial overrides. Every key of base is guaranteed to
+ * be filled, so the result is a complete theme.
  *
- * Theme 하나를 base로 주면 그 테마 위에 오버라이드를 얹는다(파생 테마).
+ * Passing a single Theme as base layers the overrides on top of that theme,
+ * producing a derived theme.
  */
 export function createTheme(base: ColorScheme | Theme, overrides?: ThemeOverrides): Theme {
   const scheme = typeof base === 'string' ? base : base.scheme;
@@ -71,8 +74,9 @@ export function createTheme(base: ColorScheme | Theme, overrides?: ThemeOverride
 }
 
 /**
- * "브랜드 컬러를 양 모드에 한 번에" — shared → 스킴별 순으로 병합한 쌍 생성.
- * 라이트만 오버라이드해도 다크는 기본 다크 팔레트를 유지한다(자동 유도하지 않는다 — 명시적 원칙).
+ * "Brand colors for both schemes at once" — builds a pair by merging shared
+ * overrides first, then per-scheme ones. Overriding only light leaves dark on the
+ * default dark palette; nothing is derived automatically, by explicit principle.
  */
 export function createThemes(input?: {
   readonly shared?: ThemeOverrides | undefined;
@@ -84,16 +88,16 @@ export function createThemes(input?: {
   return stamp<ThemePair>(deepFreeze({ light, dark }));
 }
 
-/** 내장 라이트 테마 — 값은 전신 tokens.json 계승(§3.6). */
+/** The built-in light theme — values inherited from the predecessor's tokens.json (§3.6). */
 export const lightTheme: Theme = createTheme('light');
 
-/** 내장 다크 테마 — §3.6 제안 팔레트. */
+/** The built-in dark theme — the palette proposed in §3.6. */
 export const darkTheme: Theme = createTheme('dark');
 
-/** createThemes() 무인자 결과 — 내장 쌍. */
+/** The result of calling createThemes() with no arguments — the built-in pair. */
 export const defaultThemes: ThemePair = createThemes();
 
-/** (내부) Theme/ThemePair 판별 — Provider가 사용. */
+/** (internal) Discriminates Theme from ThemePair — used by the Provider. */
 export function isThemePair(value: Theme | ThemePair): value is ThemePair {
   return 'light' in value && 'dark' in value;
 }

@@ -82,6 +82,7 @@ import {
   publishedPackageVersion,
 } from '../src/seo-content';
 import { useHydratedWindowWidth } from '../src/responsive';
+import { BREAKPOINTS } from '../src/breakpoints';
 import { LinkPressable } from '../src/site-link';
 import { useLocale } from '../src/locale';
 import { landingStrings } from '../src/landing-strings';
@@ -253,8 +254,8 @@ function Landing({
   const theme = useTheme();
   const t = landingStrings(useLocale().locale);
   const width = useHydratedWindowWidth();
-  const desktop = width >= 960;
-  const compact = width < 680;
+  const desktop = width >= BREAKPOINTS.desktop;
+  const compact = width < BREAKPOINTS.tablet;
   const [heroTab, setHeroTab] = useState<'today' | 'week'>('today');
   const [heroSelected, setHeroSelected] = useState(true);
   const [category, setCategory] = useState<DemoCategory>('actions');
@@ -1819,7 +1820,7 @@ function SectionShell({ children }: { children: ReactNode }): ReactElement {
     <ContentFrame
       maxWidth={1180}
       center
-      padding={width < 680 ? 20 : 28}
+      padding={width < BREAKPOINTS.tablet ? 20 : 28}
       style={styles.sectionShell}
     >
       {children}

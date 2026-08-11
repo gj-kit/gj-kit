@@ -14,6 +14,7 @@ import { ContentFrame, Surface, Text, UiProvider, enStrings, koStrings, useTheme
 import type { ColorScheme } from '@gj-kit/expo-ui';
 import { BrandMark, CHANGELOG_URL, ISSUES_URL, LICENSE_URL, REPO_URL, siteIcons, siteThemes } from './site-theme';
 import { useHydratedWindowWidth } from './responsive';
+import { BREAKPOINTS } from './breakpoints';
 import { componentSeoEntries } from './seo-content';
 import { SITE_NAV_LINKS } from './site-nav';
 import { useDocumentChrome, useSiteColorScheme } from './use-site-color-scheme';
@@ -139,7 +140,7 @@ function SeoPageFrame({
 }): ReactElement {
   const theme = useTheme();
   const width = useHydratedWindowWidth();
-  const compactHeader = width < 760;
+  const compactHeader = width < BREAKPOINTS.tablet;
   const pathname = usePathname();
   const { locale, toggleLocale } = useLocale();
   const t = siteStrings(locale);
@@ -382,7 +383,7 @@ export function SeoPageHeading({
 }): ReactElement {
   const theme = useTheme();
   const width = useHydratedWindowWidth();
-  const compact = width < 600;
+  const compact = width < BREAKPOINTS.phone;
   return (
     <View style={[styles.hero, compact ? styles.heroCompact : null]}>
       <View style={styles.eyebrowRow}>

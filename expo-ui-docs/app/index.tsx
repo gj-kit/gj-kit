@@ -114,6 +114,11 @@ const SOURCE_COMPONENT_COUNT = componentSeoEntries.length;
 const RELEASED_COMPONENT_COUNT = componentSeoEntries.filter(isReleasedComponent).length;
 const PREVIEW_COMPONENT_COUNT = SOURCE_COMPONENT_COUNT - RELEASED_COMPONENT_COUNT;
 
+// 미리보기가 0이면 "· 0 preview"는 정보가 아니라 잡음이다.
+const RELEASE_BADGE =
+  `npm v${publishedPackageVersion} · ${RELEASED_COMPONENT_COUNT} stable` +
+  (PREVIEW_COMPONENT_COUNT > 0 ? ` · ${PREVIEW_COMPONENT_COUNT} preview` : '');
+
 function footerLinks(t: LandingStrings): readonly { label: string; href: string }[] {
   return [
     { label: t.footerHome, href: '/' },
@@ -517,7 +522,7 @@ function Hero({
               ]}
             >
               <View style={[styles.releaseDot, { backgroundColor: '#9FF5D1' }]} />
-              <RNText style={[styles.releaseText, { color: theme.colors.textMuted }]}>npm v{publishedPackageVersion} · {RELEASED_COMPONENT_COUNT} stable · {PREVIEW_COMPONENT_COUNT} preview</RNText>
+              <RNText style={[styles.releaseText, { color: theme.colors.textMuted }]}>{RELEASE_BADGE}</RNText>
               <RNText style={[styles.releaseArrow, { color: theme.colors.primary }]}>↗</RNText>
             </View>
 

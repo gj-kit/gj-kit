@@ -12,16 +12,26 @@
   <url><loc>https://gj-kit-expo-ui.expo.app/docs/components/text</loc></url>
   <url><loc>https://gj-kit-expo-ui.expo.app/docs/components/button</loc></url>
   <url><loc>https://gj-kit-expo-ui.expo.app/docs/components/icon-button</loc></url>
+  <url><loc>https://gj-kit-expo-ui.expo.app/docs/components/chip</loc></url>
+  <url><loc>https://gj-kit-expo-ui.expo.app/docs/components/floating-action-button</loc></url>
   <url><loc>https://gj-kit-expo-ui.expo.app/docs/components/text-field</loc></url>
   <url><loc>https://gj-kit-expo-ui.expo.app/docs/components/search-field</loc></url>
+  <url><loc>https://gj-kit-expo-ui.expo.app/docs/components/form-field</loc></url>
+  <url><loc>https://gj-kit-expo-ui.expo.app/docs/components/select</loc></url>
   <url><loc>https://gj-kit-expo-ui.expo.app/docs/components/tabs</loc></url>
+  <url><loc>https://gj-kit-expo-ui.expo.app/docs/components/link</loc></url>
+  <url><loc>https://gj-kit-expo-ui.expo.app/docs/components/collapsible</loc></url>
   <url><loc>https://gj-kit-expo-ui.expo.app/docs/components/selection-indicator</loc></url>
   <url><loc>https://gj-kit-expo-ui.expo.app/docs/components/selectable-row</loc></url>
   <url><loc>https://gj-kit-expo-ui.expo.app/docs/components/select-all-row</loc></url>
   <url><loc>https://gj-kit-expo-ui.expo.app/docs/components/checkbox</loc></url>
   <url><loc>https://gj-kit-expo-ui.expo.app/docs/components/switch</loc></url>
   <url><loc>https://gj-kit-expo-ui.expo.app/docs/components/radio-group</loc></url>
+  <url><loc>https://gj-kit-expo-ui.expo.app/docs/components/slider</loc></url>
+  <url><loc>https://gj-kit-expo-ui.expo.app/docs/components/toggle-group</loc></url>
   <url><loc>https://gj-kit-expo-ui.expo.app/docs/components/surface</loc></url>
+  <url><loc>https://gj-kit-expo-ui.expo.app/docs/components/card</loc></url>
+  <url><loc>https://gj-kit-expo-ui.expo.app/docs/components/aspect-ratio</loc></url>
   <url><loc>https://gj-kit-expo-ui.expo.app/docs/components/content-frame</loc></url>
   <url><loc>https://gj-kit-expo-ui.expo.app/docs/components/section</loc></url>
   <url><loc>https://gj-kit-expo-ui.expo.app/docs/components/sticky-action-bar</loc></url>
@@ -29,6 +39,7 @@
   <url><loc>https://gj-kit-expo-ui.expo.app/docs/components/empty-state</loc></url>
   <url><loc>https://gj-kit-expo-ui.expo.app/docs/components/error-state</loc></url>
   <url><loc>https://gj-kit-expo-ui.expo.app/docs/components/toast</loc></url>
+  <url><loc>https://gj-kit-expo-ui.expo.app/docs/components/toast-viewport</loc></url>
   <url><loc>https://gj-kit-expo-ui.expo.app/docs/components/badge</loc></url>
   <url><loc>https://gj-kit-expo-ui.expo.app/docs/components/alert</loc></url>
   <url><loc>https://gj-kit-expo-ui.expo.app/docs/components/spinner</loc></url>
@@ -36,8 +47,15 @@
   <url><loc>https://gj-kit-expo-ui.expo.app/docs/components/avatar</loc></url>
   <url><loc>https://gj-kit-expo-ui.expo.app/docs/components/divider</loc></url>
   <url><loc>https://gj-kit-expo-ui.expo.app/docs/components/list-item</loc></url>
+  <url><loc>https://gj-kit-expo-ui.expo.app/docs/components/data-table</loc></url>
+  <url><loc>https://gj-kit-expo-ui.expo.app/docs/components/pagination</loc></url>
   <url><loc>https://gj-kit-expo-ui.expo.app/docs/components/accordion</loc></url>
   <url><loc>https://gj-kit-expo-ui.expo.app/docs/components/dialog</loc></url>
   <url><loc>https://gj-kit-expo-ui.expo.app/docs/components/dialog-panel</loc></url>
+  <url><loc>https://gj-kit-expo-ui.expo.app/docs/components/action-sheet</loc></url>
+  <url><loc>https://gj-kit-expo-ui.expo.app/docs/components/sheet</loc></url>
+  <url><loc>https://gj-kit-expo-ui.expo.app/docs/components/popover</loc></url>
+  <url><loc>https://gj-kit-expo-ui.expo.app/docs/components/tooltip</loc></url>
+  <url><loc>https://gj-kit-expo-ui.expo.app/docs/components/menu</loc></url>
   <url><loc>https://gj-kit-expo-ui.expo.app/docs/components/confirm-action-row</loc></url>
 </urlset>

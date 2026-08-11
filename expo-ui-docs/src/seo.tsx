@@ -9,6 +9,8 @@ export const SITE_URL = 'https://gj-kit-expo-ui.expo.app';
 export const SITE_NAME = 'GJ Kit Expo UI';
 export const PACKAGE_NAME = '@gj-kit/expo-ui';
 export const NPM_URL = 'https://www.npmjs.com/package/@gj-kit/expo-ui';
+// scripts/generate-og.mjs가 굽는 1200x630 카드. 값이 실제 파일과 어긋나면
+// 크롤러가 잘못된 비율로 자른다.
 export const OG_IMAGE_URL = `${SITE_URL}/og.png`;
 
 type JsonLd = Readonly<Record<string, unknown>>;
@@ -104,8 +106,8 @@ export function SeoHead({
       <meta property="og:image" content={OG_IMAGE_URL} />
       <meta property="og:image:secure_url" content={OG_IMAGE_URL} />
       <meta property="og:image:type" content="image/png" />
-      <meta property="og:image:width" content="1659" />
-      <meta property="og:image:height" content="948" />
+      <meta property="og:image:width" content="1200" />
+      <meta property="og:image:height" content="630" />
       <meta property="og:image:alt" content={alt} />
 
       <meta name="twitter:card" content="summary_large_image" />

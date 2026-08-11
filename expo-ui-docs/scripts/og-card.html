@@ -1,0 +1,159 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>og card</title>
+<style>
+  /*
+   * 소셜 공유 카드의 원본. scripts/generate-og.mjs가 이 파일을 1200x630으로
+   * 렌더해 public/og.png를 만든다. 색은 src/site-theme.tsx의 다크 팔레트를
+   * 그대로 쓴다 — 카드와 실제 사이트가 어긋나면 클릭 후 인상이 깨진다.
+   */
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { width: 1200px; height: 630px; }
+  body {
+    background: #0C0D14;
+    color: #F5F5FA;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    display: flex;
+    overflow: hidden;
+    position: relative;
+  }
+  .glow {
+    position: absolute;
+    width: 720px; height: 720px;
+    right: -220px; top: -300px;
+    border-radius: 50%;
+    background: #292548;
+    opacity: 0.55;
+  }
+  .copy {
+    position: relative;
+    padding: 72px 0 72px 76px;
+    width: 620px;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+  }
+  .brand { display: flex; align-items: center; gap: 14px; margin-bottom: 34px; }
+  .mark {
+    width: 56px; height: 56px; border-radius: 16px;
+    background: #8B82FF;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 34px; font-weight: 800; color: #0C0D14;
+    line-height: 1;
+  }
+  .pkg {
+    font-family: "SFMono-Regular", Consolas, Menlo, monospace;
+    font-size: 25px; font-weight: 600; letter-spacing: -0.5px; color: #F5F5FA;
+  }
+  h1 {
+    font-size: 64px; line-height: 1.08; letter-spacing: -2.4px; font-weight: 800;
+  }
+  h1 .accent { color: #8B82FF; }
+  .sub {
+    margin-top: 26px; font-size: 23px; line-height: 1.45; color: #A5A6B8; max-width: 500px;
+  }
+  .meta { margin-top: 40px; display: flex; align-items: center; gap: 12px; }
+  .pill {
+    border: 1px solid #2A2C3B; border-radius: 999px;
+    padding: 9px 17px; font-size: 16px; font-weight: 700; color: #C9CAD8;
+  }
+  .pill.on { border-color: #52C69E; color: #52C69E; }
+
+  /* 오른쪽 프리뷰 — 라이브러리의 실제 시각 언어를 단순화한 것. 평면 색만 써서
+     PNG 압축이 잘 되게 한다(그라디언트는 밴딩 없이 줄이기 어렵다). */
+  .stage { position: relative; flex: 1; display: flex; align-items: center; }
+  .phone {
+    position: absolute; left: 20px; top: 74px;
+    width: 452px; height: 482px;
+    background: #151722; border: 1px solid #2A2C3B; border-radius: 30px;
+    padding: 28px; display: flex; flex-direction: column; gap: 17px;
+  }
+  .row { display: flex; align-items: center; gap: 13px; }
+  .avatar { width: 46px; height: 46px; border-radius: 999px; background: #8B82FF; }
+  .bar { height: 13px; border-radius: 999px; background: #2A2C3B; }
+  .card {
+    background: #1C1F2E; border-radius: 18px; padding: 19px; display: flex;
+    flex-direction: column; gap: 13px;
+  }
+  .check {
+    width: 30px; height: 30px; border-radius: 999px; background: #8B82FF;
+    display: flex; align-items: center; justify-content: center;
+    color: #0C0D14; font-size: 17px; font-weight: 800; line-height: 1;
+  }
+  .ring {
+    width: 30px; height: 30px; border-radius: 999px; border: 2px solid #3A3D50;
+  }
+  .cta {
+    height: 54px; border-radius: 15px; background: #8B82FF; color: #0C0D14;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 19px; font-weight: 800;
+  }
+  .ghost {
+    height: 54px; border-radius: 15px; border: 1.5px solid #8B82FF; color: #8B82FF;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 19px; font-weight: 800;
+  }
+  .pair { display: flex; gap: 13px; }
+  .pair > * { flex: 1; }
+</style>
+</head>
+<body>
+  <div class="glow"></div>
+
+  <div class="copy">
+    <div class="brand">
+      <div class="mark">g</div>
+      <div class="pkg">@gj-kit/expo-ui</div>
+    </div>
+    <h1>Expo &amp; React&nbsp;Native UI,<br /><span class="accent">hard to get wrong.</span></h1>
+    <p class="sub">Theme tokens and accessibility contracts, in the TypeScript API.</p>
+    <div class="meta">
+      <div class="pill">49 components</div>
+      <div class="pill">MIT</div>
+      <div class="pill on">0 runtime deps</div>
+    </div>
+  </div>
+
+  <div class="stage">
+    <div class="phone">
+      <div class="row">
+        <div class="avatar"></div>
+        <div style="flex:1; display:flex; flex-direction:column; gap:9px;">
+          <div class="bar" style="width:64%"></div>
+          <div class="bar" style="width:40%; height:10px;"></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="row">
+          <div class="check">✓</div>
+          <div style="flex:1; display:flex; flex-direction:column; gap:8px;">
+            <div class="bar" style="width:72%; background:#3A3D50;"></div>
+            <div class="bar" style="width:48%; height:10px;"></div>
+          </div>
+        </div>
+        <div class="row">
+          <div class="ring"></div>
+          <div style="flex:1; display:flex; flex-direction:column; gap:8px;">
+            <div class="bar" style="width:58%; background:#3A3D50;"></div>
+            <div class="bar" style="width:36%; height:10px;"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="pair">
+        <div class="ghost">Cancel</div>
+        <div class="cta">Save</div>
+      </div>
+
+      <div class="card" style="gap:10px;">
+        <div class="bar" style="width:100%; height:10px;"></div>
+        <div class="bar" style="width:82%; height:10px;"></div>
+        <div class="bar" style="width:56%; height:10px;"></div>
+      </div>
+    </div>
+  </div>
+</body>
+</html>

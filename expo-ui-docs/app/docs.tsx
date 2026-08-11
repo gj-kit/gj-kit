@@ -34,6 +34,7 @@ import {
 } from '../src/seo-content';
 import { SeoHead, breadcrumbSchema, webPageSchema } from '../src/seo';
 import { useHydratedWindowWidth } from '../src/responsive';
+import { BREAKPOINTS } from '../src/breakpoints';
 import { LinkPressable } from '../src/site-link';
 import { SITE_NAV_LINKS } from '../src/site-nav';
 import { NPM_URL } from '../src/site-theme';
@@ -291,9 +292,9 @@ function DocsLayout({
   const theme = useTheme();
   const t = docsHubStrings(useLocale().locale);
   const width = useHydratedWindowWidth();
-  const desktop = width >= 980;
-  const wide = width >= 720;
-  const compact = width < 560;
+  const desktop = width >= BREAKPOINTS.desktop;
+  const wide = width >= BREAKPOINTS.tablet;
+  const compact = width < BREAKPOINTS.phone;
   const scrollRef = useRef<ScrollView>(null);
   const sectionOffsets = useRef<Record<SectionId, number>>({
     start: 0,

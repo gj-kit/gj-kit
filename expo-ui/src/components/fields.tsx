@@ -5,8 +5,9 @@
  * 스타일"이었으므로, 의미가 바뀐 채 조용히 이관되는 사고를 컴파일 에러로
  * 표면화한다(§0). 컨테이너는 containerStyle, 입력은 inputStyle.
  */
+import { useId } from 'react';
 import type { ReactElement, ReactNode } from 'react';
-import { Text as RNText, TextInput, View } from 'react-native';
+import { Platform, Text as RNText, TextInput, View } from 'react-native';
 import type { StyleProp, TextInputProps, TextStyle, ViewStyle } from 'react-native';
 import type { Theme } from '../theme/tokens';
 import { nativeWindProps, themedStyles } from './internal';
@@ -33,12 +34,30 @@ export interface TextFieldProps extends Omit<TextInputProps, 'style'> {
   labelClassName?: string | undefined;
   counterClassName?: string | undefined;
   helperClassName?: string | undefined;
+  /** React Native core 타입에 아직 없는 RNW 필드 관계를 좁게 지원한다. */
+  'aria-describedby'?: string | undefined;
+  'aria-errormessage'?: string | undefined;
+  'aria-invalid'?: boolean | undefined;
+  'aria-required'?: boolean | undefined;
   testID?: string | undefined;
   unstyled?: never;
 }
 
 /** 멀티라인 기본 높이 — 입력 2행 + 여백. 토큰에 대응 개념이 없어 상수로 명명(§3.8 예외). */
 const MULTILINE_MIN_HEIGHT_FACTOR = 2;
+
+function sanitizeId(value: string): string {
+  return value.replace(/[^a-zA-Z0-9_-]/g, '');
+}
+
+function combineIdRefs(...values: Array<string | undefined>): string | undefined {
+  const combined = values.filter((value): value is string => Boolean(value)).join(' ');
+  return combined || undefined;
+}
+
+function webProps(values: Record<string, unknown>): Record<string, unknown> {
+  return Platform.OS === 'web' ? values : {};
+}
 
 const getFieldStyles = themedStyles((theme: Theme) => ({
   field: { gap: theme.spacing.sm },
@@ -79,18 +98,53 @@ export function TextField({
   helperClassName,
   multiline,
   placeholderTextColor,
+  nativeID,
+  accessibilityLabel,
+  accessibilityLabelledBy,
+  accessibilityHint,
+  accessibilityState,
+  editable,
+  'aria-labelledby': ariaLabelledBy,
+  'aria-describedby': ariaDescribedBy,
+  'aria-errormessage': ariaErrorMessage,
+  'aria-invalid': ariaInvalid,
+  'aria-required': ariaRequired,
+  'aria-disabled': ariaDisabled,
   testID,
   ...inputProps
 }: TextFieldProps): ReactElement {
   const theme = useTheme();
   const styles = getFieldStyles(theme);
+  const reactId = sanitizeId(useId());
+  const baseId = `gj-text-field-${reactId}`;
+  const inputId = nativeID ?? `${baseId}-control`;
+  const labelId = `${baseId}-label`;
+  const helperId = `${baseId}-helper`;
+  const errorId = `${baseId}-error`;
+  const hasError = error !== undefined;
+  const supportText = error ?? helperText;
+  const supportId = hasError
+    ? errorId
+    : helperText !== undefined
+      ? helperId
+      : undefined;
+  const invalid = hasError || ariaInvalid === true;
+  const disabled = ariaDisabled ?? accessibilityState?.disabled ?? false;
+  const describedBy = combineIdRefs(ariaDescribedBy, supportId);
+  const resolvedAriaLabelledBy = ariaLabelledBy ?? (label !== undefined ? labelId : undefined);
+  const resolvedAriaErrorMessage = ariaErrorMessage ?? (hasError ? errorId : undefined);
+  const resolvedState: TextInputProps['accessibilityState'] = {
+    ...accessibilityState,
+    ...(disabled ? { disabled: true } : {}),
+  };
 
   return (
     <View style={[styles.field, containerStyle]} {...nativeWindProps(containerClassName)}>
-      {label || counter || labelAccessory ? (
+      {label !== undefined || counter !== undefined || labelAccessory ? (
         <View style={styles.labelRow}>
-          {label ? (
+          {label !== undefined ? (
             <RNTextLike
+              nativeID={labelId}
               className={labelClassName}
               style={[roleTextStyle(theme, 'label'), { color: theme.colors.text }, labelStyle]}
             >
@@ -115,7 +169,27 @@ export function TextField({
       {/* testID는 입력 요소에 — 전신·SearchField와 동일 계약(테스트 리뷰 발견 반영). */}
       <TextInput
         {...inputProps}
+        {...webProps({
+          ...(resolvedAriaLabelledBy !== undefined
+            ? { 'aria-labelledby': resolvedAriaLabelledBy }
+            : {}),
+          ...(describedBy !== undefined ? { 'aria-describedby': describedBy } : {}),
+          ...(resolvedAriaErrorMessage !== undefined
+            ? { 'aria-errormessage': resolvedAriaErrorMessage }
+            : {}),
+          'aria-invalid': invalid,
+          ...(ariaRequired !== undefined ? { 'aria-required': ariaRequired } : {}),
+          'aria-disabled': disabled,
+        })}
         {...nativeWindProps(inputClassName)}
+        nativeID={inputId}
+        accessibilityLabel={accessibilityLabel ?? label}
+        accessibilityLabelledBy={
+          accessibilityLabelledBy ?? (label !== undefined ? labelId : undefined)
+        }
+        accessibilityHint={accessibilityHint ?? supportText}
+        accessibilityState={resolvedState}
+        editable={!disabled && (editable ?? true)}
         testID={testID}
         multiline={multiline}
         placeholderTextColor={placeholderTextColor ?? theme.colors.textSubtle}
@@ -124,7 +198,7 @@ export function TextField({
           {
             color: theme.colors.text,
             fontSize: theme.typography.body.fontSize,
-            borderColor: error ? theme.colors.danger : theme.colors.line,
+            borderColor: hasError ? theme.colors.danger : theme.colors.textSubtle,
             backgroundColor: theme.colors.surface,
             ...(theme.typography.fontFamily !== undefined
               ? { fontFamily: theme.typography.fontFamily }
@@ -139,16 +213,18 @@ export function TextField({
           inputStyle,
         ]}
       />
-      {error || helperText ? (
+      {supportText !== undefined ? (
         <RNTextLike
+          nativeID={supportId}
+          accessibilityLiveRegion={hasError ? 'polite' : undefined}
           className={helperClassName}
           style={[
             roleTextStyle(theme, 'caption'),
-            { color: error ? theme.colors.danger : theme.colors.textMuted },
+            { color: hasError ? theme.colors.danger : theme.colors.textMuted },
             helperStyle,
           ]}
         >
-          {error ?? helperText}
+          {supportText}
         </RNTextLike>
       ) : null}
     </View>
@@ -216,7 +292,7 @@ export function SearchField({
       {...nativeWindProps(className)}
       style={[
         styles.container,
-        { borderColor: theme.colors.line, backgroundColor: theme.colors.surface },
+        { borderColor: theme.colors.textSubtle, backgroundColor: theme.colors.surface },
         style,
       ]}
     >
@@ -249,16 +325,25 @@ export function SearchField({
 
 // ─── (내부) 필드 전용 텍스트 — className 브리지를 가진 얇은 래퍼 ───────────
 function RNTextLike({
+  nativeID,
+  accessibilityLiveRegion,
   className,
   style,
   children,
 }: {
+  nativeID?: string | undefined;
+  accessibilityLiveRegion?: 'none' | 'polite' | 'assertive' | undefined;
   className?: string | undefined;
   style?: StyleProp<TextStyle> | undefined;
   children?: ReactNode | undefined;
 }): ReactElement {
   return (
-    <RNText {...nativeWindProps(className)} style={style}>
+    <RNText
+      nativeID={nativeID}
+      accessibilityLiveRegion={accessibilityLiveRegion}
+      {...nativeWindProps(className)}
+      style={style}
+    >
       {children}
     </RNText>
   );

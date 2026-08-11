@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { createElement, useState } from 'react';
 import type { ReactElement, ReactNode } from 'react';
 import { Link } from 'expo-router';
 import type { Href } from 'expo-router';
@@ -11,9 +11,16 @@ import {
   Text as RNText,
   View,
 } from 'react-native';
-import type { ColorScheme, IconRenderProps, Theme } from '@gj-kit/expo-ui';
+import type {
+  ColorScheme,
+  DataTableColumn,
+  DataTableSort,
+  IconRenderProps,
+  Theme,
+} from '@gj-kit/expo-ui';
 import {
   Accordion,
+  ActionSheet,
   Alert,
   Avatar,
   Badge,
@@ -21,6 +28,7 @@ import {
   Checkbox,
   ConfirmActionRow,
   ContentFrame,
+  DataTable,
   Dialog,
   DialogPanel,
   Divider,
@@ -28,11 +36,17 @@ import {
   ErrorState,
   IconButton,
   ListItem,
+  Menu,
+  Pagination,
+  Popover,
   ProgressBar,
   RadioGroup,
   SearchField,
+  Select,
   SelectableRow,
   SelectionIndicator,
+  Sheet,
+  Slider,
   Skeleton,
   Spinner,
   Surface,
@@ -41,10 +55,14 @@ import {
   Text,
   TextField,
   Toast,
+  ToastViewport,
+  ToggleGroup,
+  Tooltip,
   UiProvider,
   koStrings,
   useTheme,
   useToastController,
+  useToastQueue,
 } from '@gj-kit/expo-ui';
 import {
   BrandMark,
@@ -57,8 +75,14 @@ import {
   siteIcons,
   siteThemes,
 } from '../src/site-theme';
-import { publishedPackageVersion } from '../src/seo-content';
+import {
+  componentSeoEntries,
+  isReleasedComponent,
+  publishedPackageVersion,
+} from '../src/seo-content';
 import { useHydratedWindowWidth } from '../src/responsive';
+import { LinkPressable } from '../src/site-link';
+import { useDocumentChrome, useSiteColorScheme } from '../src/use-site-color-scheme';
 import {
   SeoHead,
   softwareSourceCodeSchema,
@@ -74,8 +98,21 @@ type DemoCategory =
   | 'layout'
   | 'status'
   | 'display'
+  | 'data'
   | 'feedback'
   | 'dialog';
+
+const SOURCE_COMPONENT_COUNT = componentSeoEntries.length;
+const RELEASED_COMPONENT_COUNT = componentSeoEntries.filter(isReleasedComponent).length;
+const PREVIEW_COMPONENT_COUNT = SOURCE_COMPONENT_COUNT - RELEASED_COMPONENT_COUNT;
+
+const FOOTER_LINKS: readonly { label: string; href: string }[] = [
+  { label: 'Home', href: '/' },
+  { label: 'Docs', href: '/docs' },
+  { label: 'Components', href: '/docs/components' },
+  { label: 'Getting started', href: '/docs/getting-started' },
+  { label: 'npm ↗', href: NPM_URL },
+];
 
 const DEMO_CATEGORIES: readonly { label: string; value: DemoCategory }[] = [
   { label: 'Actions', value: 'actions' },
@@ -85,40 +122,91 @@ const DEMO_CATEGORIES: readonly { label: string; value: DemoCategory }[] = [
   { label: 'Layout', value: 'layout' },
   { label: 'Status', value: 'status' },
   { label: 'Display', value: 'display' },
+  { label: 'Data', value: 'data' },
   { label: 'Feedback', value: 'feedback' },
-  { label: 'Dialog', value: 'dialog' },
+  { label: 'Overlay', value: 'dialog' },
 ];
 
 const COMPONENT_GROUPS = [
   { label: 'Foundation', items: ['Text'] },
-  { label: 'Actions', items: ['Button', 'IconButton'] },
-  { label: 'Inputs', items: ['TextField', 'SearchField'] },
-  { label: 'Navigation', items: ['Tabs'] },
-  { label: 'Selection', items: ['SelectionIndicator', 'SelectableRow', 'SelectAllRow'] },
-  { label: 'Controls', items: ['Checkbox', 'Switch', 'RadioGroup'] },
-  { label: 'Layout', items: ['Surface', 'ContentFrame', 'Section', 'StickyActionBar'] },
+  { label: 'Actions', items: ['Button', 'IconButton', 'Link', 'FloatingActionButton'] },
+  { label: 'Inputs', items: ['TextField', 'SearchField', 'FormField', 'Select'] },
+  { label: 'Navigation', items: ['Tabs', 'Collapsible', 'Pagination'] },
+  { label: 'Selection', items: ['SelectionIndicator', 'SelectableRow', 'SelectAllRow', 'Chip'] },
+  { label: 'Controls', items: ['Checkbox', 'Switch', 'RadioGroup', 'Slider', 'ToggleGroup'] },
+  { label: 'Layout', items: ['Surface', 'ContentFrame', 'Section', 'StickyActionBar', 'Card', 'AspectRatio'] },
   { label: 'Status', items: ['Badge', 'Alert', 'Spinner', 'ProgressBar'] },
   { label: 'Display', items: ['Avatar', 'Divider', 'ListItem', 'Accordion'] },
-  { label: 'Feedback', items: ['Skeleton', 'EmptyState', 'ErrorState', 'Toast'] },
-  { label: 'Overlay', items: ['Dialog', 'DialogPanel', 'ConfirmActionRow'] },
+  { label: 'Data', items: ['DataTable'] },
+  { label: 'Feedback', items: ['Skeleton', 'EmptyState', 'ErrorState', 'Toast', 'ToastViewport'] },
+  { label: 'Overlay', items: ['Dialog', 'DialogPanel', 'ConfirmActionRow', 'ActionSheet', 'Sheet', 'Popover', 'Tooltip', 'Menu'] },
 ] as const;
 
 const DEMO_SNIPPETS: Record<DemoCategory, string> = {
   actions: `<Button label="저장" onPress={save} />\n<Button variant="secondary" label="미리보기" />\n<IconButton accessibilityLabel="설정 열기" icon={Settings} />`,
   forms: `<SearchField value={query} onChangeText={setQuery} />\n<TextField\n  label="프로젝트 이름"\n  counter={\`\${name.length}/30\`}\n/>`,
-  controls: `<Checkbox\n  checked={agreed}\n  onCheckedChange={setAgreed}\n  label="이용 약관에 동의합니다"\n/>\n<Switch value={enabled} onValueChange={setEnabled} label="알림" />\n<RadioGroup items={channels} value={channel} onValueChange={setChannel} accessibilityLabel="알림 채널" />`,
+  controls: `const [volume, setVolume] = useState(60);\n\n<Slider\n  value={volume}\n  min={0}\n  max={100}\n  step={5}\n  accessibilityLabel="알림 음량"\n  onValueChange={setVolume}\n/>\n<ToggleGroup\n  selectionMode="single"\n  value={density}\n  onValueChange={setDensity}\n  accessibilityLabel="목록 밀도"\n  items={densityItems}\n  allowEmpty={false}\n/>`,
   selection: `<SelectableRow\n  selected={selected}\n  onPress={() => setSelected(!selected)}\n>\n  <Text>주간 회고 알림</Text>\n</SelectableRow>`,
   layout: `<Surface padding="xl" radius="lg" elevation="sm">\n  <Text role="title">토큰으로 조립하세요.</Text>\n  <Text color="textMuted">간격, 라운드, 그림자까지.</Text>\n</Surface>`,
   status: `<Badge label="New" variant="success" />\n<Alert title="저장했습니다" variant="success" live="polite" />\n<ProgressBar value={72} accessibilityLabel="업로드 진행률" />\n<ProgressBar value={null} accessibilityLabel="동기화 진행률" />\n<Spinner accessibilityLabel="불러오는 중" />`,
   display: `<ListItem\n  title="Ada Lovelace"\n  description="Core contributor"\n  leading={<Avatar name="Ada Lovelace" decorative />}\n  onPress={openProfile}\n/>\n<Divider />\n<Accordion items={sections} value={open} onValueChange={setOpen} />`,
-  feedback: `<EmptyState\n  body="첫 번째 프로젝트를 만들어보세요."\n  action={{ label: '프로젝트 만들기', onPress: create }}\n/>`,
-  dialog: `<Dialog visible={open} onDismiss={close}>\n  <DialogPanel title="프로젝트를 삭제할까요?">\n    <ConfirmActionRow destructive onCancel={close} onConfirm={remove} />\n  </DialogPanel>\n</Dialog>`,
+  data: `const [page, setPage] = useState(1);\nconst [sort, setSort] = useState<DataTableSort<'member' | 'amount'> | null>(null);\nconst [selectedKeys, setSelectedKeys] = useState<readonly string[]>([]);\n\n<DataTable\n  caption="최근 결제"\n  state={{ status: 'ready', rows: currentPageRows }}\n  columns={columns}\n  getRowKey={(row) => row.id}\n  rowHeaderColumnId="member"\n  sort={sort}\n  onSortChange={(next) => {\n    setSort(next);\n    notifySort(next); // rows 순서는 앱이 소유합니다.\n  }}\n  selection={{\n    selectedRowKeys: selectedKeys,\n    onSelectionChange: setSelectedKeys,\n    getRowSelectionAccessibilityLabel: ({ row }) => \`\${row.member} 결제 선택\`,\n  }}\n  presentation="auto"\n  renderListRow={({ row }) => <PaymentRow payment={row} />}\n/>\n<Pagination\n  mode="numbered"\n  countMode="items"\n  accessibilityLabel="결제 페이지"\n  page={page}\n  totalItemCount={totalItemCount}\n  pageSize={3}\n  onPageChange={setPage}\n/>`,
+  feedback: `const queue = useToastQueue({ maxVisible: 2 });\n\n<Button label="저장" onPress={() => queue.show({ message: '저장했습니다', variant: 'success' })} />\n<ToastViewport\n  toasts={queue.visibleToasts}\n  onDismiss={queue.dismiss}\n  onPause={queue.pause}\n  onResume={queue.resume}\n/>`,
+  dialog: `<Popover\n  triggerLabel="계정 도움말"\n  title="계정 정보"\n  open={popoverOpen}\n  onOpenChange={(next) => setPopoverOpen(next)}\n>\n  <Text>프로필 공개 범위를 설정합니다.</Text>\n</Popover>\n<Sheet\n  open={sheetOpen}\n  title="프로젝트 설정"\n  onOpenChange={(next) => setSheetOpen(next)}\n  footer={<Button label="저장" onPress={save} />}\n>\n  <TextField label="프로젝트 이름" value={name} />\n</Sheet>`,
 };
 
-const QUICK_START = `import { UiProvider, Button, koStrings } from '@gj-kit/expo-ui';\nimport { createThemes } from '@gj-kit/expo-ui/theme';\n\nconst themes = createThemes({\n  shared: { colors: { primary: '#635BFF' } },\n});\n\nexport function App() {\n  return (\n    <UiProvider theme={themes} strings={koStrings}>\n      <Button label="시작하기" onPress={() => {}} />\n    </UiProvider>\n  );\n}`;
+type DataDemoRow = {
+  readonly id: string;
+  readonly member: string;
+  readonly amount: number;
+  readonly status: '완료' | '대기' | '실패';
+};
+
+type DataDemoColumnId = 'member' | 'amount' | 'status';
+type DataDemoSortableColumnId = 'member' | 'amount';
+
+const DATA_DEMO_ROWS: readonly DataDemoRow[] = [
+  { id: 'payment-a', member: '김민서', amount: 128_000, status: '완료' },
+  { id: 'payment-b', member: 'Ada Kim', amount: 84_500, status: '대기' },
+  { id: 'payment-c', member: 'Grace Lee', amount: 212_000, status: '실패' },
+  { id: 'payment-d', member: 'Linus Park', amount: 64_000, status: '완료' },
+  { id: 'payment-e', member: 'Margaret Han', amount: 156_500, status: '대기' },
+  { id: 'payment-f', member: 'Alan Choi', amount: 98_000, status: '완료' },
+  { id: 'payment-g', member: 'Evelyn Seo', amount: 310_000, status: '실패' },
+];
+
+const DATA_DEMO_PAGE_SIZE = 3;
+
+const DATA_DEMO_COLUMNS = [
+  {
+    id: 'member',
+    header: '고객',
+    flex: 2,
+    sortable: true,
+    getTextValue: ({ row }) => row.member,
+  },
+  {
+    id: 'amount',
+    header: '금액',
+    width: 116,
+    align: 'end',
+    sortable: true,
+    firstSortDirection: 'descending',
+    getTextValue: ({ row }) => `₩${row.amount.toLocaleString('ko-KR')}`,
+  },
+  {
+    id: 'status',
+    header: '상태',
+    flex: 1,
+    getTextValue: ({ row }) => row.status,
+  },
+] as const satisfies readonly DataTableColumn<DataDemoRow, DataDemoColumnId, string>[];
+
+const QUICK_START = `import { UiProvider, Button, koStrings } from '@gj-kit/expo-ui';\nimport { createThemes } from '@gj-kit/expo-ui/theme';\n\nconst themes = createThemes();\n\nexport function App() {\n  return (\n    <UiProvider theme={themes} strings={koStrings}>\n      <Button label="시작하기" onPress={() => {}} />\n    </UiProvider>\n  );\n}`;
 
 export default function Home(): ReactElement {
-  const [colorScheme, setColorScheme] = useState<ColorScheme>('light');
+  const { colorScheme, setColorScheme } = useSiteColorScheme();
+  useDocumentChrome(siteThemes[colorScheme].colors.background);
 
   return (
     <>
@@ -170,6 +258,8 @@ function Landing({
   const [projectName, setProjectName] = useState('My Expo App');
   const [selected, setSelected] = useState(true);
   const [dialogVisible, setDialogVisible] = useState(false);
+  const [actionSheetVisible, setActionSheetVisible] = useState(false);
+  const [sheetOpen, setSheetOpen] = useState(false);
   const [copied, setCopied] = useState<string | null>(null);
   const { toast, showToast } = useToastController({ durationMs: 2200 });
 
@@ -222,15 +312,21 @@ function Landing({
             category={category}
             compact={compact}
             desktop={desktop}
+            actionSheetVisible={actionSheetVisible}
             dialogVisible={dialogVisible}
+            sheetOpen={sheetOpen}
             projectName={projectName}
             query={query}
             selected={selected}
             copied={copied === 'demo'}
             onCategoryChange={setCategory}
+            onCloseActionSheet={() => setActionSheetVisible(false)}
             onCloseDialog={() => setDialogVisible(false)}
+            onCloseSheet={() => setSheetOpen(false)}
             onCopyCode={() => copy(DEMO_SNIPPETS[category], 'demo')}
             onOpenDialog={() => setDialogVisible(true)}
+            onOpenSheet={() => setSheetOpen(true)}
+            onOpenActionSheet={() => setActionSheetVisible(true)}
             onProjectNameChange={setProjectName}
             onQueryChange={setQuery}
             onSelectedChange={setSelected}
@@ -293,22 +389,20 @@ function SiteHeader({
     >
       <ContentFrame maxWidth={1180} center padding={compact ? 16 : 20} style={styles.headerFrame}>
         <View style={styles.headerRow}>
-          <Link href="/" asChild>
-            <Pressable
-              accessibilityRole="link"
-              accessibilityLabel="@gj-kit/expo-ui 홈"
-              style={({ pressed }) => [styles.brand, pressed ? styles.pressed : null]}
-            >
-              <BrandMark size={34} />
-              <RNText style={[styles.brandName, { color: theme.colors.text }]}>@gj-kit/expo-ui</RNText>
-            </Pressable>
-          </Link>
+          <LinkPressable
+            href="/"
+            accessibilityLabel="@gj-kit/expo-ui 홈"
+            style={styles.brand}
+          >
+            <BrandMark size={34} />
+            <RNText style={[styles.brandName, { color: theme.colors.text }]}>@gj-kit/expo-ui</RNText>
+          </LinkPressable>
 
           {!compact ? (
             <View style={styles.navLinks}>
-              <NavLink label="Why gj-kit" href="#why" />
-              <NavLink label="Components" href="#components" />
-              <NavLink label="Theme" href="#theme" />
+              <NavLink label="Why gj-kit" targetId="why" />
+              <NavLink label="Components" targetId="components" />
+              <NavLink label="Theme" targetId="theme" />
             </View>
           ) : null}
 
@@ -335,18 +429,35 @@ function SiteHeader({
   );
 }
 
-function NavLink({ label, href }: { label: string; href: Href }): ReactElement {
+/**
+ * 같은 페이지 안의 섹션 앵커. expo-router의 <Link href="#why">는 웹에서
+ * preventDefault로 브라우저의 네이티브 앵커 점프를 막은 뒤 스크롤 없는 라우터
+ * 네비게이션만 수행해, 클릭해도 아무 일도 일어나지 않았다. 섹션에 실제 id가
+ * 있으므로 평범한 <a>를 쓰면 브라우저가 알아서 처리한다.
+ */
+function NavLink({ label, targetId }: { label: string; targetId: string }): ReactElement {
   const theme = useTheme();
-  return (
-    <Link href={href} asChild>
-      <Pressable
-        accessibilityRole="link"
-        style={({ pressed }) => [styles.navLink, pressed ? styles.pressed : null]}
-      >
-        <RNText style={[styles.navLabel, { color: theme.colors.textMuted }]}>{label}</RNText>
-      </Pressable>
-    </Link>
+  const content = (
+    <RNText style={[styles.navLabel, { color: theme.colors.textMuted }]}>{label}</RNText>
   );
+
+  if (Platform.OS === 'web') {
+    return createElement(
+      'a',
+      {
+        href: `#${targetId}`,
+        style: {
+          alignItems: 'center',
+          display: 'flex',
+          minHeight: 40,
+          padding: '10px 14px',
+          textDecoration: 'none',
+        },
+      },
+      content,
+    );
+  }
+  return <View style={styles.navLink}>{content}</View>;
 }
 
 function Hero({
@@ -374,8 +485,10 @@ function Hero({
   return (
     <View style={styles.heroShell}>
       <View
-        pointerEvents="none"
-        style={[styles.heroGlow, { backgroundColor: theme.colors.primarySoft }]}
+        style={[
+          styles.heroGlow,
+          { backgroundColor: theme.colors.primarySoft, pointerEvents: 'none' },
+        ]}
       />
       <ContentFrame maxWidth={1180} center padding={compact ? 20 : 28} style={styles.heroFrame}>
         <View style={[styles.heroGrid, desktop ? styles.heroGridDesktop : null]}>
@@ -387,7 +500,7 @@ function Hero({
               ]}
             >
               <View style={[styles.releaseDot, { backgroundColor: '#9FF5D1' }]} />
-              <RNText style={[styles.releaseText, { color: theme.colors.textMuted }]}>npm v{publishedPackageVersion} · 31 components stable</RNText>
+              <RNText style={[styles.releaseText, { color: theme.colors.textMuted }]}>npm v{publishedPackageVersion} · {RELEASED_COMPONENT_COUNT} stable · {PREVIEW_COMPONENT_COUNT} preview</RNText>
               <RNText style={[styles.releaseArrow, { color: theme.colors.primary }]}>↗</RNText>
             </View>
 
@@ -466,8 +579,8 @@ function HeroPreview({
         { borderColor: colorScheme === 'dark' ? '#30344C' : '#252941' },
       ]}
     >
-      <View pointerEvents="none" style={styles.previewOrbOne} />
-      <View pointerEvents="none" style={styles.previewOrbTwo} />
+      <View style={[styles.previewOrbOne, { pointerEvents: 'none' }]} />
+      <View style={[styles.previewOrbTwo, { pointerEvents: 'none' }]} />
       <View style={styles.previewTopline}>
         <View style={styles.liveBadge}>
           <View style={styles.liveDot} />
@@ -506,28 +619,42 @@ function HeroPreview({
         </Surface>
 
         <Tabs
+          accessibilityLabel="기간"
           items={[
             { label: '오늘', value: 'today' },
             { label: '이번 주', value: 'week' },
           ] as const}
           value={tab}
           onChange={onTabChange}
+          panels={{
+            today: (
+              <View style={styles.phoneList}>
+                <SelectableRow selected={selected} onPress={() => onSelectedChange(!selected)}>
+                  <View style={styles.rowCopy}>
+                    <Text role="label">컴포넌트 API 검토</Text>
+                    <Text role="caption" color="textMuted">타입 계약으로 잘못된 상태 차단</Text>
+                  </View>
+                </SelectableRow>
+                <SelectableRow selected={false} onPress={() => onSelectedChange(true)}>
+                  <View style={styles.rowCopy}>
+                    <Text role="label">다크 테마 확인</Text>
+                    <Text role="caption" color="textMuted">토큰 누락 없이</Text>
+                  </View>
+                </SelectableRow>
+              </View>
+            ),
+            week: (
+              <View style={styles.phoneList}>
+                <SelectableRow selected onPress={() => onSelectedChange(false)}>
+                  <View style={styles.rowCopy}>
+                    <Text role="label">접근성 회귀 테스트</Text>
+                    <Text role="caption" color="textMuted">키보드와 스크린리더 계약</Text>
+                  </View>
+                </SelectableRow>
+              </View>
+            ),
+          }}
         />
-
-        <View style={styles.phoneList}>
-          <SelectableRow selected={selected} onPress={() => onSelectedChange(!selected)}>
-            <View style={styles.rowCopy}>
-              <Text role="label">컴포넌트 API 검토</Text>
-              <Text role="caption" color="textMuted">타입 계약 36개 통과</Text>
-            </View>
-          </SelectableRow>
-          <SelectableRow selected={false} onPress={() => onSelectedChange(true)}>
-            <View style={styles.rowCopy}>
-              <Text role="label">다크 테마 확인</Text>
-              <Text role="caption" color="textMuted">토큰 누락 없이</Text>
-            </View>
-          </SelectableRow>
-        </View>
 
         <Button label={selected ? '오늘 작업 완료' : '작업 선택하기'} onPress={() => onSelectedChange(!selected)} />
       </View>
@@ -548,10 +675,10 @@ function HeroPreview({
 function ProofStrip(): ReactElement {
   const theme = useTheme();
   const proofs = [
-    { value: '31', label: 'Source components' },
+    { value: String(SOURCE_COMPONENT_COUNT), label: 'Source components' },
     { value: '31', label: 'Color roles' },
     { value: '0', label: 'Direct runtime deps' },
-    { value: '209', label: 'Tests passing' },
+    { value: '625', label: '534 unit + 91 type' },
   ];
   return (
     <ContentFrame maxWidth={1180} center padding={20} style={styles.proofFrame}>
@@ -659,35 +786,47 @@ function TypeSafetySection({ desktop }: { desktop: boolean }): ReactElement {
 }
 
 function ComponentsSection({
+  actionSheetVisible,
   category,
   compact,
   desktop,
   dialogVisible,
+  sheetOpen,
   projectName,
   query,
   selected,
   copied,
   onCategoryChange,
+  onCloseActionSheet,
   onCloseDialog,
+  onCloseSheet,
   onCopyCode,
   onOpenDialog,
+  onOpenSheet,
+  onOpenActionSheet,
   onProjectNameChange,
   onQueryChange,
   onSelectedChange,
   onShowToast,
 }: {
+  actionSheetVisible: boolean;
   category: DemoCategory;
   compact: boolean;
   desktop: boolean;
   dialogVisible: boolean;
+  sheetOpen: boolean;
   projectName: string;
   query: string;
   selected: boolean;
   copied: boolean;
   onCategoryChange: (category: DemoCategory) => void;
+  onCloseActionSheet: () => void;
   onCloseDialog: () => void;
+  onCloseSheet: () => void;
   onCopyCode: () => void;
   onOpenDialog: () => void;
+  onOpenSheet: () => void;
+  onOpenActionSheet: () => void;
   onProjectNameChange: (name: string) => void;
   onQueryChange: (query: string) => void;
   onSelectedChange: (selected: boolean) => void;
@@ -771,6 +910,8 @@ function ComponentsSection({
                 onQueryChange={onQueryChange}
                 onSelectedChange={onSelectedChange}
                 onOpenDialog={onOpenDialog}
+                onOpenSheet={onOpenSheet}
+                onOpenActionSheet={onOpenActionSheet}
                 onShowToast={onShowToast}
               />
             </View>
@@ -798,7 +939,7 @@ function ComponentsSection({
         </View>
 
         <View style={styles.componentIndex}>
-          <RNText style={[styles.componentIndexTitle, { color: theme.colors.text }]}>31개의 작은 조각, 하나의 설계 언어</RNText>
+          <RNText style={[styles.componentIndexTitle, { color: theme.colors.text }]}>{SOURCE_COMPONENT_COUNT}개의 작은 조각, 하나의 설계 언어</RNText>
           <View style={styles.componentGroups}>
             {COMPONENT_GROUPS.map((group) => (
               <View
@@ -838,6 +979,47 @@ function ComponentsSection({
           />
         </DialogPanel>
       </Dialog>
+      <ActionSheet
+        visible={actionSheetVisible}
+        title="프로젝트 작업"
+        description="일반 button 의미를 유지하는 adaptive action surface입니다."
+        items={[
+          { value: 'duplicate', label: '프로젝트 복제' },
+          { value: 'delete', label: '프로젝트 삭제', description: '복구할 수 없습니다.', destructive: true },
+        ] as const}
+        onDismiss={(detail) => {
+          onCloseActionSheet();
+          if (detail.reason === 'action-select') {
+            onShowToast(`${detail.value} 액션을 선택했습니다.`, 'info');
+          }
+        }}
+      />
+      <Sheet
+        open={sheetOpen}
+        title="프로젝트 설정"
+        description="데스크톱에서는 logical end, 작은 화면에서는 bottom에 표시됩니다."
+        footer={(
+          <Button
+            label="설정 저장"
+            onPress={() => {
+              onCloseSheet();
+              onShowToast('Sheet 설정을 저장했습니다.', 'success');
+            }}
+          />
+        )}
+        onOpenChange={(next: boolean) => {
+          if (!next) onCloseSheet();
+        }}
+      >
+        <TextField
+          label="프로젝트 이름"
+          value={projectName}
+          onChangeText={onProjectNameChange}
+        />
+        <Text role="caption" color="textMuted">
+          header와 footer는 고정되고 이 본문만 스크롤됩니다.
+        </Text>
+      </Sheet>
     </View>
   );
 }
@@ -851,6 +1033,8 @@ function ComponentDemo({
   onQueryChange,
   onSelectedChange,
   onOpenDialog,
+  onOpenSheet,
+  onOpenActionSheet,
   onShowToast,
 }: {
   category: DemoCategory;
@@ -861,6 +1045,8 @@ function ComponentDemo({
   onQueryChange: (query: string) => void;
   onSelectedChange: (selected: boolean) => void;
   onOpenDialog: () => void;
+  onOpenSheet: () => void;
+  onOpenActionSheet: () => void;
   onShowToast: (message: string, variant: 'error' | 'success' | 'info' | 'warning') => void;
 }): ReactElement {
   const theme = useTheme();
@@ -868,8 +1054,25 @@ function ComponentDemo({
   const [checked, setChecked] = useState<boolean | 'mixed'>('mixed');
   const [switchEnabled, setSwitchEnabled] = useState(true);
   const [channel, setChannel] = useState<'push' | 'email' | 'sms'>('push');
+  const [volume, setVolume] = useState(60);
+  const [density, setDensity] = useState<'comfortable' | 'compact' | 'spacious'>('comfortable');
   const [openSection, setOpenSection] = useState<'overview' | 'accessibility' | null>('overview');
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [popoverOpen, setPopoverOpen] = useState(false);
+  const [compactView, setCompactView] = useState(false);
+  const [selectOpen, setSelectOpen] = useState(false);
+  const [releaseChannel, setReleaseChannel] = useState<'stable' | 'preview' | null>('stable');
+  const [dataSort, setDataSort] = useState<DataTableSort<DataDemoSortableColumnId> | null>(null);
+  const [dataPage, setDataPage] = useState(1);
+  const [selectedPaymentKeys, setSelectedPaymentKeys] = useState<readonly string[]>([
+    'payment-a',
+  ]);
+  const toastQueue = useToastQueue({ defaultDurationMs: 3_600, maxQueued: 3, maxVisible: 2 });
   const icon = (props: IconRenderProps) => <Glyph {...props}>✦</Glyph>;
+  const visibleDataRows = DATA_DEMO_ROWS.slice(
+    (dataPage - 1) * DATA_DEMO_PAGE_SIZE,
+    dataPage * DATA_DEMO_PAGE_SIZE,
+  );
 
   switch (category) {
     case 'actions':
@@ -899,12 +1102,26 @@ function ComponentDemo({
             helperText="입력, 라벨, 헬퍼가 같은 토큰을 사용합니다."
           />
           <Tabs
+            accessibilityLabel="데모 보기"
             items={[
               { label: 'Preview', value: 'preview' },
               { label: 'Code', value: 'code' },
             ] as const}
             value={demoTab}
             onChange={setDemoTab}
+            panels={{
+              preview: (
+                <Text role="caption" color="textMuted">
+                  Preview 패널이 선택되었습니다.
+                </Text>
+              ),
+              code: (
+                <Text role="caption" color="textMuted">
+                  Code 패널이 선택되었습니다.
+                </Text>
+              ),
+            }}
+            panelStyle={{ paddingTop: theme.spacing.md }}
           />
         </View>
       );
@@ -935,6 +1152,33 @@ function ComponentDemo({
             accessibilityLabel="알림 채널"
             orientation="horizontal"
           />
+          <View style={styles.demoStack}>
+            <View style={styles.sliderLabelRow}>
+              <Text role="label">알림 음량</Text>
+              <Text role="caption" color="textMuted">{volume}%</Text>
+            </View>
+            <Slider
+              value={volume}
+              min={0}
+              max={100}
+              step={5}
+              accessibilityLabel="알림 음량"
+              onValueChange={setVolume}
+            />
+            <ToggleGroup
+              selectionMode="single"
+              value={density}
+              onValueChange={(next) => setDensity(next ?? 'comfortable')}
+              accessibilityLabel="목록 밀도"
+              allowEmpty={false}
+              items={[
+                { label: '여유', value: 'spacious' },
+                { label: '기본', value: 'comfortable' },
+                { label: '압축', value: 'compact' },
+              ] as const}
+              size="sm"
+            />
+          </View>
         </Surface>
       );
     case 'selection':
@@ -1053,6 +1297,84 @@ function ComponentDemo({
           />
         </View>
       );
+    case 'data':
+      return (
+        <View style={styles.dataDemo}>
+          <DataTable
+            caption="최근 결제"
+            description="정렬 요청과 선택 상태만 바뀌며 행 순서는 앱이 계속 소유합니다."
+            state={{ status: 'ready', rows: visibleDataRows }}
+            columns={DATA_DEMO_COLUMNS}
+            getRowKey={(row) => row.id}
+            rowHeaderColumnId="member"
+            sort={dataSort}
+            onSortChange={(next) => {
+              setDataSort(next);
+              const column = next?.columnId === 'amount' ? '금액' : '고객';
+              const direction = next?.direction === 'ascending' ? '오름차순' : '내림차순';
+              onShowToast(
+                next === null
+                  ? '정렬을 해제했습니다. 행 순서는 그대로입니다.'
+                  : `${column} ${direction} 정렬을 요청했습니다.`,
+                'info',
+              );
+            }}
+            selection={{
+              selectedRowKeys: selectedPaymentKeys,
+              onSelectionChange: setSelectedPaymentKeys,
+              getRowSelectionAccessibilityLabel: ({ row }) => `${row.member} 결제 선택`,
+              isRowSelectionDisabled: ({ row }) => row.status === '실패',
+              selectAllAccessibilityLabel: '표시된 결제 전체 선택',
+              clearSelectionAccessibilityLabel: '표시된 결제 선택 해제',
+            }}
+            presentation="auto"
+            renderListRow={({ row }) => (
+              <View style={styles.dataListRow}>
+                <View style={styles.rowCopy}>
+                  <Text role="label">{row.member}</Text>
+                  <Text role="caption" color="textMuted">
+                    ₩{row.amount.toLocaleString('ko-KR')} · {row.status}
+                  </Text>
+                </View>
+                <Badge
+                  label={row.status}
+                  size="sm"
+                  variant={
+                    row.status === '완료'
+                      ? 'success'
+                      : row.status === '대기'
+                        ? 'warning'
+                        : 'error'
+                  }
+                />
+              </View>
+            )}
+            minTableWidth={500}
+            size="sm"
+            striped
+            variant="outline"
+            style={styles.dataTable}
+          />
+          <Text role="caption" color="textMuted" style={styles.dataSelectionSummary}>
+            {selectedPaymentKeys.length}개 선택 · 실패 행은 선택 대상에서 제외
+          </Text>
+          <Pagination
+            mode="numbered"
+            countMode="items"
+            accessibilityLabel="결제 페이지"
+            page={dataPage}
+            totalItemCount={DATA_DEMO_ROWS.length}
+            pageSize={DATA_DEMO_PAGE_SIZE}
+            siblingCount={0}
+            size="sm"
+            getPageAccessibilityLabel={({ page, current }) =>
+              `${page}페이지${current ? ' (현재)' : ''}`
+            }
+            onPageChange={setDataPage}
+            style={styles.dataPagination}
+          />
+        </View>
+      );
     case 'feedback':
       return (
         <View style={styles.demoStack}>
@@ -1078,6 +1400,25 @@ function ComponentDemo({
               </View>
             </View>
           </Surface>
+          <Surface padding="lg" style={styles.demoStack}>
+            <Text role="label">ToastViewport · FIFO queue</Text>
+            <Text role="caption" color="textMuted">
+              최대 두 개를 표시하고, 숨겨진 탭·앱에서는 남은 시간을 보존합니다.
+            </Text>
+            <Button
+              label="저장 알림 추가"
+              size="sm"
+              onPress={() => toastQueue.show({ message: '문서 상태를 저장했습니다.', variant: 'success' })}
+            />
+          </Surface>
+          <ToastViewport
+            toasts={toastQueue.visibleToasts}
+            onDismiss={toastQueue.dismiss}
+            onPause={toastQueue.pause}
+            onResume={toastQueue.resume}
+            placement="top"
+            offset={20}
+          />
         </View>
       );
     case 'dialog':
@@ -1088,9 +1429,72 @@ function ComponentDemo({
           </View>
           <Text role="title">확인이 필요한 순간도 같은 언어로.</Text>
           <Text role="body" color="textMuted" style={styles.dialogDemoCopy}>
-            최소 Modal 조각을 앱 흐름에 맞춰 조합하세요. 포털과 바텀시트 정책은 앱이 소유합니다.
+            웹 non-modal부터 네이티브 adaptive Dialog와 접근성 힌트까지 같은 API 경계로 적응합니다.
           </Text>
-          <Button label="Dialog 열기" onPress={onOpenDialog} />
+          <View style={styles.demoStack}>
+            <Select
+              label="릴리스 채널"
+              placeholder="채널 선택"
+              items={[
+                { value: 'stable', label: 'Stable' },
+                { value: 'preview', label: 'Preview', description: '테스트 빌드' },
+              ] as const}
+              value={releaseChannel}
+              onValueChange={setReleaseChannel}
+              open={selectOpen}
+              onOpenChange={(next) => setSelectOpen(next)}
+              size="sm"
+            />
+            <Menu
+              triggerLabel="프로젝트 작업"
+              items={[
+                { kind: 'action', value: 'duplicate', label: '프로젝트 복제' },
+                { kind: 'checkbox', value: 'compact', label: '압축 보기', checked: compactView },
+                { kind: 'action', value: 'delete', label: '프로젝트 삭제', destructive: true },
+              ] as const}
+              open={menuOpen}
+              onOpenChange={(next) => setMenuOpen(next)}
+              onSelect={(detail) => {
+                if (detail.kind === 'checkbox') setCompactView(detail.checked);
+                if (detail.kind === 'action') onShowToast(`${detail.value} 메뉴를 선택했습니다.`, 'info');
+              }}
+              size="sm"
+              variant="outlined"
+            />
+            <View style={styles.demoRow}>
+              <Popover
+                triggerLabel="계정 도움말"
+                title="계정 정보"
+                description="controlled rich overlay"
+                open={popoverOpen}
+                onOpenChange={(next) => setPopoverOpen(next)}
+                size="sm"
+                variant="outlined"
+              >
+                <Text>프로필 공개 범위는 설정에서 언제든 바꿀 수 있습니다.</Text>
+              </Popover>
+              <Tooltip
+                triggerLabel="오버레이 도움말"
+                triggerIcon={icon}
+                content="웹에서는 시각 설명, 네이티브에서는 접근성 힌트로 제공합니다."
+                onPress={() => onShowToast('오버레이 도움말을 열었습니다.', 'info')}
+                size="sm"
+              />
+            </View>
+          </View>
+          <View style={styles.demoRow}>
+            <Button label="Dialog 열기" onPress={onOpenDialog} />
+            <Button
+              label="Sheet 열기"
+              variant="secondary"
+              onPress={onOpenSheet}
+            />
+            <Button
+              label="ActionSheet 열기"
+              variant="secondary"
+              onPress={onOpenActionSheet}
+            />
+          </View>
         </View>
       );
   }
@@ -1282,7 +1686,7 @@ function FinalCta({
   return (
     <ContentFrame maxWidth={1180} center padding={compact ? 20 : 28} style={styles.finalFrame}>
       <View style={[styles.finalCta, compact ? styles.finalCtaCompact : null]}>
-        <View pointerEvents="none" style={styles.finalOrb} />
+        <View style={[styles.finalOrb, { pointerEvents: 'none' }]} />
         <View style={styles.finalCopy}>
           <RNText style={styles.finalEyebrow}>BUILD WITH CONFIDENCE</RNText>
           <RNText style={[styles.finalTitle, compact ? styles.finalTitleCompact : null]}>좋은 UI는, 좋은 제약에서 시작됩니다.</RNText>
@@ -1294,12 +1698,10 @@ function FinalCta({
             <RNText selectable style={styles.finalInstallText}>{INSTALL_COMMAND}</RNText>
             <RNText style={styles.finalCopyLabel}>{copied ? 'COPIED' : 'COPY'}</RNText>
           </Pressable>
-          <Link href="/docs/getting-started" asChild>
-            <Pressable accessibilityRole="link" style={({ pressed }) => [styles.finalDocs, pressed ? styles.pressed : null]}>
-              <RNText style={styles.finalDocsText}>문서에서 시작하기</RNText>
-              <RNText style={styles.finalDocsArrow}>→</RNText>
-            </Pressable>
-          </Link>
+          <LinkPressable href="/docs/getting-started" style={styles.finalDocs}>
+            <RNText style={styles.finalDocsText}>문서에서 시작하기</RNText>
+            <RNText aria-hidden style={styles.finalDocsArrow}>→</RNText>
+          </LinkPressable>
         </View>
       </View>
     </ContentFrame>
@@ -1319,21 +1721,11 @@ function SiteFooter(): ReactElement {
           </View>
         </View>
         <View style={styles.footerLinks}>
-          <Link href="/" asChild>
-            <Pressable accessibilityRole="link"><RNText style={[styles.footerLink, { color: theme.colors.textMuted }]}>Home</RNText></Pressable>
-          </Link>
-          <Link href="/docs" asChild>
-            <Pressable accessibilityRole="link"><RNText style={[styles.footerLink, { color: theme.colors.textMuted }]}>Docs</RNText></Pressable>
-          </Link>
-          <Link href="/docs/components" asChild>
-            <Pressable accessibilityRole="link"><RNText style={[styles.footerLink, { color: theme.colors.textMuted }]}>Components</RNText></Pressable>
-          </Link>
-          <Link href="/docs/getting-started" asChild>
-            <Pressable accessibilityRole="link"><RNText style={[styles.footerLink, { color: theme.colors.textMuted }]}>Getting started</RNText></Pressable>
-          </Link>
-          <Link href={NPM_URL} target="_blank" asChild>
-            <Pressable accessibilityRole="link"><RNText style={[styles.footerLink, { color: theme.colors.textMuted }]}>npm ↗</RNText></Pressable>
-          </Link>
+          {FOOTER_LINKS.map((item) => (
+            <LinkPressable key={item.label} href={item.href as Href} style={styles.footerLinkHit}>
+              <RNText style={[styles.footerLink, { color: theme.colors.textMuted }]}>{item.label}</RNText>
+            </LinkPressable>
+          ))}
         </View>
         <RNText style={[styles.footerLicense, { color: theme.colors.textSubtle }]}>MIT · npm v{publishedPackageVersion}</RNText>
       </View>
@@ -1380,43 +1772,46 @@ function SiteButton({
 }): ReactElement {
   const theme = useTheme();
   const primary = variant === 'primary';
-  const button = (
-    <Pressable
-      accessibilityRole={href ? 'link' : 'button'}
-      onPress={onPress}
-      style={({ pressed }) => [
-        styles.siteButton,
-        compact ? styles.siteButtonCompact : null,
-        {
-          backgroundColor: primary ? theme.colors.text : theme.colors.surface,
-          borderColor: primary ? theme.colors.text : theme.colors.line,
-        },
-        pressed ? styles.pressed : null,
-      ]}
-    >
+  const shape = [
+    styles.siteButton,
+    compact ? styles.siteButtonCompact : null,
+    {
+      backgroundColor: primary ? theme.colors.text : theme.colors.surface,
+      borderColor: primary ? theme.colors.text : theme.colors.line,
+    },
+  ];
+  const labelColor = primary ? theme.colors.background : theme.colors.text;
+  const content = (
+    <>
       <RNText
         style={[
           styles.siteButtonLabel,
           compact ? styles.siteButtonLabelCompact : null,
-          { color: primary ? theme.colors.background : theme.colors.text },
+          { color: labelColor },
         ]}
       >
         {label}
       </RNText>
       {showArrow ? (
-        <RNText style={[styles.siteButtonArrow, { color: primary ? theme.colors.background : theme.colors.text }]}>→</RNText>
+        <RNText aria-hidden style={[styles.siteButtonArrow, { color: labelColor }]}>→</RNText>
       ) : null}
+    </>
+  );
+
+  // href가 있으면 Slot 안전한 LinkPressable을 쓴다. 함수형 style은 여기서 쓰지 않는다.
+  return href ? (
+    <LinkPressable href={href} style={shape}>
+      {content}
+    </LinkPressable>
+  ) : (
+    <Pressable
+      accessibilityRole="button"
+      onPress={onPress}
+      style={({ pressed }) => [...shape, pressed ? styles.pressed : null]}
+    >
+      {content}
     </Pressable>
   );
-  return href ? (
-    <Link
-      href={href}
-      target={typeof href === 'string' && href.startsWith('http') ? '_blank' : undefined}
-      asChild
-    >
-      {button}
-    </Link>
-  ) : button;
 }
 
 function SectionShell({ children }: { children: ReactNode }): ReactElement {
@@ -1678,6 +2073,12 @@ const styles = StyleSheet.create({
   copyButton: { borderRadius: 8, borderWidth: 1, paddingHorizontal: 9, paddingVertical: 6 },
   copyButtonText: { fontFamily: MONO_FAMILY, fontSize: 8, fontWeight: '800', letterSpacing: 0.7 },
   demoStack: { gap: 16, width: '100%' },
+  dataDemo: { gap: 10, width: '100%' },
+  dataTable: { maxWidth: '100%' },
+  dataListRow: { alignItems: 'center', flexDirection: 'row', gap: 10, justifyContent: 'space-between', width: '100%' },
+  dataSelectionSummary: { textAlign: 'right' },
+  dataPagination: { alignSelf: 'stretch' },
+  sliderLabelRow: { alignItems: 'center', flexDirection: 'row', justifyContent: 'space-between' },
   demoRow: { alignItems: 'center', flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
   selectionCard: { alignSelf: 'center', gap: 14, maxWidth: 430, width: '100%' },
   layoutDemoHeader: { alignItems: 'center', flexDirection: 'row', gap: 12 },
@@ -1760,7 +2161,8 @@ const styles = StyleSheet.create({
   footer: { alignItems: 'center', borderTopWidth: 1, flexDirection: 'row', flexWrap: 'wrap', gap: 24, justifyContent: 'space-between', paddingTop: 28 },
   footerBrand: { fontFamily: MONO_FAMILY, fontSize: 12, fontWeight: '800' },
   footerCaption: { fontFamily: FONT_FAMILY, fontSize: 10, marginTop: 2 },
-  footerLinks: { flexDirection: 'row', gap: 20 },
+  footerLinks: { flexDirection: 'row', flexWrap: 'wrap', gap: 20 },
+  footerLinkHit: { justifyContent: 'center', minHeight: 44 },
   footerLink: { fontFamily: FONT_FAMILY, fontSize: 12, fontWeight: '600' },
   footerLicense: { fontFamily: MONO_FAMILY, fontSize: 9 },
   toast: { alignSelf: 'center', left: 'auto', maxWidth: 420, right: 24 },

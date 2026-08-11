@@ -27,6 +27,12 @@ describe('Spinner / ProgressBar', () => {
         confirm: '확인',
         close: '닫기',
         searchPlaceholder: '검색',
+        noResults: '검색 결과 없음',
+        sortAscending: '오름차순 정렬됨',
+        sortDescending: '내림차순 정렬됨',
+        sortUnsorted: '정렬되지 않음',
+        previousPage: '이전 페이지',
+        nextPage: '다음 페이지',
       }}>
         <Spinner />
       </UiProvider>,

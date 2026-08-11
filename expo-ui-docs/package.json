@@ -7,8 +7,11 @@
     "dev": "expo start",
     "web": "expo start --web",
     "generate:seo": "node scripts/generate-seo.mjs",
-    "export:web": "pnpm run generate:seo && expo export --platform web",
+    "export:web": "pnpm run verify && expo export --platform web",
     "check:seo": "node scripts/check-seo.mjs",
+    "check:links": "node scripts/check-link-styles.mjs",
+    "generate:props": "node scripts/generate-props.mjs",
+    "verify": "pnpm run check:links && pnpm run generate:props && pnpm run typecheck && pnpm run generate:seo",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

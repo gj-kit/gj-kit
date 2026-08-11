@@ -15,7 +15,14 @@
     "theme",
     "dark-mode",
     "accessibility",
+    "data-table",
+    "pagination",
+    "combobox",
+    "searchable-select",
+    "table",
+    "drawer",
     "safe-area",
+    "sheet",
     "keyboard",
     "tailwind"
   ],
@@ -34,6 +41,36 @@
   "types": "./dist/index.d.ts",
   "exports": {
     ".": {
+      "node": {
+        "import": {
+          "types": "./dist/index.d.ts",
+          "default": "./dist/index.web.js"
+        },
+        "require": {
+          "types": "./dist/index.d.cts",
+          "default": "./dist/index.web.cjs"
+        }
+      },
+      "browser": {
+        "import": {
+          "types": "./dist/index.d.ts",
+          "default": "./dist/index.web.js"
+        },
+        "require": {
+          "types": "./dist/index.d.cts",
+          "default": "./dist/index.web.cjs"
+        }
+      },
+      "react-native": {
+        "import": {
+          "types": "./dist/index.d.ts",
+          "default": "./dist/index.js"
+        },
+        "require": {
+          "types": "./dist/index.d.cts",
+          "default": "./dist/index.cjs"
+        }
+      },
       "import": {
         "types": "./dist/index.d.ts",
         "default": "./dist/index.js"
@@ -76,7 +113,7 @@
     "./package.json": "./package.json"
   },
   "scripts": {
-    "build": "tsup",
+    "build": "tsup --env.BUILD_TARGET native && tsup --env.BUILD_TARGET web",
     "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.tests.json",
     "test": "vitest run --project unit",
     "test:types": "vitest run --project types",
@@ -86,10 +123,14 @@
   "peerDependencies": {
     "react": ">=18",
     "react-native": ">=0.79",
-    "react-native-safe-area-context": ">=4"
+    "react-native-safe-area-context": ">=4",
+    "react-native-web": ">=0.21"
   },
   "peerDependenciesMeta": {
     "react-native-safe-area-context": {
+      "optional": true
+    },
+    "react-native-web": {
       "optional": true
     }
   },

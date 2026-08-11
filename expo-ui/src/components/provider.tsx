@@ -9,6 +9,7 @@ import type { ColorScheme, Theme, ThemePair } from '../theme/tokens';
 import { enStrings } from '../strings/strings';
 import type { UiStrings } from '../strings/strings';
 import type { UiIcons } from './icons';
+import { OverlayProvider, useOptionalOverlayStack } from './overlay/provider';
 
 const ThemeContext = createContext<Theme>(lightTheme);
 const StringsContext = createContext<UiStrings>(enStrings);
@@ -73,6 +74,7 @@ export function UiProvider({
   children,
 }: UiProviderProps): ReactElement {
   const nested = useContext(NestedContext);
+  const inheritedOverlayStack = useOptionalOverlayStack();
   // 중첩 Provider는 미지정 prop을 부모 값으로 상속한다(적대적 리뷰 확정 발견 —
   // 리셋 시 서브트리의 문구·아이콘·브랜드 테마가 라이브러리 기본값으로 소실).
   // 컨텍스트 기본값이 곧 라이브러리 기본(lightTheme/enStrings/{})이므로
@@ -102,7 +104,7 @@ export function UiProvider({
 
   const iconsValue = useMemo(() => icons ?? parentIcons, [icons, parentIcons]);
 
-  return (
+  const content = (
     <NestedContext.Provider value={true}>
       <ThemeContext.Provider value={resolved}>
         <StringsContext.Provider value={strings ?? parentStrings}>
@@ -111,6 +113,12 @@ export function UiProvider({
       </ThemeContext.Provider>
     </NestedContext.Provider>
   );
+
+  // 루트 UiProvider는 product overlays가 공유할 dismiss/layer scope도 함께 제공한다.
+  // 중첩 UiProvider는 테마만 바꾸며 바깥 overlay stack을 분리하지 않는다.
+  return nested || inheritedOverlayStack !== null
+    ? content
+    : <OverlayProvider>{content}</OverlayProvider>;
 }
 
 /** 활성 스킴으로 해석된 Theme. Provider 없으면 lightTheme (Provider는 선택 — 전신과 동일). */

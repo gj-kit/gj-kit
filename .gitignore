@@ -13,5 +13,8 @@ coverage/
 .DS_Store
 .turbo/
 
+# Expo local state
+.expo/
+
 # check-readme 작업 디렉토리 (실패 시 보존됨)
 .readme-check-*/

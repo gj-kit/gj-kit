@@ -20,6 +20,73 @@ function compareVersions(first, second) {
   return 0;
 }
 
+function assertEntries(entries, label) {
+  if (!Array.isArray(entries) || entries.length === 0) {
+    throw new Error(`SEO catalog ${label} must be a non-empty array.`);
+  }
+}
+
+function assertUnique(entries, key, label) {
+  const values = entries.map((entry) => entry[key]);
+  const duplicate = values.find((value, index) => values.indexOf(value) !== index);
+  if (duplicate !== undefined) {
+    throw new Error(`SEO catalog contains duplicate ${label}: ${duplicate}`);
+  }
+}
+
+assertEntries(catalog.components, 'components');
+assertEntries(catalog.guides, 'guides');
+assertUnique(catalog.components, 'slug', 'component slug');
+assertUnique(catalog.components, 'name', 'component name');
+assertUnique(catalog.guides, 'slug', 'guide slug');
+
+const componentReferences = new Set(
+  catalog.components.flatMap((entry) => [entry.slug, entry.name]),
+);
+for (const entry of catalog.components) {
+  if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/u.test(entry.slug)) {
+    throw new Error(`Invalid component slug: ${entry.slug}`);
+  }
+  if (!/^\d+\.\d+\.\d+$/u.test(entry.since)) {
+    throw new Error(`Invalid component version for ${entry.name}: ${entry.since}`);
+  }
+  for (const related of entry.related ?? []) {
+    if (!componentReferences.has(related)) {
+      throw new Error(`Unknown related component for ${entry.name}: ${related}`);
+    }
+  }
+  // 상세 페이지 h1은 headline을 그대로 쓴다. 이름으로 끝나지 않으면 제목에서
+  // 컴포넌트 이름이 사라진다.
+  if (!entry.headline.trim().endsWith(entry.name)) {
+    throw new Error(
+      `Headline must end with the component name so the detail page h1 contains it: ${entry.name} — ${entry.headline}`,
+    );
+  }
+}
+
+// 카탈로그에 컴포넌트를 추가하고 미리보기를 빠뜨리면 상세 페이지가 글만 남는다.
+const previewSource = await readFile(
+  path.join(projectDir, 'src/component-previews.tsx'),
+  'utf8',
+);
+const registryBlock = previewSource
+  .split('const previews: Readonly<Record<string, ComponentType>> = {')[1]
+  ?.split('\n};')[0];
+if (registryBlock === undefined) {
+  throw new Error('component-previews.tsx의 previews 레지스트리를 찾지 못했습니다.');
+}
+const previewSlugs = new Set(
+  [...registryBlock.matchAll(/^\s{2}'?([a-z0-9-]+)'?:/gmu)].map((match) => match[1]),
+);
+const missingPreviews = catalog.components
+  .map((entry) => entry.slug)
+  .filter((slug) => !previewSlugs.has(slug));
+if (missingPreviews.length > 0) {
+  throw new Error(
+    `미리보기가 없는 컴포넌트: ${missingPreviews.join(', ')} — src/component-previews.tsx에 추가하세요.`,
+  );
+}
+
 const releasedComponents = catalog.components.filter(
   (entry) => compareVersions(catalog.publishedVersion, entry.since) >= 0,
 );
@@ -31,12 +98,6 @@ const routes = [
   ...releasedComponents.map((entry) => `/docs/components/${entry.slug}`),
 ];
 
-if (catalog.components.length !== 31) {
-  throw new Error(`SEO catalog must contain 31 components, received ${catalog.components.length}`);
-}
-if (catalog.guides.length !== 6) {
-  throw new Error(`SEO catalog must contain 6 guides, received ${catalog.guides.length}`);
-}
 if (new Set(routes).size !== routes.length) {
   throw new Error('SEO routes contain duplicates.');
 }
@@ -58,3 +119,4 @@ await Promise.all([
 console.log(
   `SEO assets generated: ${routes.length} canonical routes (${releasedComponents.length} released components, ${catalog.components.length - releasedComponents.length} previews excluded).`,
 );
+console.log(`Live previews: ${previewSlugs.size}/${catalog.components.length} components covered.`);

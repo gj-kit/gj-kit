@@ -56,6 +56,17 @@ const BASE_PICKER_OPTIONS = {
   allowsEditing: false,
 } as const;
 
+/**
+ * Analysis/crop workflows need a broadly readable local image instead of a PhotoKit original.
+ * This is intentionally opt-in: storage uploads should retain their original representation by
+ * default, while consumers such as document scanning can request the compatible representation.
+ */
+const COMPATIBLE_LIBRARY_PICKER_OPTIONS = {
+  ...BASE_PICKER_OPTIONS,
+  preferredAssetRepresentationMode:
+    ImagePicker.UIImagePickerPreferredAssetRepresentationMode.Compatible,
+} as const;
+
 /** `MediaKind` → expo `MediaType`(16.0.0의 배열 형식 — §2.3 peer 하한 근거표). */
 function toMediaTypes(kinds: readonly MediaKind[]): ImagePicker.MediaType[] {
   const types = kinds.map((kind): ImagePicker.MediaType =>
@@ -117,12 +128,30 @@ export function expoPicker(options?: {
    * 함께 깨지기 때문이다. 즉 이 옵션은 fast path의 on/off이지 옵션 가방이 아니다.
    */
   readonly preferOriginalRepresentation?: boolean | undefined;
+  /**
+   * When original PhotoKit data is unsuitable for an app-owned processing flow, ask iOS for a
+   * compatible representation. This keeps the default upload-oriented original fast path intact.
+   */
+  readonly preferCompatibleRepresentation?: boolean | undefined;
+  /**
+   * Retry a failed single-image library launch with UIImagePickerController's editing flow.
+   * This is useful for iCloud/HEIC assets that PHPicker cannot materialize. The retry is limited
+   * to one selection because Expo does not support editing together with multi-selection.
+   */
+  readonly retryWithEditingOnError?: boolean | undefined;
 }): PickerAdapter {
+  if (options?.preferOriginalRepresentation && options?.preferCompatibleRepresentation) {
+    throw new TypeError('Only one asset representation preference can be enabled.');
+  }
   const preferOriginal = options?.preferOriginalRepresentation ?? true;
+  const preferCompatible = options?.preferCompatibleRepresentation ?? false;
+  const retryWithEditingOnError = options?.retryWithEditingOnError ?? false;
   // EOP 때문에 `preferredAssetRepresentationMode: undefined`를 넘길 수 없다 — 키 자체를 지운다.
-  const libraryOptions = preferOriginal
-    ? ORIGINAL_LIBRARY_PICKER_OPTIONS
-    : BASE_PICKER_OPTIONS;
+  const libraryOptions = preferCompatible
+    ? COMPATIBLE_LIBRARY_PICKER_OPTIONS
+    : preferOriginal
+      ? ORIGINAL_LIBRARY_PICKER_OPTIONS
+      : BASE_PICKER_OPTIONS;
 
   return {
     /**
@@ -144,16 +173,28 @@ export function expoPicker(options?: {
       readonly kinds: readonly MediaKind[];
       readonly max: number;
     }): Promise<readonly PickedAsset[]> {
-      const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: toMediaTypes(input.kinds),
-        ...libraryOptions,
-        // 전신 보존: `max === 1`은 단일선택 UI(uploader.ts:921-924), 그 이상은 다중선택
-        // + `selectionLimit`(946-950). 고정 조합(위 상수)은 **양쪽이 공유**하므로 §7.1의
-        // "단일선택이 다중선택과 조용히 달라지면 안 된다"는 그대로 성립한다 —
-        // 달라지는 것은 선택 UI뿐이고 바이트 경로가 아니다.
-        allowsMultipleSelection: input.max > 1,
-        selectionLimit: input.max,
-      });
+      let result: ImagePicker.ImagePickerResult;
+      try {
+        result = await ImagePicker.launchImageLibraryAsync({
+          mediaTypes: toMediaTypes(input.kinds),
+          ...libraryOptions,
+          // 전신 보존: `max === 1`은 단일선택 UI(uploader.ts:921-924), 그 이상은 다중선택
+          // + `selectionLimit`(946-950). 고정 조합(위 상수)은 **양쪽이 공유**하므로 §7.1의
+          // "단일선택이 다중선택과 조용히 달라지면 안 된다"는 그대로 성립한다 —
+          // 달라지는 것은 선택 UI뿐이고 바이트 경로가 아니다.
+          allowsMultipleSelection: input.max > 1,
+          selectionLimit: input.max,
+        });
+      } catch (error) {
+        if (!retryWithEditingOnError || input.max !== 1 || !input.kinds.includes('image')) {
+          throw error;
+        }
+        result = await ImagePicker.launchImageLibraryAsync({
+          mediaTypes: ['images'],
+          quality: 0.9,
+          allowsEditing: true,
+        });
+      }
       // 취소는 빈 배열이다. 실패가 아니므로 throw하지 않는다 — 코어도 빈 결과를 그대로 다룬다.
       if (result.canceled) return [];
       return result.assets.map(toPickedAsset);

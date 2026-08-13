@@ -235,6 +235,24 @@ const uploaded = await picker.pickAndUpload({ max: 10, kinds: ['image'] });
 const shot = await picker.captureAndUpload({ kind: 'image' });
 ```
 
+앱이 파일을 직접 자르거나 분석할 때는 업로드 설정 없이 선택 전용 API를 조합한다. 권한 확인,
+단일 촬영 제한, 피커 결과 정규화는 라이브러리가 맡고 이후 처리만 앱에 남긴다.
+
+```ts
+import { createMediaPickerActions } from '@gj-kit/expo-media';
+import { expoPicker } from '@gj-kit/expo-media/picker';
+
+const scannerPicker = createMediaPickerActions({
+  picker: expoPicker({
+    preferCompatibleRepresentation: true,
+    retryWithEditingOnError: true,
+  }),
+});
+
+const [photo] = await scannerPicker.capture({ kind: 'image' });
+const [libraryPhoto] = await scannerPicker.pick({ max: 1, kinds: ['image'] });
+```
+
 ```ts
 import { createMediaKit } from '@gj-kit/expo-media';
 import { expoDeviceLibrary } from '@gj-kit/expo-media/device';

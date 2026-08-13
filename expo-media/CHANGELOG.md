@@ -1,5 +1,11 @@
 # @gj-kit/expo-media
 
+## 0.3.0
+
+### Minor Changes
+
+- d30bc29: Add upload-independent camera and library picker actions, plus compatible iOS representation and editing-retry options for app-owned image processing flows.
+
 ## 0.2.0
 
 ### Minor Changes

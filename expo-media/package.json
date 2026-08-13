@@ -1,6 +1,6 @@
 {
   "name": "@gj-kit/expo-media",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Expo/React Native 사진·동영상 파이프라인 — 프리사인 업로드, EXIF, 기기 라이브러리(iCloud·PhotoKit 하드닝), 스트리밍 SHA-256, 동영상 포스터, 기기 저장. 어댑터 seam으로 expo 없이도 동작하며 런타임 의존성 0",
   "homepage": "https://github.com/gj-kit/gj-kit/tree/main/expo-media",
   "repository": {

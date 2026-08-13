@@ -14,74 +14,13 @@
 import type { BinarySourceLoader, MediaKind, PickedAsset, PickerAdapter, PlatformAdapter } from '../adapters';
 import { MediaError } from '../errors';
 import { inferMediaContentType, mediaFileName } from '../mediaTypes';
+import { createMediaPickerActions } from '../pickerActions';
 import { normalizeDurationMs } from './duration';
 import type { MediaStrings } from '../strings';
 import { enMediaStrings } from '../strings';
 import type { UploadResult } from '../types';
 import type { BinaryUploads } from './binary';
 import type { LocalUploads } from './uploader';
-import { DEFAULT_PICK_MAX } from './uploader';
-
-/** 전신 3사이트가 모두 `mediaTypes: ["images"]`로 시작했다(uploader.ts:921,940). */
-const DEFAULT_PICK_KINDS: readonly MediaKind[] = ['image'];
-
-/**
- * Picker adapters are host code, so their runtime result is not trusted merely because the
- * TypeScript interface says `PickedAsset[]`. Copy exactly the fields this flow owns before an
- * asset crosses into upload code; a getter/Proxy cannot later replace a safe file name with a raw
- * URL-shaped value.
- */
-function snapshotPickedAssets(value: unknown, max: number): readonly PickedAsset[] | null {
-  if (!Array.isArray(value)) return null;
-  const snapshots: PickedAsset[] = [];
-  const count = Math.min(value.length, max);
-  for (let index = 0; index < count; index += 1) {
-    const source = value[index];
-    if (typeof source !== 'object' || source === null || Array.isArray(source)) return null;
-    const record = source as Record<string, unknown>;
-    const uri = record['uri'];
-    const assetId = record['assetId'];
-    const fileName = record['fileName'];
-    const mimeType = record['mimeType'];
-    const width = record['width'];
-    const height = record['height'];
-    const durationRaw = record['durationRaw'];
-    const exif = record['exif'];
-    const verifiedSizeBytes = record['verifiedSizeBytes'];
-    const reportedSizeBytes = record['reportedSizeBytes'];
-    if (
-      typeof uri !== 'string' ||
-      uri.length === 0 ||
-      (assetId !== undefined && typeof assetId !== 'string') ||
-      (fileName !== undefined && typeof fileName !== 'string') ||
-      (mimeType !== undefined && typeof mimeType !== 'string') ||
-      (width !== undefined && (!Number.isFinite(width) || typeof width !== 'number')) ||
-      (height !== undefined && (!Number.isFinite(height) || typeof height !== 'number')) ||
-      (durationRaw !== undefined && (!Number.isFinite(durationRaw) || typeof durationRaw !== 'number')) ||
-      (verifiedSizeBytes !== undefined &&
-        (!Number.isFinite(verifiedSizeBytes) || typeof verifiedSizeBytes !== 'number')) ||
-      (reportedSizeBytes !== undefined &&
-        (!Number.isFinite(reportedSizeBytes) || typeof reportedSizeBytes !== 'number')) ||
-      (exif !== undefined && (typeof exif !== 'object' || exif === null || Array.isArray(exif)))
-    ) {
-      return null;
-    }
-    snapshots.push({
-      uri,
-      ...(assetId !== undefined ? { assetId } : {}),
-      ...(fileName !== undefined ? { fileName } : {}),
-      ...(mimeType !== undefined ? { mimeType } : {}),
-      ...(width !== undefined ? { width } : {}),
-      ...(height !== undefined ? { height } : {}),
-      ...(durationRaw !== undefined ? { durationRaw } : {}),
-      ...(exif !== undefined ? { exif: exif as Readonly<Record<string, unknown>> } : {}),
-      ...(verifiedSizeBytes !== undefined ? { verifiedSizeBytes } : {}),
-      ...(reportedSizeBytes !== undefined ? { reportedSizeBytes } : {}),
-    });
-  }
-  return snapshots;
-}
-
 export type PickUploadOptions<TCollectionId extends string = string> = {
   readonly collectionId?: TCollectionId | null | undefined;
   readonly max?: number | undefined;
@@ -139,6 +78,7 @@ export function createPickerFlows<TAsset, TCollectionId extends string = string>
   const { picker, uploads, platform } = input;
   const strings = input.strings ?? enMediaStrings;
   const fileNamePrefix = input.fileNamePrefix;
+  const pickerActions = createMediaPickerActions({ picker, strings });
 
   /**
    * 자산 1건 업로드 — 플랫폼 라우팅의 유일한 지점(§8.5 표의 마지막 행).
@@ -196,34 +136,7 @@ export function createPickerFlows<TAsset, TCollectionId extends string = string>
 
   const flows: PickerFlows<TAsset, TCollectionId> = {
     async pick(options) {
-      const kinds = options?.kinds ?? DEFAULT_PICK_KINDS;
-      const max = options?.max ?? DEFAULT_PICK_MAX;
-      let granted: boolean;
-      try {
-        const permission = await picker.requestLibraryPermission(kinds);
-        if (typeof permission?.granted !== 'boolean') throw new TypeError('Invalid picker permission');
-        granted = permission.granted;
-      } catch {
-        throw new MediaError('picker-failed', strings.pickerFailed);
-      }
-      if (!granted) {
-        // 전신은 bare Error였고(uploader.ts:918/937/973), 호스트가 "설정으로 이동" UI를 띄울
-        // 근거로 삼을 code가 없었다(§5.2의 typed-error 계약).
-        // 문구는 요청한 종류에 따라 갈린다 — 전신 uploader.ts:937(사진) vs 973(사진 및 동영상).
-        throw new MediaError(
-          'permission-denied',
-          kinds.includes('video') ? strings.mediaPermissionRequired : strings.photoPermissionRequired,
-        );
-      }
-      try {
-        const assets = await picker.pickFromLibrary({ kinds, max });
-        // 어댑터가 selectionLimit을 무시하는 플랫폼이 있어 코어에서 한 번 더 자른다(전신 946,983).
-        const snapshots = snapshotPickedAssets(assets, max);
-        if (!snapshots) throw new TypeError('Invalid picker asset result');
-        return snapshots;
-      } catch {
-        throw new MediaError('picker-failed', strings.pickerFailed);
-      }
+      return pickerActions.pick(options);
     },
 
     async pickAndUpload(options) {
@@ -235,29 +148,7 @@ export function createPickerFlows<TAsset, TCollectionId extends string = string>
     },
 
     async captureAndUpload(options) {
-      let granted: boolean;
-      try {
-        const permission = await picker.requestCameraPermission();
-        if (typeof permission?.granted !== 'boolean') throw new TypeError('Invalid camera permission');
-        granted = permission.granted;
-      } catch {
-        throw new MediaError('picker-failed', strings.pickerFailed);
-      }
-      if (!granted) {
-        throw new MediaError('permission-denied', strings.cameraPermissionRequired);
-      }
-      let snapshots: readonly PickedAsset[];
-      try {
-        const assets = await picker.capture({ kind: options?.kind ?? 'image' });
-        // ⚠ 1건 고정. 카메라가 여러 장을 돌려주는 플랫폼이 생겨도 상위 계약은 변하지 않는다.
-        const captured = snapshotPickedAssets(assets, 1);
-        if (!captured) throw new TypeError('Invalid camera asset result');
-        snapshots = captured;
-      } catch {
-        // Keep this boundary to the host picker only. `uploadAll` may reject with a safe
-        // MediaError from another entry-point copy, which must retain its code and recovery info.
-        throw new MediaError('picker-failed', strings.pickerFailed);
-      }
+      const snapshots = await pickerActions.capture({ kind: options?.kind });
       return uploadAll(snapshots, options?.collectionId);
     },
   };

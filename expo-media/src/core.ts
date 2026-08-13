@@ -160,6 +160,8 @@ export type { BinaryUploads } from './core/upload/binary';
 export { createBinaryUploads } from './core/upload/binary';
 
 // ─── §5.4-③ 피커 플로우 ─────────────────────────────────────────────────────
+export type { MediaPickOptions, MediaPickerActions } from './core/pickerActions';
+export { createMediaPickerActions } from './core/pickerActions';
 export type { PickUploadOptions, PickerFlows } from './core/upload/pickerFlows';
 export { createPickerFlows } from './core/upload/pickerFlows';
 

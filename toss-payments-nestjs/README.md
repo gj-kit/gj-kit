@@ -1,59 +1,161 @@
 # @gj-kit/toss-payments-nestjs
 
-[`@gj-kit/toss-payments`](../toss-payments/README.md)의 `createTossPayments` 파사드를 NestJS DI에 얹는 통합 패키지입니다 — DI 토큰(`TOSS_PAYMENTS`), `TossPaymentsModule.forRoot/forRootAsync`, 타입 보존 별칭(`TossPaymentsFor`), rawBody 강제 웹훅 헬퍼(`toNestWebhookHandler`)를 제공합니다.
+[`@gj-kit/toss-payments`](../toss-payments/README.md)의 안전한 결제 파사드를 NestJS 의존성 주입에 연결합니다. `TOSS_PAYMENTS` 토큰, `TossPaymentsModule.forRoot/forRootAsync`, 타입 보존 별칭(`TossPaymentsFor`), raw body를 강제하는 웹훅 헬퍼(`toNestWebhookHandler`)를 제공합니다.
 
-> **원칙 경계**: 코어의 "런타임 의존성 0" 원칙은 이 패키지에 적용되지 않습니다.
-> Nest와 코어를 **peerDependencies로만** 수용하며(앱과 단일 인스턴스 공유 — 이중 로드 방지), `dependencies` 0은 유지합니다.
+처음 연동한다면 아래 **Nest 골든 패스**를 그대로 따라 하세요. 기존 DB provider를 `OrderStore`로 감싸 한 번만 배선하면, 주문 저장·금액 대조·승인에 필요한 `confirm` 플로우를 앱 전체에서 주입할 수 있습니다.
 
----
-
-## ⚠️ 웹훅을 쓴다면 rawBody부터 — 3중 확인 (필독)
-
-Nest 기본 body-parser가 웹훅 body를 JSON으로 **선파싱하면 서명/secret 검증이 전멸**합니다. 파싱된 객체를 다시 직렬화해도 원문과 바이트가 달라 검증은 복구되지 않습니다.
-
-1. **Express 플랫폼(기본)** — 부트스트랩에서 rawBody 보존을 켜세요.
-
-   ```ts
-   const app = await NestFactory.create<NestExpressApplication>(AppModule, { rawBody: true });
-   ```
-
-   컨트롤러에서는 `@Req() req: RawBodyRequest<Request>`로 받아 `req.rawBody`를 사용합니다 — 직접 `verifier.verify(req.rawBody!, req.headers, { sourceIp: req.ip })`를 호출하거나, 아래의 `toNestWebhookHandler`에 위임하세요.
-
-2. **Fastify 플랫폼** — `NestFactory.create(..., { rawBody: true })` 설정 후 동일하게 `req.rawBody`를 사용하세요(어댑터가 rawBody를 보존하도록 구성해야 합니다).
-
-3. **경고** — 웹훅 경로에 별도 JSON body 미들웨어(`express.json()`, 전역 body-parser 재장착 등)가 선적용되면 rawBody가 있어도 검증 대상 원문이 오염될 수 있습니다. 웹훅 라우트에는 JSON 파싱 미들웨어를 두지 마세요.
-
-`toNestWebhookHandler`는 `req.rawBody` 부재 시 **핸들러를 실행하지 않고 명시적 500 + 설정 안내 로그**를 남깁니다 — "400이 계속 나는데 원인을 모르는" 조용한 검증 전멸 사고를 설정 결함 신호로 바꿔 줍니다.
-
----
+> **원칙 경계**: 코어의 “런타임 의존성 0” 원칙은 이 패키지에 적용되지 않습니다. Nest와 코어는 앱과 단일 인스턴스를 공유하는 peer dependency이며, 이 패키지는 runtime dependency를 추가하지 않습니다.
 
 ## 설치
 
 ```sh
 pnpm add @gj-kit/toss-payments @gj-kit/toss-payments-nestjs
-# peer: @nestjs/common ^10 || ^11, reflect-metadata, rxjs (Nest 앱이면 이미 있음)
 ```
 
-- `emitDecoratorMetadata`가 **필요 없습니다.** 모든 주입이 명시적 `@Inject(토큰)`이라 SWC/esbuild(Vitest·tsup 포함) 빌드에서 무설정으로 동작합니다.
+Nest 앱에는 보통 이미 `@nestjs/common`, `reflect-metadata`, `rxjs`가 있습니다. `emitDecoratorMetadata`는 필요하지 않습니다. 모든 주입은 명시적 토큰을 사용하므로 SWC·esbuild에서도 별도 설정 없이 동작합니다.
 
-## forRoot — 동기 조립
+## Nest 골든 패스 — 영속 주문 저장소 + 비동기 조립
 
-config는 코어와 동일합니다(`createTossPayments` 인자 그대로). 기본 `global: true` — 앱 어디서든 import 없이 주입됩니다.
+일반적인 Nest 앱에서는 `forRootAsync`가 기본 선택입니다. **중요한 Nest 규칙**은 하나입니다: `useFactory`가 주입받을 provider는 `TossPaymentsModule.forRootAsync({ imports })`의 `imports`에서 export되어야 합니다. 상위 `AppModule`의 `providers`에만 등록하면 DynamicModule의 factory에서는 보이지 않습니다.
+
+### 1. DB provider를 `OrderStore`로 감싸 export
+
+아래는 Prisma 예시입니다. `TossOrder`는 `orderId`(unique), `amount`, `orderName`, `createdAt` 컬럼을 가진 앱의 주문 테이블로 바꾸세요. 이 예제는 KRW 결제만 다룹니다.
+
+```ts
+// payments/toss/toss-stores.module.ts
+import { Injectable, Module } from '@nestjs/common';
+import type { OrderId } from '@gj-kit/toss-payments';
+import type { OrderStore, StoredOrder } from '@gj-kit/toss-payments/server';
+import { PrismaModule, PrismaService } from '../../prisma';
+
+@Injectable()
+export class TossOrderStore implements OrderStore {
+  constructor(private readonly prisma: PrismaService) {}
+
+  async saveOrder(order: StoredOrder): Promise<void> {
+    await this.prisma.tossOrder.create({
+      data: {
+        orderId: order.orderId,
+        amount: order.amount,
+        orderName: order.orderName,
+        createdAt: new Date(order.createdAt),
+      },
+    });
+  }
+
+  async loadOrder(orderId: OrderId): Promise<StoredOrder | null> {
+    const order = await this.prisma.tossOrder.findUnique({ where: { orderId } });
+    if (order === null) return null;
+
+    return {
+      // 조회에 사용한 branded orderId를 되돌려 타입 경계를 유지합니다.
+      orderId,
+      amount: order.amount,
+      currency: 'KRW',
+      orderName: order.orderName,
+      createdAt: order.createdAt.toISOString(),
+    };
+  }
+}
+
+@Module({
+  imports: [PrismaModule],
+  providers: [TossOrderStore],
+  exports: [TossOrderStore],
+})
+export class TossStoresModule {}
+```
+
+`OrderStore`는 단순 캐시가 아니라 **승인 시 금액을 대조하는 단일 진실 공급원**입니다. 운영 환경에서는 반드시 내구성 있는 DB를 사용하세요.
+
+### 2. config와 앱 전역 타입을 한 파일에 고정
+
+`buildTossConfig`를 factory와 타입 별칭이 함께 사용하면, `forRootAsync` 뒤에도 `confirm`처럼 실제로 배선한 플로우만 주입부에 남습니다.
+
+```ts
+// payments/toss/toss.config.ts
+import { orThrow } from '@gj-kit/toss-payments';
+import {
+  defineTossPaymentsConfig,
+  parseApiSecretKey,
+  type OrderStore,
+} from '@gj-kit/toss-payments/server';
+import type { TossPaymentsFor } from '@gj-kit/toss-payments-nestjs';
+
+export const buildTossConfig = (orders: OrderStore) =>
+  defineTossPaymentsConfig({
+    // 부팅 시 한 번만 파싱합니다. 요청 처리 중에는 orThrow를 쓰지 마세요.
+    secretKey: orThrow(parseApiSecretKey(process.env.TOSS_SECRET_KEY!)),
+    orders,
+  });
+
+export type AppToss = TossPaymentsFor<ReturnType<typeof buildTossConfig>>;
+```
+
+### 3. storage module을 DynamicModule에 import
+
+```ts
+// app.module.ts
+import { Module } from '@nestjs/common';
+import { TossPaymentsModule } from '@gj-kit/toss-payments-nestjs';
+import { TossStoresModule, TossOrderStore } from './payments/toss/toss-stores.module';
+import { buildTossConfig } from './payments/toss/toss.config';
+
+@Module({
+  imports: [
+    TossPaymentsModule.forRootAsync({
+      // factory provider가 보이는 모듈 스코프입니다.
+      imports: [TossStoresModule],
+      inject: [TossOrderStore],
+      useFactory: (orders: TossOrderStore) => buildTossConfig(orders),
+    }),
+  ],
+})
+export class AppModule {}
+```
+
+기본값은 `global: true`입니다. 따라서 feature module에서 `TossPaymentsModule`을 다시 import하지 않아도 됩니다. 모듈 경계를 엄격히 유지하고 싶다면 `{ global: false }`를 지정하고 필요한 feature module에 직접 import하세요.
+
+### 4. 서비스에서 주문을 만들고, 승인 플로우를 주입
+
+클라이언트가 보낸 금액을 그대로 받지 말고, 서버가 보유한 상품·플랜 가격을 사용하세요. `toClientProps()`의 반환값은 브라우저 패키지의 `requestPayment` 입력에 바로 사용할 수 있습니다.
+
+```ts
+// payments/payments.service.ts
+import { BadRequestException, Injectable } from '@nestjs/common';
+import { InjectTossPayments } from '@gj-kit/toss-payments-nestjs';
+import type { AppToss } from './toss/toss.config';
+
+const plans = {
+  starter: { amount: 9_900, orderName: 'Starter 플랜' },
+  pro: { amount: 19_900, orderName: 'Pro 플랜' },
+} as const;
+
+@Injectable()
+export class PaymentsService {
+  constructor(@InjectTossPayments() private readonly toss: AppToss) {}
+
+  async createOrder(planId: keyof typeof plans) {
+    const result = await this.toss.confirm.createOrder(plans[planId]);
+    if (!result.ok) throw new BadRequestException(result.error);
+    return result.value.toClientProps();
+  }
+}
+```
+
+successUrl의 콜백에서는 `parseSuccessCallback` → `toss.confirm.verify` → `toss.confirm.confirm` 순서를 따르세요. `verify`는 저장된 주문 금액과 콜백 금액을 대조한 뒤에만 승인용 값을 만듭니다. 전체 콜백·실패 복구 예제는 코어의 [결제위젯 승인 흐름](../toss-payments/README.md#4.1-결제위젯-주문-생성--인증--금액-검증--승인)을 참고하세요.
+
+## 다른 조립 방식
+
+### `forRoot` — config를 이미 동기로 만들 수 있을 때
+
+Nest DI를 거치지 않는 저장소가 있다면 아래처럼 한 번에 조립할 수 있습니다.
 
 ```ts
 import { Module } from '@nestjs/common';
-import { orThrow } from '@gj-kit/toss-payments';
-import { defineTossPaymentsConfig, parseApiSecretKey } from '@gj-kit/toss-payments/server';
-import { TossPaymentsModule, TossPaymentsFor } from '@gj-kit/toss-payments-nestjs';
-
-export const tossConfig = defineTossPaymentsConfig({
-  secretKey: orThrow(parseApiSecretKey(process.env.TOSS_SECRET_KEY!)),
-  orders: {
-    saveOrder: async (o) => { /* db 저장 */ },
-    loadOrder: async (id) => null /* db 조회 */,
-  },
-});
-export type AppToss = TossPaymentsFor<typeof tossConfig>;
+import { TossPaymentsModule } from '@gj-kit/toss-payments-nestjs';
+import { tossConfig } from './payments/toss.config';
 
 @Module({
   imports: [TossPaymentsModule.forRoot(tossConfig)],
@@ -61,112 +163,64 @@ export type AppToss = TossPaymentsFor<typeof tossConfig>;
 export class AppModule {}
 ```
 
-## forRootAsync — 스토어를 Nest 프로바이더로 주입
+`forRoot`와 `forRootAsync` 모두 `global` 옵션을 받을 수 있으며 기본값은 `true`입니다.
 
-DB 클라이언트(PrismaService 등)를 스토어 구현으로 쓰는 표준 경로입니다. 스토어를 프로바이더로 만들고 `inject`로 팩토리에 흘립니다.
+## 웹훅을 추가한다면: rawBody부터
 
-```ts
-import { Injectable, Module } from '@nestjs/common';
-import type { OrderStore } from '@gj-kit/toss-payments/server';
-import { defineTossPaymentsConfig, parseApiSecretKey } from '@gj-kit/toss-payments/server';
-import { orThrow } from '@gj-kit/toss-payments';
-import { TossPaymentsModule } from '@gj-kit/toss-payments-nestjs';
+Nest의 기본 body parser가 웹훅 body를 먼저 JSON으로 파싱하면 서명·secret 검증은 복구할 수 없습니다. 파싱한 객체를 다시 직렬화해도 원문 바이트와 다릅니다.
 
-@Injectable()
-export class TossOrderStore implements OrderStore {
-  constructor(private readonly prisma: PrismaService) {}
-  async saveOrder(order) { await this.prisma.tossOrder.create({ data: order }); }
-  async loadOrder(orderId) { return this.prisma.tossOrder.findUnique({ where: { orderId } }); }
-}
+1. Express 플랫폼에서는 부트스트랩에서 raw body를 보존하세요.
 
-@Module({ providers: [TossOrderStore], exports: [TossOrderStore], imports: [PrismaModule] })
-export class TossStoresModule {}
+   ```ts
+   const app = await NestFactory.create<NestExpressApplication>(AppModule, { rawBody: true });
+   ```
 
-@Module({
-  imports: [
-    TossPaymentsModule.forRootAsync({
-      imports: [TossStoresModule],
-      inject: [TossOrderStore],
-      // ⚠ 반환은 반드시 defineTossPaymentsConfig로 감싸세요 — 팩토리 반환 경로에서는
-      //   const 추론이 풀려 배선 판정(조건부 프로퍼티)이 무너질 수 있습니다.
-      useFactory: (orders: TossOrderStore) =>
-        defineTossPaymentsConfig({
-          secretKey: orThrow(parseApiSecretKey(process.env.TOSS_SECRET_KEY!)),
-          orders,
-        }),
-    }),
-  ],
-})
-export class AppModule {}
-```
+2. 컨트롤러는 `@Req() req: RawBodyRequest<Request>`로 `req.rawBody`를 받고, `toNestWebhookHandler`에 요청과 응답을 위임하세요.
 
-## 타입 보존 패턴 — 배선 누락을 주입부에서도 컴파일 에러로
+   ```ts
+   import { Controller, Post, Req, Res } from '@nestjs/common';
+   import type { RawBodyRequest } from '@nestjs/common';
+   import type { Request, Response } from 'express';
+   import { InjectTossPayments, toNestWebhookHandler } from '@gj-kit/toss-payments-nestjs';
+   import type { AppToss } from '../toss/toss.config';
 
-`forRootAsync`는 런타임 토큰 주입이라 kit의 조건부 타입이 그냥은 소실됩니다. config를 `defineTossPaymentsConfig`로 한 번 고정하고 `TossPaymentsFor<typeof config>`를 앱 전역 별칭으로 쓰세요.
+   @Controller('webhooks')
+   export class TossWebhookController {
+     private readonly handle;
 
-```ts
-// app/toss.config.ts
-export const tossConfig = defineTossPaymentsConfig({ secretKey, orders, billingKeys });
-export type AppToss = TossPaymentsFor<typeof tossConfig>;
+     constructor(@InjectTossPayments() toss: AppToss) {
+       this.handle = toNestWebhookHandler(toss.webhook, {
+         onDepositCallback: async (webhook) => {
+           // trust: 'secret' — 입금 주문을 반영
+         },
+         onPaymentStatusChanged: async (webhook) => {
+           if (webhook.prefetched?.ok) {
+             // payload가 아니라 조회한 결제 상태를 반영
+           }
+         },
+       });
+     }
 
-// 주입부 — 빠진 스토어의 플로우 접근은 여기서도 컴파일 에러
-@Injectable()
-export class SubscriptionService {
-  constructor(@InjectTossPayments() private readonly toss: AppToss) {}
-  charge() { return this.toss.billing.approve(/* ... */); }   // billingKeys 배선 시에만 컴파일
-}
-```
+     @Post('toss')
+     async toss(@Req() req: RawBodyRequest<Request>, @Res() res: Response) {
+       await this.handle(req, res);
+     }
+   }
+   ```
 
-에러↔원인 매핑(코어 §2와 동일): `Property 'billing' does not exist ...` → config에 `billingKeys` 미배선(또는 위젯 키 파사드), `'confirm'` 부재 → `orders` 미배선, `'webhook'` 부재 → `webhook: { dedupe }` 미배선.
+3. 웹훅 경로에 별도 `express.json()` 또는 전역 body parser를 다시 붙이지 마세요. `toNestWebhookHandler`는 raw body가 없으면 핸들러를 실행하지 않고, 500과 설정 안내 로그를 남깁니다.
 
-## 웹훅 컨트롤러
-
-```ts
-import { Controller, Post, Req, Res } from '@nestjs/common';
-import type { RawBodyRequest } from '@nestjs/common';
-import type { Request, Response } from 'express';
-import { InjectTossPayments, toNestWebhookHandler } from '@gj-kit/toss-payments-nestjs';
-import type { AppToss } from '../toss.config';
-
-@Controller('webhooks')
-export class TossWebhookController {
-  private readonly handle;
-
-  constructor(@InjectTossPayments() toss: AppToss) {
-    this.handle = toNestWebhookHandler(toss.webhook, {
-      onDepositCallback: async (w) => { /* 가상계좌 입금 반영 */ },
-      onPaymentStatusChanged: async (w) => {
-        if (w.prefetched?.ok) { /* payload가 아닌 조회 결과로 갱신 */ }
-      },
-    });
-  }
-
-  @Post('toss')
-  async toss(@Req() req: RawBodyRequest<Request>, @Res() res: Response) {
-    await this.handle(req, res); // 검증→dedupe→200 ack→디스패치 전부 코어에 위임
-  }
-}
-```
-
-`verifier.verify`를 직접 쓰는 수동 경로도 그대로 가능합니다(응답 소유권을 직접 가질 때):
-
-```ts
-@Post('toss')
-async toss(@Req() req: RawBodyRequest<Request>, @Res() res: Response) {
-  const verdict = await this.toss.webhook.verify(req.rawBody!, req.headers, { sourceIp: req.ip });
-  // ... 10초 안에 200을 먼저 확정하고 처리하세요
-}
-```
+Fastify도 `NestFactory.create(..., { rawBody: true })`로 raw body를 보존한 뒤 같은 방식으로 사용하세요.
 
 ## 공개 표면
 
 | export | 설명 |
 |---|---|
-| `TOSS_PAYMENTS` | kit 바인딩 토큰 — `Symbol.for` 기반(ESM/CJS 이중 로드에도 동일) |
+| `TOSS_PAYMENTS` | `Symbol.for` 기반 kit 바인딩 토큰 — ESM/CJS 이중 로드에도 동일 |
 | `InjectTossPayments()` | `@Inject(TOSS_PAYMENTS)` 명시 위임 데코레이터 |
-| `TossPaymentsModule.forRoot(config, { global? })` | 동기 조립 (기본 global: true) |
-| `TossPaymentsModule.forRootAsync({ imports?, inject?, useFactory, global? })` | DI 의존 조립 |
-| `TossPaymentsFor<C>` | config 타입 → kit 타입 복원 별칭 (§4.3) |
-| `toNestWebhookHandler(verifier, handlers)` | rawBody 강제 웹훅 핸들러 (부재 시 명시적 500) |
+| `TossPaymentsModule.forRoot(config, { global? })` | 동기 조립 |
+| `TossPaymentsModule.forRootAsync({ imports?, inject?, useFactory, global? })` | Nest provider 기반 비동기 조립 |
+| `TossPaymentsFor<C>` | config 타입에서 kit 타입을 복원하는 별칭 |
+| `toNestWebhookHandler(verifier, handlers)` | raw body를 강제하는 Nest 웹훅 핸들러 |
 
-코어 사용법(플로우·옵션·에러 표)은 [`@gj-kit/toss-payments` README](../toss-payments/README.md)를 보세요.
+플로우별 옵션·에러·브라우저 결제창 사용법은 [`@gj-kit/toss-payments` README](../toss-payments/README.md)를 참고하세요.

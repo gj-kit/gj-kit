@@ -36,7 +36,11 @@
           <div class="module-top"><span class="nest-logo">N</span><span>app.module.ts</span><span class="module-ready"><b></b> module ready</span></div>
           <pre><code><span class="c-decorator">@Module</span>({
   <span class="c-prop">imports</span>: [
-    <span class="c-type">TossPaymentsModule</span>.<span class="c-fn">forRoot</span>(tossConfig),
+    <span class="c-type">TossPaymentsModule</span>.<span class="c-fn">forRootAsync</span>({
+      imports: [<span class="c-type">TossStoresModule</span>],
+      inject: [<span class="c-type">TossOrderStore</span>],
+      useFactory: buildTossConfig,
+    }),
   ],
 })
 <span class="c-key">export class</span> <span class="c-type">AppModule</span> {}</code></pre>
@@ -58,11 +62,11 @@
           <p>이 패키지는 새 결제 로직을 만들지 않습니다. 코어 파사드를 한 번 조립해 <code>TOSS_PAYMENTS</code> 토큰에 바인딩하고, 앱 서비스가 타입을 보존한 채 받도록 합니다.</p>
         </div>
         <div class="composition-board">
-          <div class="board-rail"><span class="rail-label">APP LAYER</span><span>Config</span><i></i><span>Module</span><i></i><span>Service</span></div>
+          <div class="board-rail"><span class="rail-label">APP LAYER</span><span>Store</span><i></i><span>Module</span><i></i><span>Service</span></div>
           <div class="board-stage" aria-label="NestJS 결제 의존성 구성도">
-            <div class="node config-node"><span class="node-tag">01</span><b>defineTossPaymentsConfig</b><small>배선 정보를 const 타입으로 고정</small></div>
+            <div class="node config-node"><span class="node-tag">01</span><b>TossStoresModule</b><small>DB store를 export</small></div>
             <div class="connector connector-a">↓</div>
-            <div class="node module-node"><span class="node-tag">02</span><b>TossPaymentsModule.forRoot</b><small>kit 생성 + 토큰 바인딩</small></div>
+            <div class="node module-node"><span class="node-tag">02</span><b>forRootAsync</b><small>store를 factory에 주입</small></div>
             <div class="connector connector-b">↓</div>
             <div class="node service-node"><span class="node-tag">03</span><b>@InjectTossPayments()</b><small>AppToss 타입 그대로 주입</small></div>
             <div class="side-note"><span>keep the proof</span><p>저장소를 빼먹은 플로우는 서비스에서도 존재하지 않습니다.</p></div>
@@ -74,8 +78,8 @@
         <div class="section-heading compact"><p class="eyebrow">Two ways to compose</p><h2>앱 구조에 맞게 선택하고,<br />안전성은 그대로 유지하세요.</h2></div>
         <div class="config-workbench">
           <div class="config-tabs" role="tablist" aria-label="NestJS 설정 방식">
-            <button class="config-tab active" role="tab" aria-selected="true" data-config="root"><span>01</span> forRoot</button>
-            <button class="config-tab" role="tab" aria-selected="false" data-config="async"><span>02</span> forRootAsync</button>
+            <button class="config-tab active" role="tab" aria-selected="true" data-config="async"><span>01</span> forRootAsync · 권장</button>
+            <button class="config-tab" role="tab" aria-selected="false" data-config="root"><span>02</span> forRoot</button>
           </div>
           <div class="config-display">
             <div class="config-copy"><p class="config-label" data-config-label>SYNCHRONOUS COMPOSITION</p><h3 data-config-title>config가 이미 있다면<br />한 번에 조립합니다.</h3><p data-config-description>앱 부팅 시 config를 고정하고, 기본 전역 모듈로 어느 서비스에서나 필요한 kit을 받습니다.</p><div class="config-points" data-config-points><span>글로벌 기본값</span><span>조건부 kit 타입 보존</span><span>가장 짧은 시작점</span></div></div>
@@ -96,61 +100,75 @@
       </section>
 
       <section id="start" class="section quickstart-section reveal">
-        <div class="start-copy"><p class="eyebrow">Ready when your app is</p><h2>설치 다음에는,<br />rawBody부터 확인하세요.</h2><p>아래 순서대로 부트스트랩, DI 조립, 웹훅 경계를 연결합니다. 주문 저장소는 기존 Nest provider를 재사용하고, 처음부터 영속 저장소를 연결하세요.</p><div class="resource-links"><a href="../toss-payments/">코어 패키지 살펴보기 <span>←</span></a><a href="https://github.com/gj-kit/gj-kit/blob/main/toss-payments-nestjs/README.md" target="_blank" rel="noreferrer">전체 가이드 <span>↗</span></a></div></div>
+        <div class="start-copy"><p class="eyebrow">Ready when your app is</p><h2>설치 다음에는,<br />주문 저장소를 연결하세요.</h2><p>아래 순서대로 DB store, DI 조립, 결제 서비스를 연결합니다. 웹훅을 추가할 때만 rawBody 경계를 켜면 됩니다.</p><div class="resource-links"><a href="../toss-payments/">코어 패키지 살펴보기 <span>←</span></a><a href="https://github.com/gj-kit/gj-kit/blob/main/toss-payments-nestjs/README.md" target="_blank" rel="noreferrer">전체 가이드 <span>↗</span></a></div></div>
         <div class="install-panel"><div class="install-tabs" role="tablist" aria-label="패키지 매니저"><button class="install-tab active" role="tab" aria-selected="true" data-package-manager="pnpm">pnpm</button><button class="install-tab" role="tab" aria-selected="false" data-package-manager="npm">npm</button><button class="install-tab" role="tab" aria-selected="false" data-package-manager="yarn">yarn</button></div><div class="install-command"><code data-install-command>pnpm add @gj-kit/toss-payments @gj-kit/toss-payments-nestjs</code><button class="copy-install" type="button" aria-label="설치 명령 복사">⧉</button></div><div class="install-note"><span>◎</span><p>Nest 앱의 <code>@nestjs/common</code>, <code>reflect-metadata</code>, <code>rxjs</code>는 peer로 공유합니다.</p></div><a class="button button-primary full" href="https://github.com/gj-kit/gj-kit/tree/main/toss-payments-nestjs" target="_blank" rel="noreferrer">소스에서 살펴보기 <span aria-hidden="true">↗</span></a></div>
         <div class="quickstart-steps" aria-label="NestJS 골든 패스">
           <article class="quickstart-step quickstart-code-step">
-            <div class="quickstart-step-head"><div><p class="quickstart-number">01 · BOOTSTRAP</p><h3>원본 요청 바이트를 먼저 보존합니다.</h3></div><div class="quickstart-file"><span>main.ts</span><button class="copy-quickstart" data-copy-target="#nest-bootstrap-code" type="button">Copy</button></div></div>
-            <pre><code id="nest-bootstrap-code">import { NestFactory } from '@nestjs/core';
-import { AppModule } from './app.module';
+            <div class="quickstart-step-head"><div><p class="quickstart-number">01 · STORE</p><h3>기존 DB provider를 주문 저장소로 감쌉니다.</h3></div><div class="quickstart-file"><span>toss-stores.module.ts</span><button class="copy-quickstart" data-copy-target="#nest-bootstrap-code" type="button">Copy</button></div></div>
+            <pre><code id="nest-bootstrap-code">import { Injectable, Module } from '@nestjs/common';
+import type { OrderId } from '@gj-kit/toss-payments';
+import type { OrderStore, StoredOrder } from '@gj-kit/toss-payments/server';
+import { PrismaModule, PrismaService } from '../../prisma';
 
-async function bootstrap() {
-  const app = await NestFactory.create(AppModule, {
-    rawBody: true,
-  });
-  await app.listen(process.env.PORT ?? 3000);
+@Injectable()
+export class TossOrderStore implements OrderStore {
+  constructor(private readonly prisma: PrismaService) {}
+
+  async saveOrder(order: StoredOrder): Promise&lt;void&gt; {
+    await this.prisma.tossOrder.create({
+      data: { orderId: order.orderId, amount: order.amount,
+        orderName: order.orderName, createdAt: new Date(order.createdAt) },
+    });
+  }
+
+  async loadOrder(orderId: OrderId): Promise&lt;StoredOrder | null&gt; {
+    const order = await this.prisma.tossOrder.findUnique({ where: { orderId } });
+    return order === null ? null : {
+      orderId, amount: order.amount, currency: 'KRW',
+      orderName: order.orderName, createdAt: order.createdAt.toISOString(),
+    };
+  }
 }
 
-void bootstrap();</code></pre>
-            <p class="quickstart-warning">웹훅 경로 앞에 별도 JSON body 미들웨어를 붙이지 마세요. 파싱 뒤에는 서명 검증에 필요한 원본 바이트를 복구할 수 없습니다.</p>
+@Module({
+  imports: [PrismaModule],
+  providers: [TossOrderStore],
+  exports: [TossOrderStore],
+})
+export class TossStoresModule {}</code></pre>
+            <p class="quickstart-warning">이 store는 승인 금액의 단일 진실 공급원입니다. 메모리 저장소가 아닌 영속 DB를 사용하세요.</p>
           </article>
           <article class="quickstart-step quickstart-code-step">
-            <div class="quickstart-step-head"><div><p class="quickstart-number">02 · COMPOSE</p><h3>기존 주문 저장소를 DI로 배선합니다.</h3></div><div class="quickstart-file"><span>app.module.ts</span><button class="copy-quickstart" data-copy-target="#nest-compose-code" type="button">Copy</button></div></div>
+            <div class="quickstart-step-head"><div><p class="quickstart-number">02 · COMPOSE</p><h3>export한 store를 DynamicModule에 import합니다.</h3></div><div class="quickstart-file"><span>app.module.ts</span><button class="copy-quickstart" data-copy-target="#nest-compose-code" type="button">Copy</button></div></div>
             <pre><code id="nest-compose-code">import { Module } from '@nestjs/common';
-import { orThrow } from '@gj-kit/toss-payments';
-import {
-  defineTossPaymentsConfig,
-  parseApiSecretKey,
-} from '@gj-kit/toss-payments/server';
 import { TossPaymentsModule } from '@gj-kit/toss-payments-nestjs';
-import { TossOrderStore } from './toss-order.store';
+import { TossStoresModule, TossOrderStore } from './payments/toss/toss-stores.module';
+import { buildTossConfig } from './payments/toss/toss.config';
 
 @Module({
   imports: [
     TossPaymentsModule.forRootAsync({
+      // factory가 보는 모듈 스코프
+      imports: [TossStoresModule],
       inject: [TossOrderStore],
       useFactory: (orders: TossOrderStore) =&gt;
-        defineTossPaymentsConfig({
-          secretKey: orThrow(parseApiSecretKey(process.env.TOSS_SECRET_KEY!)),
-          orders,
-        }),
+        buildTossConfig(orders),
     }),
   ],
-  providers: [TossOrderStore],
 })
 export class AppModule {}</code></pre>
-            <p class="quickstart-warning"><code>TossOrderStore</code>는 앱의 DB provider를 감싼 <code>OrderStore</code> 구현입니다. 메모리 저장소는 결제 서비스의 금액 기준으로 사용하면 안 됩니다.</p>
+            <p class="quickstart-warning">상위 <code>AppModule.providers</code>에만 store를 등록하면 factory에서 주입할 수 없습니다. <code>imports</code>와 <code>exports</code>를 함께 사용하세요.</p>
           </article>
           <article class="quickstart-step quickstart-checklist">
-            <p class="quickstart-number">03 · HANDLE WEBHOOK</p>
-            <h3>컨트롤러는 rawBody 경계를 넘기기만 합니다.</h3>
-            <p><code>toNestWebhookHandler(toss.webhook, handlers)</code>에 요청과 응답을 위임하면 검증·dedupe·핸들러 디스패치가 같은 경로로 실행됩니다.</p>
+            <p class="quickstart-number">03 · USE CONFIRM</p>
+            <h3>주입된 kit으로 서버 주문을 만듭니다.</h3>
+            <p><code>AppToss</code>는 실제 config에서 배선한 플로우만 노출합니다. 이 예제에는 <code>orders</code>가 있으므로 <code>confirm</code>을 안전하게 사용할 수 있습니다.</p>
             <ol>
-              <li><code>@InjectTossPayments()</code>로 앱의 <code>AppToss</code> 타입을 주입합니다.</li>
-              <li><code>@Post('toss')</code>에서 <code>req.rawBody</code>를 받는 핸들러를 연결합니다.</li>
-              <li>핸들러는 검증된 이벤트만 이행하고, 미검증 상태 변경은 재조회 결과만 반영합니다.</li>
+              <li><code>@InjectTossPayments()</code>로 <code>AppToss</code>를 서비스에 주입합니다.</li>
+              <li>클라이언트 금액 대신 서버의 상품·플랜 가격으로 <code>confirm.createOrder()</code>를 호출합니다.</li>
+              <li>successUrl에서는 저장 주문과 콜백 금액을 대조한 뒤 승인합니다.</li>
             </ol>
-            <a class="inline-guide-link" href="https://github.com/gj-kit/gj-kit/blob/main/toss-payments-nestjs/README.md#웹훅-컨트롤러" target="_blank" rel="noreferrer">완전한 컨트롤러 예제 보기 <span>↗</span></a>
+            <a class="inline-guide-link" href="https://github.com/gj-kit/gj-kit/blob/main/toss-payments-nestjs/README.md#4-서비스에서-주문을-만들고-승인-플로우를-주입" target="_blank" rel="noreferrer">서비스와 콜백 예제 보기 <span>↗</span></a>
           </article>
         </div>
         <div class="evidence-links" aria-label="신뢰 및 통합 자료">

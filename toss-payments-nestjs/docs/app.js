@@ -8,12 +8,12 @@ const configExamples = {
     code: `@Module({\n  imports: [\n    TossPaymentsModule.forRoot(tossConfig),\n  ],\n})\nexport class AppModule {}`,
   },
   async: {
-    label: 'DEPENDENCY-INJECTED COMPOSITION',
+    label: 'RECOMMENDED NEST COMPOSITION',
     file: 'app.module.ts',
-    title: '저장소도 Nest provider라면\n자연스럽게 주입합니다.',
-    description: 'Prisma 같은 앱 의존성을 store 구현으로 주입해, 모든 조립 책임을 모듈 선언에 모읍니다.',
-    points: ['기존 DB provider 재사용', 'imports · inject 지원', 'const 추론 보존'],
-    code: `TossPaymentsModule.forRootAsync({\n  imports: [TossStoresModule],\n  inject: [TossOrderStore],\n  useFactory: (orders) =>\n    defineTossPaymentsConfig({ secretKey, orders }),\n})`,
+    title: 'export한 DB store를\nfactory에 주입합니다.',
+    description: 'TossStoresModule을 DynamicModule에 import하면 Prisma 같은 앱 의존성을 안전하게 주입할 수 있습니다.',
+    points: ['기존 DB provider 재사용', 'imports · exports 스코프', 'AppToss 타입 보존'],
+    code: `TossPaymentsModule.forRootAsync({\n  imports: [TossStoresModule],\n  inject: [TossOrderStore],\n  useFactory: (orders) => buildTossConfig(orders),\n})`,
   },
 };
 
@@ -27,7 +27,7 @@ function syntax(code) {
     .replace(/\b(export|class|const)\b/g, '<span class="c-key">$1</span>')
     .replace(/\b(Module)\b/g, '<span class="c-decorator">$1</span>')
     .replace(/\b(TossPaymentsModule|TossStoresModule|TossOrderStore|AppModule)\b/g, '<span class="c-type">$1</span>')
-    .replace(/\b(forRootAsync|forRoot|defineTossPaymentsConfig)\b/g, '<span class="c-fn">$1</span>');
+    .replace(/\b(forRootAsync|forRoot|defineTossPaymentsConfig|buildTossConfig)\b/g, '<span class="c-fn">$1</span>');
 }
 function renderConfig(name) {
   const item = configExamples[name];

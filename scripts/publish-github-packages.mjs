@@ -1,9 +1,12 @@
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join, resolve } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
 
-const root = resolve(import.meta.dirname, '..');
+// Keep the release script compatible with every supported Node 20 runtime;
+// `import.meta.dirname` was added after the initial Node 20 releases.
+const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const registry = 'https://npm.pkg.github.com';
 const token = process.env.GITHUB_PACKAGES_TOKEN;
 

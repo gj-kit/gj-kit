@@ -4,7 +4,8 @@
   // 라이브러리 코드의 DOM 유입은 여전히 차단된다.
   "extends": "../tsconfig.base.json",
   "compilerOptions": {
-    "lib": ["ES2022", "DOM"]
+    "lib": ["ES2022", "DOM"],
+    "ignoreDeprecations": "6.0"
   },
   "include": ["src", "tests"]
 }

@@ -31,6 +31,7 @@ import {
   Popover,
   ProgressBar,
   RadioGroup,
+  Rating,
   SearchField,
   Section,
   Select,
@@ -314,6 +315,27 @@ function SliderPreview(): ReactElement {
         <Text role="caption" color="textMuted">{volume}%</Text>
       </View>
       <Slider value={volume} min={0} max={100} step={5} accessibilityLabel="Notification volume" onValueChange={setVolume} />
+    </Stack>
+  );
+}
+
+function RatingPreview(): ReactElement {
+  const [rating, setRating] = useState<number | undefined>(3.5);
+  return (
+    <Stack>
+      <View style={styles.labelRow}>
+        <Text role="label">Coffee rating</Text>
+        <Text role="caption" color="textMuted">
+          {rating === undefined ? 'No rating' : `${rating} out of 5`}
+        </Text>
+      </View>
+      <Rating
+        value={rating}
+        onChange={setRating}
+        halfStep
+        clearable
+        accessibilityLabel="Coffee rating"
+      />
     </Stack>
   );
 }
@@ -983,6 +1005,7 @@ const previews: Readonly<Record<string, ComponentType>> = {
   popover: PopoverPreview,
   'progress-bar': ProgressBarPreview,
   'radio-group': RadioGroupPreview,
+  rating: RatingPreview,
   'search-field': SearchFieldPreview,
   section: SectionPreview,
   select: SelectPreview,

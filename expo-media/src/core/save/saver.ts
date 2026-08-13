@@ -16,11 +16,16 @@ import type { MediaContentType } from '../mediaTypes';
 import type { MediaStrings } from '../strings';
 import { enMediaStrings } from '../strings';
 import type { MediaTelemetry } from '../telemetry';
-import { noopMediaTelemetry } from '../telemetry';
+import { noopMediaTelemetry, trackMediaSafely } from '../telemetry';
 import { mediaDownloadFileName } from './fileName';
 
 /** §5.4.1-13 — 전신은 `'photo'`였다(§5.7.3). */
 const DEFAULT_FILE_NAME_PREFIX = 'media';
+
+// These sentinels are private to this invocation. A host adapter can forge the global MediaError
+// brand, but cannot manufacture the exact value we throw for our own deliberate outcomes.
+const SAVE_PERMISSION_DENIED = Symbol('save-permission-denied');
+const SAVE_DOWNLOAD_FAILED = Symbol('save-download-failed');
 
 export type SaveableMedia = {
   /**
@@ -56,66 +61,99 @@ export function createMediaSaver(input: {
   // ⚠ 보고되는 mode는 타깃에서 **파생**된다 — 전신처럼 별도 플래그로 계산하지 않는다(§6.1-⑦).
   const mode = target.kind;
 
+  const safeSaveFailure = (error: unknown): MediaError => {
+    // Never trust a global MediaError tag from an adapter: another copy (or hostile host) can put
+    // a presigned URL in its message and forge the tag. Only our private sentinel retains the
+    // intentional permission outcome; all adapter/filesystem/configuration failures are retryable
+    // download failures with a freshly injected, user-safe message.
+    if (error === SAVE_PERMISSION_DENIED) {
+      return new MediaError('save-permission-denied', strings.savePermissionDenied);
+    }
+    return new MediaError('save-download-failed', strings.saveDownloadFailed);
+  };
+
+  const removeDownloadedFile = async (
+    files: Extract<SaveTarget, { readonly kind: 'media-library' }>['files'],
+    uri: string,
+  ): Promise<void> => {
+    try {
+      await files.remove(uri);
+    } catch {
+      // Cleanup is best-effort. Once a photo is already in the library, reporting a cleanup error
+      // as save failure invites a duplicate retry; before that, the typed download failure wins.
+    }
+  };
+
+  const save = async (images: readonly SaveableMedia[]): Promise<SaveResult> => {
+    try {
+      if (images.length === 0) return { savedCount: 0, mode };
+
+      if (target.kind === 'browser-download') {
+        for (const [index, image] of images.entries()) {
+          await target.browser.saveByDownload({
+            url: image.url,
+            fileName: fileNameFor(image, index, prefix),
+          });
+        }
+        return { savedCount: images.length, mode };
+      }
+
+      const { files, library } = target;
+
+      // Android Expo Go는 사진 권한 요청 자체가 불가하다(전신 saveImages.ts:95-110).
+      // 그 판정은 호스트가 하고(`Constants.appOwnership === 'expo'`) 어댑터가 값만 노출한다 —
+      // 라이브러리에서 expo 상수 의존을 완전히 걷어내는 지점이다(§0.2).
+      if (!library.skipPermissionRequest) {
+        const permission = await library.requestWritePermission();
+        if (!permission.granted) {
+          throw SAVE_PERMISSION_DENIED;
+        }
+      }
+
+      const directory = files.cacheDirectory();
+      if (!directory) {
+        // This is a public execution path, not a programmer-only assertion. Returning a typed
+        // safe failure avoids leaking filesystem diagnostics and keeps a retry UI classifiable.
+        throw SAVE_DOWNLOAD_FAILED;
+      }
+
+      for (const [index, image] of images.entries()) {
+        const fileUri = `${directory}${fileNameFor(image, index, prefix)}`;
+        const download = await files.download({ url: image.url, to: fileUri });
+        // ⚠ **2xx 범위** 검증(§7.1). `status < 400`이 아니다 — 3xx가 몸통 없이 도착하면
+        //   0바이트 파일이 사진첩에 저장된다. 실패한 임시 파일은 즉시 정리한다.
+        if (download.status < 200 || download.status >= 300) {
+          await removeDownloadedFile(files, download.uri);
+          throw SAVE_DOWNLOAD_FAILED;
+        }
+        try {
+          await library.saveToLibrary(download.uri);
+        } catch (error) {
+          // The source file remains app-owned. Best-effort cleanup does not change the safe
+          // failure, and avoids filling the cache when a library adapter repeatedly fails.
+          await removeDownloadedFile(files, download.uri);
+          throw error;
+        }
+        // 저장이 성공한 뒤에만 지운다 — 전신 saveImages.ts:251-268의 순서 보존.
+        await removeDownloadedFile(files, download.uri);
+      }
+      return { savedCount: images.length, mode };
+    } catch (error) {
+      throw safeSaveFailure(error);
+    }
+  };
+
   return {
     saveToDevice(images: readonly SaveableMedia[]): Promise<SaveResult> {
       // operation 이름과 payload 키는 소비자 대시보드의 입력이다 — rename = 파괴적 변경(§7.2).
       // 전신 saveImages.ts:277-283과 동일하게 **빈 배열도 스팬을 남긴다**(호출은 있었다는 사실이
       // 지표에서 사라지지 않게).
-      return telemetry.track(
-        'media.save-to-device',
-        { imageCount: images.length, mode },
-        async () => {
-          if (images.length === 0) return { savedCount: 0, mode };
-
-          if (target.kind === 'browser-download') {
-            for (const [index, image] of images.entries()) {
-              await target.browser.saveByDownload({
-                url: image.url,
-                fileName: fileNameFor(image, index, prefix),
-              });
-            }
-            return { savedCount: images.length, mode };
-          }
-
-          const { files, library } = target;
-
-          // Android Expo Go는 사진 권한 요청 자체가 불가하다(전신 saveImages.ts:95-110).
-          // 그 판정은 호스트가 하고(`Constants.appOwnership === 'expo'`) 어댑터가 값만 노출한다 —
-          // 라이브러리에서 expo 상수 의존을 완전히 걷어내는 지점이다(§0.2).
-          if (!library.skipPermissionRequest) {
-            const permission = await library.requestWritePermission();
-            if (!permission.granted) {
-              throw new MediaError('save-permission-denied', strings.savePermissionDenied);
-            }
-          }
-
-          const directory = files.cacheDirectory();
-          if (!directory) {
-            // ⚠ 여기서만 `MediaError`가 아니라 plain Error를 던진다(errors.ts의
-            //   `assertNeverMediaError` 선례). 쓸 수 있는 앱 소유 디렉토리가 하나도 없다는 것은
-            //   사용자가 조치할 수 있는 상태가 아니라 호스트 환경 결함이므로 `MediaStrings`에
-            //   대응 키가 없고, 문구를 지어내면 string-guard(§10.3)에 걸린다.
-            //   전신(saveImages.ts:215)도 정확히 이 bare Error였다.
-            throw new Error('No writable file-system directory is available.');
-          }
-
-          for (const [index, image] of images.entries()) {
-            const fileUri = `${directory}${fileNameFor(image, index, prefix)}`;
-            const download = await files.download({ url: image.url, to: fileUri });
-            // ⚠ **2xx 범위** 검증(§7.1). `status < 400`이 아니다 — 3xx가 몸통 없이 도착하면
-            //   0바이트 파일이 사진첩에 저장된다. 실패한 임시 파일은 즉시 정리한다.
-            if (download.status < 200 || download.status >= 300) {
-              await files.remove(download.uri);
-              throw new MediaError('save-download-failed', strings.saveDownloadFailed);
-            }
-            await library.saveToLibrary(download.uri);
-            // 저장이 성공한 뒤에만 지운다 — 전신 saveImages.ts:251-268의 순서 보존.
-            // (저장 실패는 그대로 전파되며 임시 파일은 남는다. 전신 동작이다.)
-            await files.remove(download.uri);
-          }
-          return { savedCount: images.length, mode };
-        },
-      );
+      return trackMediaSafely({
+        telemetry,
+        operation: 'media.save-to-device',
+        extra: { imageCount: images.length, mode },
+        run: () => save(images),
+      });
     },
   };
 }

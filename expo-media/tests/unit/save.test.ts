@@ -9,8 +9,14 @@
 //   ④ `SaveResult.mode`가 `target.kind`에서 **파생**된다 — 보고와 실동작이 어긋날 수 없다.
 
 import { describe, expect, it } from 'vitest';
-import type { BrowserSaveAdapter, MediaLibrarySaveAdapter, MediaPermission } from '../../src/core/adapters';
-import { mediaErrorCode } from '../../src/core/errors';
+import type {
+  BrowserSaveAdapter,
+  FileDownloadAdapter,
+  FileSystemAdapter,
+  MediaLibrarySaveAdapter,
+  MediaPermission,
+} from '../../src/core/adapters';
+import { MediaError, mediaErrorCode } from '../../src/core/errors';
 import { mediaDownloadFileName } from '../../src/core/save/fileName';
 import { createMediaSaver } from '../../src/core/save/saver';
 import { createMemoryFileSystem, createRecordingTelemetry, fakeBytes } from '../../src/testing';
@@ -188,7 +194,7 @@ describe('createMediaSaver — media-library 타깃', () => {
     expect(result.savedCount).toBe(1);
   });
 
-  it('쓸 수 있는 디렉토리가 없으면 plain Error — 사용자가 조치할 수 있는 상태가 아니다', async () => {
+  it('쓸 수 있는 디렉터리가 없어도 URL 없는 save-download-failed로 정규화한다', async () => {
     const files = createMemoryFileSystem({ cacheDirectory: null });
     const saver = createMediaSaver({
       target: { kind: 'media-library', files, library: fakeLibrary() },
@@ -196,8 +202,57 @@ describe('createMediaSaver — media-library 타깃', () => {
     const error = await saver
       .saveToDevice([{ id: 'a', url: 'https://x.test/o/a.png' }])
       .catch((thrown: unknown) => thrown);
-    expect(mediaErrorCode(error)).toBeNull();
-    expect(error).toBeInstanceOf(Error);
+    expect(mediaErrorCode(error)).toBe('save-download-failed');
+  });
+
+  it('files.download·library.saveToLibrary의 raw/위조 MediaError는 안전한 저장 실패로 바꾼다', async () => {
+    const rawUrl = 'https://downloads.example.test/secret?X-Amz-Signature=never-public';
+    const downloadBase = createMemoryFileSystem();
+    const failingDownload: FileSystemAdapter & FileDownloadAdapter = {
+      ...downloadBase,
+      download: () => Promise.reject(new Error(`download rejected: ${rawUrl}`)),
+    };
+    const downloadSaver = createMediaSaver({
+      target: { kind: 'media-library', files: failingDownload, library: fakeLibrary() },
+    });
+    const downloadError = await downloadSaver
+      .saveToDevice([{ id: 'a', url: rawUrl }])
+      .catch((thrown: unknown) => thrown);
+    expect(mediaErrorCode(downloadError)).toBe('save-download-failed');
+    expect(String((downloadError as Error).message)).not.toContain(rawUrl);
+
+    const library = fakeLibrary();
+    const forgedLibrary: MediaLibrarySaveAdapter = {
+      ...library,
+      // A host can manufacture the exported class and global tag. Its message remains untrusted.
+      saveToLibrary: () =>
+        Promise.reject(new MediaError('save-download-failed', `forged adapter error ${rawUrl}`)),
+    };
+    const librarySaver = createMediaSaver({
+      target: { kind: 'media-library', files: createMemoryFileSystem(), library: forgedLibrary },
+    });
+    const libraryError = await librarySaver
+      .saveToDevice([{ id: 'a', url: rawUrl }])
+      .catch((thrown: unknown) => thrown);
+    expect(mediaErrorCode(libraryError)).toBe('save-download-failed');
+    expect(String((libraryError as Error).message)).not.toContain(rawUrl);
+  });
+
+  it('files.remove 오류는 성공한 저장을 뒤집거나 raw URL을 공개하지 않는다', async () => {
+    const rawUrl = 'https://downloads.example.test/secret?X-Amz-Signature=never-public';
+    const base = createMemoryFileSystem();
+    const files: FileSystemAdapter & FileDownloadAdapter = {
+      ...base,
+      remove: () => Promise.reject(new Error(`cleanup failed: ${rawUrl}`)),
+    };
+    const saver = createMediaSaver({
+      target: { kind: 'media-library', files, library: fakeLibrary() },
+    });
+
+    await expect(saver.saveToDevice([{ id: 'a', url: rawUrl }])).resolves.toEqual({
+      savedCount: 1,
+      mode: 'media-library',
+    });
   });
 });
 
@@ -216,6 +271,28 @@ describe('createMediaSaver — browser-download 타깃', () => {
       { url: 'https://x.test/o/a.png', fileName: 'media-a.png' },
       { url: 'https://x.test/download/token', fileName: 'media-2.jpg' },
     ]);
+  });
+
+  it('browser adapter의 raw·위조 MediaError는 telemetry와 public error에 새지 않는다', async () => {
+    const rawUrl = 'https://downloads.example.test/secret?X-Amz-Signature=never-public';
+    const telemetry = createRecordingTelemetry();
+    const saver = createMediaSaver({
+      target: {
+        kind: 'browser-download',
+        browser: {
+          saveByDownload: () =>
+            Promise.reject(new MediaError('save-download-failed', `browser failed ${rawUrl}`)),
+        },
+      },
+      telemetry,
+    });
+
+    const error = await saver.saveToDevice([{ id: 'a', url: rawUrl }]).catch((thrown: unknown) => thrown);
+
+    expect(mediaErrorCode(error)).toBe('save-download-failed');
+    expect(String((error as Error).message)).not.toContain(rawUrl);
+    expect(telemetry.spans[0]?.error).toBe(error);
+    expect(String(telemetry.spans[0]?.error)).not.toContain(rawUrl);
   });
 });
 

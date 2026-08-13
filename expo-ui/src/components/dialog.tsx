@@ -669,7 +669,7 @@ export function Dialog({
               : undefined
           }
           style={[
-            StyleSheet.absoluteFillObject,
+            StyleSheet.absoluteFill,
             { backgroundColor: theme.colors.overlay },
           ]}
         />

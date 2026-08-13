@@ -28,8 +28,8 @@ export type RecordedPut = PutRequest & {
 export type RecordingTransportOptions = {
   /**
    * 이 상태코드로 응답한다. 생략 시 200.
-   * ⚠ `upload-failed`·`poster-upload-failed` 경로는 2xx가 아닌 응답으로만 도달한다
-   *   (`isSuccessStatus`, §5.4-①). 상태코드 주입구가 없으면 그 두 코드가 영영 검증되지 않는다.
+   * ⚠ PUT의 모호한 2xx 밖 응답은 `upload-failed` + `possibly-uploaded` cleanup 후보가 된다
+   *   (`isSuccessStatus`, §5.4-①). 상태코드 주입구가 없으면 그 안전한 실패 경계가 검증되지 않는다.
    */
   readonly failWithStatus?: number | undefined;
   /**

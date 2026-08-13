@@ -8,6 +8,7 @@
 import { cleanup, render, renderHook } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ReactNode } from 'react';
+import { renderToString } from 'react-dom/server';
 import {
   UiProvider,
   createTheme,
@@ -17,6 +18,7 @@ import {
   getActiveTheme,
   koStrings,
   lightTheme,
+  resolveTheme,
   subscribeActiveTheme,
   useResolvedColorScheme,
   useStrings,
@@ -40,6 +42,32 @@ function useProbe() {
     scheme: useResolvedColorScheme(),
   };
 }
+
+describe('§3.3 resolveTheme — SSR-safe pure resolver', () => {
+  it('returns a fixed Theme unchanged and selects the requested member of a ThemePair', () => {
+    expect(resolveTheme(darkTheme, 'light')).toBe(darkTheme);
+    expect(resolveTheme(defaultThemes, 'light')).toBe(defaultThemes.light);
+    expect(resolveTheme(defaultThemes, 'dark')).toBe(defaultThemes.dark);
+  });
+
+  it('does not mutate the client snapshot during server rendering', () => {
+    expect(getActiveTheme()).toBe(lightTheme);
+    const requestTheme = resolveTheme(defaultThemes, 'dark');
+
+    const markup = renderToString(
+      <UiProvider theme={defaultThemes} colorScheme="dark">
+        SSR
+      </UiProvider>,
+    );
+
+    expect(markup).toContain('SSR');
+    expect(requestTheme).toBe(defaultThemes.dark);
+    // UiProvider publishes only from a client layout effect. SSR has no effect
+    // phase, so it must not cross-contaminate the process-global compatibility
+    // snapshot with one request's theme.
+    expect(getActiveTheme()).toBe(lightTheme);
+  });
+});
 
 describe('§3.4 UiProvider와 훅', () => {
   it('Provider 없이 useTheme()는 lightTheme을 반환한다 (Provider는 선택)', () => {

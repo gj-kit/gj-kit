@@ -4,7 +4,7 @@
 import { createContext, useContext, useLayoutEffect, useMemo } from 'react';
 import type { ReactElement, ReactNode } from 'react';
 import { useColorScheme } from 'react-native';
-import { isThemePair, lightTheme } from '../theme/createTheme';
+import { lightTheme, resolveTheme } from '../theme/createTheme';
 import type { ColorScheme, Theme, ThemePair } from '../theme/tokens';
 import { enStrings } from '../strings/strings';
 import type { UiStrings } from '../strings/strings';
@@ -17,7 +17,7 @@ const IconsContext = createContext<UiIcons>({});
 /** (internal) Detects a nested Provider — only the root writes the global snapshot (§3.5). */
 const NestedContext = createContext<boolean>(false);
 
-// ─── 비-React 스냅샷 (§3.5) ────────────────────────────────────────────────
+// ─── Deprecated client-only snapshot (§3.5) ────────────────────────────────
 let activeTheme: Theme = lightTheme;
 const themeListeners = new Set<(theme: Theme) => void>();
 
@@ -29,16 +29,25 @@ function publishActiveTheme(theme: Theme): void {
 
 /**
  * A snapshot of the theme the root UiProvider is currently emitting; lightTheme
- * before or without a Provider. It triggers no re-render and exists purely for
- * non-React paths such as expo-router static options and navigation themes.
- * Nested Providers do not write the snapshot, so its definition stays unique even
- * in an app with several Providers.
+ * before or without a Provider. It triggers no re-render. Nested Providers do
+ * not write the snapshot, so its definition stays unique in a native client app.
+ *
+ * @deprecated This is a client-only mutable module snapshot. It is neither
+ * request-scoped nor updated during SSR rendering. For SSR or static
+ * configuration, use `resolveTheme(theme, colorScheme)` with request-owned
+ * inputs instead.
  */
 export function getActiveTheme(): Theme {
   return activeTheme;
 }
 
-/** Subscribes to root theme replacements, for syncing a navigation theme. Returns an unsubscribe function. */
+/**
+ * Subscribes to root theme replacements. Returns an unsubscribe function.
+ *
+ * @deprecated This client-only subscription observes a module-global snapshot.
+ * It must not be used for SSR. Use `resolveTheme(theme, colorScheme)` for
+ * request-scoped or static configuration instead.
+ */
 export function subscribeActiveTheme(listener: (theme: Theme) => void): () => void {
   themeListeners.add(listener);
   return () => {
@@ -92,11 +101,9 @@ export function UiProvider({
   // 부모에서 상속되는 값은 이미 해석된 단일 Theme이다 — theme 미지정 + colorScheme만
   // 지정하는 중첩은 스킴을 바꾸지 못한다(Pair 원본은 상속되지 않음 — TSDoc 명시).
   const themeInput: Theme | ThemePair = theme ?? parentTheme;
-  const resolved: Theme = isThemePair(themeInput)
-    ? themeInput[
-        colorScheme === 'system' ? (systemScheme === 'dark' ? 'dark' : 'light') : colorScheme
-      ]
-    : themeInput;
+  const resolvedColorScheme: ColorScheme =
+    colorScheme === 'system' ? (systemScheme === 'dark' ? 'dark' : 'light') : colorScheme;
+  const resolved = resolveTheme(themeInput, resolvedColorScheme);
 
   // 스냅샷 기록은 렌더가 아니라 이펙트에서(렌더 부수효과 금지) — 단 passive
   // effect는 자식→부모 순이라 자식 mount 이펙트가 stale을 읽는 창이 생기므로

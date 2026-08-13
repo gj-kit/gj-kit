@@ -18,6 +18,7 @@ import {
   isMediaError,
   mediaErrorCode,
   mediaErrorUserMessage,
+  mediaUploadFailureInfo,
   mediaKindOf,
 } from '../../src/core';
 import type {
@@ -28,6 +29,8 @@ import type {
   MediaKind,
   MediaMetadata,
   MediaPlatform,
+  MediaOrphanedUpload,
+  MediaUploadFailureInfo,
   MediaUploadLimits,
   VideoContentType,
 } from '../../src/core';
@@ -106,12 +109,14 @@ describe('§6.3-⑱ gif는 유니언에 없다 (§5.1 · G15)', () => {
   });
 });
 
-describe('`MediaErrorCode` 14종 exhaustive (§5.2)', () => {
-  it('유니언이 정확히 14종이다 — 순서·문자열이 계약이다', () => {
+describe('`MediaErrorCode` 16종 exhaustive (§5.2)', () => {
+  it('유니언이 정확히 16종이다 — 순서·문자열이 계약이다', () => {
     expectTypeOf<MediaErrorCode>().toEqualTypeOf<
       | 'device-timeout'
       | 'device-icloud-only'
       | 'device-not-found'
+      | 'device-library-failed'
+      | 'picker-failed'
       | 'unsupported-file-type'
       | 'file-too-large'
       | 'upload-failed'
@@ -125,17 +130,19 @@ describe('`MediaErrorCode` 14종 exhaustive (§5.2)', () => {
       | 'platform-unsupported'
     >();
     // 튜플 길이로 개수를 못 박는다 — 스냅샷은 `-u`로 조용히 갱신되므로 쓰지 않는다(§7.2 선례).
-    expectTypeOf(MEDIA_ERROR_CODES.length).toEqualTypeOf<14>();
+    expectTypeOf(MEDIA_ERROR_CODES.length).toEqualTypeOf<16>();
     expectTypeOf(MEDIA_ERROR_CODES[0]).toEqualTypeOf<'device-timeout'>();
-    expectTypeOf(MEDIA_ERROR_CODES[13]).toEqualTypeOf<'platform-unsupported'>();
+    expectTypeOf(MEDIA_ERROR_CODES[15]).toEqualTypeOf<'platform-unsupported'>();
   });
 
-  it('14종을 전부 분기하면 `assertNeverMediaError`가 통과한다', () => {
+  it('16종을 전부 분기하면 `assertNeverMediaError`가 통과한다', () => {
     const classify = (code: MediaErrorCode): string => {
       switch (code) {
         case 'device-timeout':
         case 'device-icloud-only':
         case 'device-not-found':
+        case 'device-library-failed':
+        case 'picker-failed':
           return 'device';
         case 'unsupported-file-type':
         case 'file-too-large':
@@ -167,7 +174,7 @@ describe('`MediaErrorCode` 14종 exhaustive (§5.2)', () => {
         case 'device-timeout':
           return 'device';
         default:
-          // @ts-expect-error 나머지 13종이 남아 있으므로 `never`가 아니다
+          // @ts-expect-error 나머지 15종이 남아 있으므로 `never`가 아니다
           return assertNeverMediaError(code);
       }
     };
@@ -175,7 +182,7 @@ describe('`MediaErrorCode` 14종 exhaustive (§5.2)', () => {
   });
 
   it('없는 코드는 만들 수 없다', () => {
-    // @ts-expect-error 'network-offline'은 14종에 없다 — rename·추가는 라이브러리의 결정이다
+    // @ts-expect-error 'network-offline'은 16종에 없다 — rename·추가는 라이브러리의 결정이다
     new MediaError('network-offline', 'x');
     // 정상 경로.
     void new MediaError('upload-failed', 'x');
@@ -191,5 +198,22 @@ describe('`MediaErrorCode` 14종 exhaustive (§5.2)', () => {
       expectTypeOf(error.code).toEqualTypeOf<MediaErrorCode>();
       expectTypeOf(error.message).toBeString();
     }
+  });
+});
+
+describe('업로드 실패 복구 정보 — URL 없는 cross-entry inspection API', () => {
+  it('임의 caught value에서만 읽고, 결과는 null 또는 안전한 immutable metadata다', () => {
+    const error: unknown = new MediaError('upload-failed', 'Upload failed.');
+    expectTypeOf(mediaUploadFailureInfo(error)).toEqualTypeOf<MediaUploadFailureInfo | null>();
+    expectTypeOf<MediaUploadFailureInfo>().toEqualTypeOf<{
+      readonly stage: 'intent' | 'put' | 'complete';
+      readonly orphanedObjects: readonly MediaOrphanedUpload[];
+    }>();
+    expectTypeOf<MediaOrphanedUpload['objectName']>().toEqualTypeOf<string>();
+    expectTypeOf<MediaOrphanedUpload['contentType']>().toEqualTypeOf<MediaContentType>();
+    expectTypeOf<MediaOrphanedUpload['sizeBytes']>().toEqualTypeOf<number>();
+    expectTypeOf<MediaOrphanedUpload['storageState']>().toEqualTypeOf<
+      'uploaded' | 'possibly-uploaded'
+    >();
   });
 });

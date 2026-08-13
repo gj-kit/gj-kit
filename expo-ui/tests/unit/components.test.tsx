@@ -25,7 +25,7 @@ import {
   createTheme,
   darkTheme,
 } from '../../src/index';
-import type { IconRenderProps, Theme } from '../../src/index';
+import type { ButtonProps, IconButtonProps, IconRenderProps, Theme } from '../../src/index';
 
 // vitest globals가 꺼져 있으면 RTL auto-cleanup이 등록되지 않는다 — 명시 등록.
 // (누락 시 이전 테스트의 렌더가 DOM에 남아 getAllByRole이 이전 요소를 집는다.)
@@ -38,15 +38,15 @@ function renderWithTheme(ui: ReactElement, theme?: Theme) {
 describe('§1 불변식 1 — 토큰이 스타일을 관통한다', () => {
   it('metrics.control 오버라이드가 Button minHeight를 바꾼다', () => {
     // 기본 테마: md 컨트롤 44.
-    renderWithTheme(<Button label="기본" testID="btn-base" />);
+    renderWithTheme(<Button label="기본" onPress={() => {}} testID="btn-base" />);
     expect(screen.getByTestId('btn-base').style.minHeight).toBe('44px');
 
     // 오버라이드 테마: 같은 컴포넌트 코드가 다른 치수를 렌더해야 토큰 관통이다.
     const custom = createTheme('light', { metrics: { control: { sm: 30, md: 60, lg: 70 } } });
     renderWithTheme(
       <>
-        <Button label="엠디" testID="btn-md" />
-        <Button label="라지" size="lg" testID="btn-lg" />
+        <Button label="엠디" onPress={() => {}} testID="btn-md" />
+        <Button label="라지" size="lg" onPress={() => {}} testID="btn-lg" />
       </>,
       custom,
     );
@@ -186,13 +186,48 @@ describe('§5.2 Button', () => {
 
   it('icon 렌더 슬롯에 팔레트 색과 iconSize(기본 metrics.icon.md)가 전달된다', () => {
     const icon = vi.fn((_props: IconRenderProps) => null);
-    renderWithTheme(<Button label="추가" icon={icon} />);
+    renderWithTheme(<Button label="추가" icon={icon} onPress={() => {}} />);
     // primary variant 텍스트색 = colors.onPrimary, 기본 크기 = metrics.icon.md(18).
     expect(icon).toHaveBeenCalledWith({ color: '#FFFFFF', size: 18 });
 
     const sizedIcon = vi.fn((_props: IconRenderProps) => null);
-    renderWithTheme(<Button label="추가" icon={sizedIcon} iconSize={30} />);
+    renderWithTheme(<Button label="추가" icon={sizedIcon} iconSize={30} onPress={() => {}} />);
     expect(sizedIcon).toHaveBeenCalledWith({ color: '#FFFFFF', size: 30 });
+  });
+
+  it('ghost is a transparent text-color action and keeps disabled button semantics', () => {
+    const onPress = vi.fn();
+    const theme = createTheme('light', {
+      colors: {
+        text: '#123456',
+        textSubtle: '#345678',
+      },
+    });
+    renderWithTheme(
+      <>
+        <Button label="취소" variant="ghost" onPress={onPress} testID="ghost-action" />
+        <Button label="취소 불가" variant="ghost" onPress={onPress} disabled testID="ghost-disabled" />
+      </>,
+      theme,
+    );
+
+    const action = screen.getByTestId('ghost-action');
+    expect(action.getAttribute('role')).toBe('button');
+    // RNW normalizes the transparent keyword in inline styles.
+    expect(action.style.backgroundColor).toBe('rgba(0, 0, 0, 0)');
+    expect(action.style.borderWidth).toBe('');
+    expect(screen.getByText('취소').style.color).toBe('rgb(18, 52, 86)');
+    fireEvent.click(action);
+    expect(onPress).toHaveBeenCalledTimes(1);
+
+    const disabled = screen.getByTestId('ghost-disabled');
+    expect(disabled.style.backgroundColor).toBe('rgba(0, 0, 0, 0)');
+    expect(disabled.style.borderWidth).toBe('');
+    expect(disabled.getAttribute('aria-disabled')).toBe('true');
+    expect(disabled.hasAttribute('disabled')).toBe(true);
+    expect(screen.getByText('취소 불가').style.color).toBe('rgb(52, 86, 120)');
+    fireEvent.click(disabled);
+    expect(onPress).toHaveBeenCalledTimes(1);
   });
 
   it('label과 children 겸용 — 각각 단독 렌더 가능, 둘 다 주면 label이 이긴다', () => {
@@ -202,12 +237,67 @@ describe('§5.2 Button', () => {
     fireEvent.click(screen.getByTestId('btn-label'));
     expect(onPress).toHaveBeenCalledTimes(1);
 
-    renderWithTheme(<Button>칠드런 버튼</Button>);
+    renderWithTheme(<Button onPress={onPress}>칠드런 버튼</Button>);
     expect(screen.getByText('칠드런 버튼')).toBeTruthy();
 
-    renderWithTheme(<Button label="라벨 우선">뒤로 밀리는 칠드런</Button>);
+    renderWithTheme(<Button label="라벨 우선" onPress={onPress}>뒤로 밀리는 칠드런</Button>);
     expect(screen.getByText('라벨 우선')).toBeTruthy();
     expect(screen.queryByText('뒤로 밀리는 칠드런')).toBeNull();
+  });
+
+  it('rejects JS callers that bypass the action and accessible-name types', () => {
+    const noAction = { label: '저장' } as unknown as ButtonProps;
+    expect(() => renderWithTheme(<Button {...noAction} />)).toThrow(
+      'Button requires onPress unless disabled or loading.',
+    );
+
+    const unnamedRichContent = {
+      children: <Text>사용자 콘텐츠</Text>,
+      onPress: () => {},
+    } as unknown as ButtonProps;
+    expect(() => renderWithTheme(<Button {...unnamedRichContent} />)).toThrow(
+      'Button accessibilityLabel must be a non-empty string.',
+    );
+
+    const noIconAction = {
+      accessibilityLabel: '설정 열기',
+      icon: <Text>i</Text>,
+    } as unknown as IconButtonProps;
+    expect(() => renderWithTheme(<IconButton {...noIconAction} />)).toThrow(
+      'IconButton requires onPress unless disabled or loading.',
+    );
+
+    expect(() => renderWithTheme(
+      <Button label=" " onPress={() => {}} />,
+    )).toThrow('Button label or text children must be a non-empty string.');
+    expect(() => renderWithTheme(
+      <Button label=" " accessibilityLabel="저장" onPress={() => {}} />,
+    )).toThrow('Button label or text children must be a non-empty string.');
+    expect(() => renderWithTheme(
+      <Button accessibilityLabel="저장" onPress={() => {}}> </Button>,
+    )).toThrow('Button label or text children must be a non-empty string.');
+    expect(() => renderWithTheme(
+      <IconButton accessibilityLabel=" " icon={<Text>i</Text>} onPress={() => {}} />,
+    )).toThrow('IconButton accessibilityLabel must be a non-empty string.');
+  });
+
+  it('allows intentionally inert controls without meaningless handlers and names rich content explicitly', () => {
+    const onPress = vi.fn();
+    renderWithTheme(
+      <>
+        <Button label="권한 없음" disabled testID="disabled-without-handler" />
+        <Button label="저장 중" loading testID="loading-without-handler" />
+        <Button accessibilityLabel="사용자 정보 열기" onPress={onPress} testID="rich-content">
+          <Text>프로필</Text>
+        </Button>
+        <IconButton accessibilityLabel="권한 없음" icon={<Text>i</Text>} disabled testID="disabled-icon-without-handler" />
+      </>,
+    );
+
+    expect(screen.getByTestId('disabled-without-handler').getAttribute('aria-disabled')).toBe('true');
+    expect(screen.getByTestId('loading-without-handler').getAttribute('aria-disabled')).toBe('true');
+    expect(screen.getByTestId('disabled-icon-without-handler').getAttribute('aria-disabled')).toBe('true');
+    expect(screen.getByRole('button', { name: '사용자 정보 열기' })).toBeTruthy();
   });
 });
 

@@ -30,8 +30,9 @@ import {
   guideDocsPath,
   guideSeoEntries,
   guideText,
-  isReleasedComponent,
+  isSourcePreview,
   publishedPackageVersion,
+  sourcePreviewVersion,
 } from '../../src/seo-content';
 import { useLocale } from '../../src/locale';
 import type { Locale } from '../../src/locale';
@@ -57,8 +58,8 @@ const ALL_CATEGORIES = '__all__';
 type ReleaseFilter = 'all' | 'released' | 'preview';
 
 const componentCount = componentSeoEntries.length;
-const releasedCount = componentSeoEntries.filter(isReleasedComponent).length;
-const previewCount = componentCount - releasedCount;
+const previewCount = componentSeoEntries.filter(isSourcePreview).length;
+const releasedCount = componentCount - previewCount;
 
 function CssLayout({
   className,
@@ -93,7 +94,7 @@ export default function ComponentsIndexPage(): ReactElement {
     return componentSeoEntries.filter((entry) => {
       const text = componentText(entry, locale);
       if (activeCategory !== ALL_CATEGORIES && text.category !== activeCategory) return false;
-      const released = isReleasedComponent(entry);
+      const released = !isSourcePreview(entry);
       if (releaseFilter === 'released' && !released) return false;
       if (releaseFilter === 'preview' && released) return false;
       if (!normalizedQuery) return true;
@@ -183,7 +184,7 @@ export default function ComponentsIndexPage(): ReactElement {
               {/*
                 라이브 리전은 조건 분기 바깥에 항상 마운트돼 있어야 한다. 전에는
                 결과 0건이 되면 EmptyResults가 새로 마운트되면서 스크린리더가
-                아무것도 알리지 않았고, 카운터도 "12 / 49" 숫자쌍만 읽었다.
+                아무것도 알리지 않았고, 카운터도 "12 / 50" 숫자쌍만 읽었다.
               */}
               <RNText
                 accessibilityLiveRegion="polite"
@@ -500,7 +501,8 @@ function ComponentCard({ entry }: { readonly entry: ComponentSeoEntry }): ReactE
   const { locale } = useLocale();
   const t = siteStrings(locale);
   const text = componentText(entry, locale);
-  const released = isReleasedComponent(entry);
+  const released = !isSourcePreview(entry);
+  const previewVersion = sourcePreviewVersion(entry);
   return (
     <Link href={componentDocsPath(entry.slug) as Href} asChild>
       <Pressable
@@ -530,7 +532,7 @@ function ComponentCard({ entry }: { readonly entry: ComponentSeoEntry }): ReactE
                   { color: released ? theme.colors.success : theme.colors.warning },
                 ]}
               >
-                {released ? `v${entry.since}` : `v${entry.since} preview`}
+                {released ? `v${entry.since}` : `v${previewVersion ?? entry.since} preview`}
               </RNText>
             </View>
           </View>

@@ -36,6 +36,7 @@ export {
   lightTheme,
   darkTheme,
   defaultThemes,
+  resolveTheme,
 } from "./theme/createTheme";
 
 // ─── Provider / 훅 ─────────────────────────────────────────────────────────
@@ -280,6 +281,14 @@ export type {
   SliderDirection,
 } from "./components/slider";
 
+export { Rating } from "./components/rating";
+export type {
+  RatingSize,
+  InteractiveRatingProps,
+  ReadonlyRatingProps,
+  RatingProps,
+} from "./components/rating";
+
 export { Checkbox, Switch } from "./components/controls";
 export type {
   CheckboxProps,
@@ -363,6 +372,7 @@ export type {
   ChipProps,
   ActionChipProps,
   FilterChipProps,
+  StaticChipProps,
   RemovableChipProps,
   ChipKind,
   ChipVariant,

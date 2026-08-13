@@ -150,6 +150,44 @@ describe('Chip filter semantics', () => {
   });
 });
 
+describe('Chip static semantics', () => {
+  it('renders a read-only selected tag as ordinary text rather than a disabled button or selection widget', () => {
+    render(
+      <UiProvider>
+        <Chip kind="static" label="다크 초콜릿" selected testID="static-chip" />
+      </UiProvider>,
+    );
+
+    const chip = screen.getByTestId('static-chip');
+    expect(chip.matches('button, [role="button"]')).toBe(false);
+    expect(chip.getAttribute('tabindex')).toBeNull();
+    expect(chip.getAttribute('aria-pressed')).toBeNull();
+    expect(chip.getAttribute('aria-selected')).toBeNull();
+    expect(chip.getAttribute('aria-disabled')).toBeNull();
+    expect(screen.queryByRole('button', { name: '다크 초콜릿' })).toBeNull();
+    expect(screen.getByText('다크 초콜릿')).toBeTruthy();
+  });
+
+  it('uses the selected palette for a static selected tag without adding interaction', () => {
+    const theme = createTheme('light', {
+      colors: {
+        primarySoft: '#123456',
+        primaryStrong: '#345678',
+      },
+    });
+    render(
+      <UiProvider theme={theme}>
+        <Chip kind="static" label="꽃향" selected testID="selected-static-chip" />
+      </UiProvider>,
+    );
+
+    const chip = screen.getByTestId('selected-static-chip');
+    expect(chip.style.backgroundColor).toBe('rgb(18, 52, 86)');
+    expect(screen.getByText('꽃향').style.color).toBe('rgb(52, 86, 120)');
+    expect(screen.queryByRole('button', { name: '꽃향' })).toBeNull();
+  });
+});
+
 describe('Chip removable semantics', () => {
   it('keeps the root static and exposes exactly one separate, named remove button', () => {
     const onRemove = vi.fn();

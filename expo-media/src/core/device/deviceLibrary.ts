@@ -27,6 +27,7 @@ import type { StagingCache } from '../staging';
 import type { MediaStrings } from '../strings';
 import { enMediaStrings } from '../strings';
 import type { MediaDebugOptions } from '../types';
+import { MediaError } from '../errors';
 import type { DeviceResolveDeps, DeviceResolveOptions } from './resolveSource';
 import { getDeviceAssetInfoWithDeadline, resolveDeviceAssetSource } from './resolveSource';
 import { toPickedAsset } from './toPickedAsset';
@@ -76,7 +77,8 @@ export interface DeviceLibrary {
   /**
    * 하드닝된 자산정보 조회 — 그리드/스캐너/업로드가 공유하는 단일 관문(§5.7.5, G9 승격).
    * 기본값은 iCloud 다운로드 없음 + 15s 데드라인, 옵트인 시 60s(§7 하드닝 6).
-   * 데드라인 초과는 `MediaError('device-timeout')`이며 어댑터 실패는 그대로 전파된다.
+   * 데드라인 초과는 `MediaError('device-timeout')`이며, 어댑터 실패는 URL·원본 예외를
+   * 신뢰하지 않고 새 `MediaError('device-library-failed')`로 정규화한다.
    *
    * ⚠ 이 메서드를 공개하지 않으면 동기화 스캐너가 자체 조회를 짜게 되고, 그 순간 15초 데드라인과
    * `downloadFromNetwork: false` 기본값이 **스캔 경로에서만** 사라진다 — 하드닝 6의 조용한 절반 소멸.
@@ -137,70 +139,93 @@ export function createDeviceLibrary(input: {
   const debug = createMediaDebugLogger({ platform, options: input.debug });
 
   const deps: DeviceResolveDeps = { adapter, files, staging, platform, strings, debug };
+  const adapterFailure = (): MediaError =>
+    new MediaError('device-library-failed', strings.deviceLibraryFailed);
 
   return {
     async getPermission(): Promise<MediaPermission> {
-      return adapter.getPermission();
+      try {
+        return await adapter.getPermission();
+      } catch (error) {
+        debug.error('permission.read.failed', error);
+        throw adapterFailure();
+      }
     },
 
     async ensurePermission(): Promise<MediaPermission> {
-      // 전신 `ensureMediaPermission`(mediaPermission.ts:22-38)의 3단 규칙 그대로다.
-      const current = await adapter.getPermission();
-      // ⚠ `canAskAgain === false`면 **요청하지 않는다.** iOS에서 이 상태의 재요청은 아무 일도
-      //   일어나지 않는 no-op이고, 호출자는 응답을 기다리며 멈춘다(UI 데드록).
-      const permission =
-        !current.granted && current.canAskAgain ? await adapter.requestPermission() : current;
-      debug.log('permission.checked', {
-        granted: permission.granted,
-        canAskAgain: permission.canAskAgain,
-        limited: permission.limited,
-        requested: permission !== current,
-      });
-      return permission;
+      try {
+        // 전신 `ensureMediaPermission`(mediaPermission.ts:22-38)의 3단 규칙 그대로다.
+        const current = await adapter.getPermission();
+        // ⚠ `canAskAgain === false`면 **요청하지 않는다.** iOS에서 이 상태의 재요청은 아무 일도
+        //   일어나지 않는 no-op이고, 호출자는 응답을 기다리며 멈춘다(UI 데드록).
+        const permission =
+          !current.granted && current.canAskAgain ? await adapter.requestPermission() : current;
+        debug.log('permission.checked', {
+          granted: permission.granted,
+          canAskAgain: permission.canAskAgain,
+          limited: permission.limited,
+          requested: permission !== current,
+        });
+        return permission;
+      } catch (error) {
+        debug.error('permission.ensure.failed', error);
+        throw adapterFailure();
+      }
     },
 
     async fetchPage(pageInput): Promise<DeviceAssetPage> {
       const pageSize = pageInput?.pageSize ?? DEVICE_PAGE_SIZE;
       const kinds = pageInput?.kinds ?? DEFAULT_DEVICE_KINDS;
-      debug.log('page.fetch.start', {
-        albumId: Boolean(pageInput?.albumId),
-        after: Boolean(pageInput?.after),
-        pageSize,
-        kinds,
-      });
-      // ⚠ 여기서 자산별 `getAssetInfo`를 부르지 않는다(§7.1). 60개 원본을 직렬 해석하면
-      //   페이지당 ~20초다. 그리드는 raw uri(iOS `ph://`)를 그대로 그리고, 네이티브 이미지
-      //   로더가 PHImageManager에 뷰 크기 썸네일을 요청한다 — 시스템 사진 그리드와 같은 방식이다.
-      //   원본 바이트는 업로드 시점의 resolve에서만 해석한다.
-      // ⚠ **core는 재정렬하지 않는다**(§5.4-④(d)). 페이지 단위 재정렬은 전역 순서를 보장하지
-      //   못하면서 `endCursor`는 여전히 어댑터 순서를 따라가므로, 커서와 표시 순서가 어긋난다 —
-      //   원 결함보다 나쁘다. 내림차순은 어댑터의 계약이다(§3.3).
-      const page = await adapter.listAssets({
-        albumId: pageInput?.albumId,
-        after: pageInput?.after,
-        pageSize,
-        kinds,
-      });
-      debug.log('page.fetch.done', {
-        fetched: page.assets.length,
-        hasNextPage: page.hasNextPage,
-        totalCount: page.totalCount,
-      });
-      return page;
+      try {
+        debug.log('page.fetch.start', {
+          albumId: Boolean(pageInput?.albumId),
+          after: Boolean(pageInput?.after),
+          pageSize,
+          kinds,
+        });
+        // ⚠ 여기서 자산별 `getAssetInfo`를 부르지 않는다(§7.1). 60개 원본을 직렬 해석하면
+        //   페이지당 ~20초다. 그리드는 raw uri(iOS `ph://`)를 그대로 그리고, 네이티브 이미지
+        //   로더가 PHImageManager에 뷰 크기 썸네일을 요청한다 — 시스템 사진 그리드와 같은 방식이다.
+        //   원본 바이트는 업로드 시점의 resolve에서만 해석한다.
+        // ⚠ **core는 재정렬하지 않는다**(§5.4-④(d)). 페이지 단위 재정렬은 전역 순서를 보장하지
+        // 못하면서 `endCursor`는 여전히 어댑터 순서를 따라가므로, 커서와 표시 순서가 어긋난다 —
+        // 원 결함보다 나쁘다. 내림차순은 어댑터의 계약이다(§3.3).
+        const page = await adapter.listAssets({
+          albumId: pageInput?.albumId,
+          after: pageInput?.after,
+          pageSize,
+          kinds,
+        });
+        debug.log('page.fetch.done', {
+          fetched: page.assets.length,
+          hasNextPage: page.hasNextPage,
+          totalCount: page.totalCount,
+        });
+        return page;
+      } catch (error) {
+        debug.error('page.fetch.failed', error, { pageSize, kinds });
+        throw adapterFailure();
+      }
     },
 
     async fetchAlbums(): Promise<readonly DeviceAlbum[]> {
-      // 전신 `fetchDeviceAlbumOptions`(devicePhotoLibrary.ts:243-250)의 정책을 core로 승격했다.
-      // `listAssets`와 달리 여기서는 core가 강제한다 — 전량을 한 번에 받는 in-memory 목록이라
-      // 전역 순서를 보장할 수 있고 비용도 O(n log n)뿐이다. 3자 어댑터가 무엇을 주든 결과가 같아진다.
-      const albums = await adapter.listAlbums();
-      return [...albums].filter((album) => album.count > 0).sort((a, b) => b.count - a.count);
+      try {
+        // 전신 `fetchDeviceAlbumOptions`(devicePhotoLibrary.ts:243-250)의 정책을 core로 승격했다.
+        // `listAssets`와 달리 여기서는 core가 강제한다 — 전량을 한 번에 받는 in-memory 목록이라
+        // 전역 순서를 보장할 수 있고 비용도 O(n log n)뿐이다. 3자 어댑터가 무엇을 주든 결과가 같아진다.
+        const albums = await adapter.listAlbums();
+        return [...albums].filter((album) => album.count > 0).sort((a, b) => b.count - a.count);
+      } catch (error) {
+        debug.error('albums.fetch.failed', error);
+        throw adapterFailure();
+      }
     },
 
     async getAssetInfo(assetId, options): Promise<DeviceAssetInfo> {
       return getDeviceAssetInfoWithDeadline({
         adapter,
         strings,
+        platform,
         assetId,
         // ⚠ 기본값 false — 백그라운드 동기화가 예기치 않은 셀룰러 전송을 시작하지 않게(§7 하드닝 6).
         //   레거시 네이티브 API의 기본값은 true였고, 그 기본값이 실제 사고를 냈다.

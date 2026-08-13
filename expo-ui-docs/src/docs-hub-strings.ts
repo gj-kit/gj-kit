@@ -140,7 +140,7 @@ const en: DocsHubStrings = {
   heroTitleTop: 'Expo UI components:',
   heroTitleBottom: 'start fast, scale safely.',
   heroCopy: (version, released, preview) =>
-    `Documents the ${released} components published in npm v${version} alongside ${preview} v0.4 source previews. Unreleased pages stay out of the search index, and token-based light and dark themes plus device-edge utilities share one type-safe API.`,
+    `Documents the ${released} components published in npm v${version} alongside ${preview} source previews. Source-only pages stay out of the search index, and token-based light and dark themes plus device-edge utilities share one type-safe API.`,
   heroCopyAllReleased: (version, released) =>
     `Documents all ${released} components published in npm v${version}. Every one of them is installable today, and token-based light and dark themes plus device-edge utilities share one type-safe API.`,
   heroCopyCommand: 'Copy the install command',
@@ -279,7 +279,7 @@ export function ReadingControls() {
 }`,
   componentGroupDescriptions: {
     Foundation: 'Semantic typography and color roles keep every screen speaking the same way.',
-    Actions: 'Six intent-revealing variants with explicit accessibility contracts.',
+    Actions: 'Seven intent-revealing variants with explicit accessibility contracts.',
     'Inputs & Navigation': 'Input state and current position, expressed through consistent tokens.',
     Selection: 'Composable primitives from a selection mark to a select-all row.',
     Controls: 'Controlled form primitives with the semantics and keyboard behavior built in.',
@@ -413,7 +413,7 @@ const ko: DocsHubStrings = {
   heroTitleTop: 'Expo UI 컴포넌트,',
   heroTitleBottom: '빠르게 시작하고 안전하게 확장하세요.',
   heroCopy: (version, released, preview) =>
-    `npm v${version}에 공개된 ${released}개와 v0.4 소스 미리보기 ${preview}개를 함께 문서화합니다. 미공개 상세 페이지는 검색에서 제외하며, 토큰 기반 light·dark 테마와 device edge 유틸을 같은 타입 안전 API로 제공합니다.`,
+    `npm v${version}에 공개된 ${released}개와 소스 미리보기 ${preview}개를 함께 문서화합니다. 소스 전용 상세 페이지는 검색에서 제외하며, 토큰 기반 light·dark 테마와 device edge 유틸을 같은 타입 안전 API로 제공합니다.`,
   heroCopyAllReleased: (version, released) =>
     `npm v${version}에 공개된 컴포넌트 ${released}종을 모두 문서화합니다. 전부 지금 설치할 수 있으며, 토큰 기반 light·dark 테마와 device edge 유틸을 같은 타입 안전 API로 제공합니다.`,
   heroCopyCommand: '설치 명령 복사',
@@ -551,7 +551,7 @@ export function ReadingControls() {
 }`,
   componentGroupDescriptions: {
     Foundation: '의미 기반 서체와 색 역할로 화면의 목소리를 맞춥니다.',
-    Actions: '의도를 드러내는 6개 variant와 명시적인 접근성 계약.',
+    Actions: '의도를 드러내는 7개 variant와 명시적인 접근성 계약.',
     'Inputs & Navigation': '입력 상태와 현재 위치를 일관된 토큰으로 표현합니다.',
     Selection: '선택 마크부터 전체 선택 행까지 조합 가능한 프리미티브.',
     Controls: '의미론과 키보드 동작까지 갖춘 controlled form primitives.',

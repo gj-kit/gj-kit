@@ -24,7 +24,7 @@ const SRC_DIR = join(PACKAGE_ROOT, 'src');
  * 어긋나는 지점을 좁게 지목한다).
  *
  * `src/core/staging.ts`의 네임스페이스 검증은 **부팅 시점의 개발자 대상 단언**이다.
- * §4의 `MediaStrings` 19키는 전부 사용자 노출 문구이고 이 상황에 대응하는 키가 없다
+ * §4의 `MediaStrings` 22키는 전부 사용자 노출 문구이고 이 상황에 대응하는 키가 없다
  * (`assertNeverMediaError`가 같은 이유로 plain Error를 쓴다 — §5.2). 그런데 §7 하드닝 7이
  * 이 실패를 `config-invalid` **MediaError**로 요구하므로 plain Error로 내려갈 수도 없다.
  * 설계 문서의 미결(=`configInvalid` 키 부재)이지 구현의 자유재량이 아니다 — 결과 보고의

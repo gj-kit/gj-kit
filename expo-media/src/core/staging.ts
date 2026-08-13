@@ -46,7 +46,7 @@ export function createStagingCache(input: {
 }): StagingCache {
   const { namespace, files } = input;
   if (!NAMESPACE_PATTERN.test(namespace)) {
-    // ⚠ `MediaStrings`에는 이 문구의 키가 없다 — §4의 19키는 전부 **사용자 노출** 문구이고
+    // ⚠ `MediaStrings`에는 이 문구의 키가 없다 — §4의 22키는 전부 **사용자 노출** 문구이고
     // 이것은 부팅 시점의 **개발자 대상 단언**이라 화면에 도달할 경로가 없다. §5.2의
     // `assertNeverMediaError`가 같은 이유로 plain Error를 쓴 것과 동종의 예외이며,
     // `string-guard`(§10.3)에는 §7 하드닝 5의 `src/save/**` 예외와 동형의 명시 예외가 필요하다.

@@ -23,7 +23,7 @@ import type {
   PlatformAdapter,
 } from '../adapters';
 import { createMediaDebugLogger, summarizeUri } from '../debug';
-import { MediaError } from '../errors';
+import { attachMediaUploadFailureInfo, MediaError, mediaErrorCode } from '../errors';
 import { createFileHasher } from '../hashFile';
 import type { MediaContentType } from '../mediaTypes';
 import { inferMediaContentType, mediaFileName, mediaKindOf } from '../mediaTypes';
@@ -32,16 +32,22 @@ import type { StagingCache } from '../staging';
 import type { MediaStrings } from '../strings';
 import { enMediaStrings } from '../strings';
 import type { MediaTelemetry } from '../telemetry';
-import { noopMediaTelemetry } from '../telemetry';
+import { beginMediaActivitySafely, noopMediaTelemetry, trackMediaSafely } from '../telemetry';
 import type {
   MediaDebugOptions,
   MediaMetadata,
+  MediaUploadCompletion,
   MediaUploadApi,
+  MediaUploadFailureStage,
+  MediaUploadIntentApi,
+  MediaUploadIntent,
   MediaUploadLimits,
+  MediaOrphanedUpload,
   UploadedPoster,
   UploadResult,
 } from '../types';
 import { normalizeDurationMs } from './duration';
+import { parseMediaUploadIntent } from './intent';
 import { resolveUploadSize } from './resolveSize';
 
 // ── 공통 설정 (§5.4 공통 설정) ──────────────────────────────────────────────
@@ -49,8 +55,7 @@ import { resolveUploadSize } from './resolveSize';
  * 업로드 팩토리 2종(`createLocalUploads`·`createBinaryUploads`)이 공유하는 설정.
  * 전신 `PhotoUploaderConfig`의 분해 결과다(§5.7.2-①).
  */
-export type MediaUploadConfig<TAsset, TCollectionId extends string = string> = {
-  readonly api: MediaUploadApi<TAsset, TCollectionId>;
+type MediaUploadBaseConfig = {
   /**
    * ⚠ 생략 불가(§6.1-③). 무제한 업로드는 **명시된 결정**이어야 한다 —
    * 누락하면 2GB를 전부 PUT한 뒤 서버가 413을 준다(사용자 시간과 셀룰러 데이터를 통째로 버린다).
@@ -64,6 +69,11 @@ export type MediaUploadConfig<TAsset, TCollectionId extends string = string> = {
   readonly fileNamePrefix?: string | undefined;
   readonly debug?: MediaDebugOptions | undefined;
 };
+
+export type MediaUploadConfig<TAsset, TCollectionId extends string = string> =
+  MediaUploadBaseConfig & {
+    readonly api: MediaUploadApi<TAsset, TCollectionId>;
+  };
 
 // ── ① 로컬 파일 업로드 ──────────────────────────────────────────────────────
 export type LocalUploadInput<TCollectionId extends string = string> = {
@@ -102,6 +112,18 @@ export interface LocalUploads<TAsset, TCollectionId extends string = string> {
     asset: PickedAsset,
     options?: { readonly collectionId?: TCollectionId | null | undefined } | undefined,
   ): Promise<UploadResult<TAsset>>;
+}
+
+/**
+ * PUT에 성공한 뒤, 나중의 앱 트랜잭션에 연결할 수 있도록 돌려주는 오브젝트 메타데이터.
+ * `MediaUploadCompletion`과 같은 형태를 써서 앱이 별도 변환 없이 자기 API에 전달할 수 있다.
+ */
+export type DeferredLocalUpload<TCollectionId extends string = string> =
+  MediaUploadCompletion<TCollectionId>;
+
+/** `createDeferredLocalUploads`의 최소 능력. 피커 흐름이나 앱 자산 등록은 의도적으로 포함하지 않는다. */
+export interface DeferredLocalUploads<TCollectionId extends string = string> {
+  uploadLocalFile(input: LocalUploadInput<TCollectionId>): Promise<DeferredLocalUpload<TCollectionId>>;
 }
 
 // ── 업로드 팩토리 공용 상수·헬퍼 ────────────────────────────────────────────
@@ -180,7 +202,7 @@ export function assertUploadSize(input: {
  * 조용히 탈락**했고, 사용자는 앨범을 골랐는데 앨범 없이 저장되는 결과만 봤다. 값 자체는
  * 킷이 해석하지 않는 불투명 id이므로(§6.2 `CollectionId` 브랜드 기각) 검증은 이 한 가지뿐이다.
  *
- * ⚠ 이 에러 문구는 설계 문서의 `MediaStrings` 19키에 대응 키가 없어 업로드 실패 문구를 재사용한다
+ * ⚠ 이 에러 문구는 설계 문서의 `MediaStrings` 22키에 대응 키가 없어 업로드 실패 문구를 재사용한다
  *    (결과 보고의 deviations 참조 — `configInvalid` 키 신설이 필요하다).
  */
 export function normalizeCollectionId<TCollectionId extends string>(input: {
@@ -206,20 +228,195 @@ function normalizeDimension(value: number | undefined): number | undefined {
     : undefined;
 }
 
+/**
+ * URL·header·원본 네트워크 에러를 경계 밖으로 내보내지 않는 업로드 실패 생성기.
+ *
+ * `MediaError`의 message는 화면·텔레메트리에 갈 수 있으므로, backend/transport/finalizer가
+ * 던진 원문을 cause나 detail에 보관하지 않는다. 원문은 호출 직전 `debug.error()`만 받아
+ * `sanitizeMediaErrorMessage()`를 거친다. orphan 정보는 이미 검증된 `objectName`과 알려진
+ * contentType/size만 보존하므로 cleanup에는 충분하지만 presigned credential을 재노출하지 않는다.
+ */
+/** @internal shared with binary.ts — public barrel은 이 helper를 내보내지 않는다. */
+export function safeUploadFailure(input: {
+  readonly message: string;
+  readonly stage: MediaUploadFailureStage;
+  readonly orphanedObjects: readonly MediaOrphanedUpload[];
+}): MediaError {
+  return attachMediaUploadFailureInfo(
+    new MediaError('upload-failed', input.message),
+    { stage: input.stage, orphanedObjects: input.orphanedObjects },
+  );
+}
+
+/** @internal shared with binary.ts — URL 없는 cleanup 후보만 만든다. */
+export function orphanedUpload(input: {
+  readonly intent: MediaUploadIntent;
+  readonly contentType: MediaContentType;
+  readonly sizeBytes: number;
+  readonly storageState: MediaOrphanedUpload['storageState'];
+}): MediaOrphanedUpload {
+  return {
+    objectName: input.intent.objectName,
+    contentType: input.contentType,
+    sizeBytes: input.sizeBytes,
+    storageState: input.storageState,
+  };
+}
+
 // ── 팩토리 ──────────────────────────────────────────────────────────────────
+type LocalStreamingUploadAdapters = {
+  readonly files: FileSystemAdapter;
+  readonly transport: LocalFileTransport;
+  /** 생략 = core 내장 순수 TS 증분 SHA-256(§9). 네이티브 가속이 필요한 호스트만 교체한다. */
+  readonly hasher?: HashAdapter | undefined;
+  /** 생략 = 동영상 포스터 없음. 포스터 부재가 업로드를 막지 않는다(§6.2 마지막 행). */
+  readonly poster?: LocalPosterAdapter | undefined;
+  readonly posterAtMs?: number | undefined;
+};
+
+type LocalUploadAdapters = LocalStreamingUploadAdapters & {
+  /** `DeviceUploads`/`MediaKit`이 공급한다. 있으면 업로드 후 스테이징 사본을 지운다(§7 하드닝 7). */
+  readonly staging?: StagingCache | undefined;
+};
+
+/**
+ * `completeUpload` 없이 presign → 네이티브 PUT까지만 수행하는 설정.
+ *
+ * 반환된 `DeferredLocalUpload`은 서버 등록 요청처럼 보이게 만든 가짜 값이 아니다. 호출자가
+ * 자기 도메인 트랜잭션에서 `objectName`과 메타데이터를 연결할 수 있는 완료 페이로드다.
+ */
+export type DeferredLocalUploadConfig = MediaUploadBaseConfig &
+  LocalStreamingUploadAdapters & {
+    readonly api: MediaUploadIntentApi;
+  };
+
+type LocalUploadRuntimeConfig = MediaUploadBaseConfig &
+  LocalUploadAdapters & {
+    readonly api: MediaUploadIntentApi;
+  };
+
+type LocalUploadFinalizer<TOutput, TCollectionId extends string> = {
+  /** PUT 뒤에만 실행된다. 일반 흐름은 서버 등록, 지연 흐름은 attachment 반환이다. */
+  readonly finish: (input: MediaUploadCompletion<TCollectionId>) => Promise<TOutput>;
+  readonly successDebugEvent: string;
+  readonly failureDebugEvent: string;
+  readonly successDetails?: (output: TOutput) => Readonly<Record<string, unknown>>;
+};
+
+interface LocalUploadPipeline<TOutput, TCollectionId extends string> {
+  uploadLocalFile(input: LocalUploadInput<TCollectionId>): Promise<TOutput>;
+  uploadPickedAsset(
+    asset: PickedAsset,
+    options?: { readonly collectionId?: TCollectionId | null | undefined } | undefined,
+  ): Promise<TOutput>;
+}
+
+/**
+ * A picker adapter is an untrusted runtime boundary even though its TypeScript result is
+ * `PickedAsset`. Copy every field this pipeline reads exactly once before doing policy work.
+ * Otherwise a getter can expose a safe value during content-type inference and throw a signed URL
+ * on a later read during debug/size/EXIF handling.
+ */
+type PickedAssetSnapshot = {
+  readonly uri: string;
+  readonly fileName?: string | undefined;
+  readonly mimeType?: string | undefined;
+  readonly width?: number | undefined;
+  readonly height?: number | undefined;
+  readonly durationRaw?: number | undefined;
+  readonly exif?: Readonly<Record<string, unknown>> | undefined;
+  readonly verifiedSizeBytes?: number | undefined;
+  readonly reportedSizeBytes?: number | undefined;
+};
+
+function snapshotPickedAsset(value: unknown): PickedAssetSnapshot | null {
+  try {
+    if (typeof value !== 'object' || value === null || Array.isArray(value)) return null;
+    const asset = value as Record<string, unknown>;
+    const uri = asset['uri'];
+    const fileName = asset['fileName'];
+    const mimeType = asset['mimeType'];
+    const width = asset['width'];
+    const height = asset['height'];
+    const durationRaw = asset['durationRaw'];
+    const exif = asset['exif'];
+    const verifiedSizeBytes = asset['verifiedSizeBytes'];
+    const reportedSizeBytes = asset['reportedSizeBytes'];
+    if (
+      typeof uri !== 'string' ||
+      (fileName !== undefined && typeof fileName !== 'string') ||
+      (mimeType !== undefined && typeof mimeType !== 'string') ||
+      (width !== undefined && (typeof width !== 'number' || !Number.isFinite(width))) ||
+      (height !== undefined && (typeof height !== 'number' || !Number.isFinite(height))) ||
+      (durationRaw !== undefined &&
+        (typeof durationRaw !== 'number' || !Number.isFinite(durationRaw))) ||
+      (verifiedSizeBytes !== undefined &&
+        (typeof verifiedSizeBytes !== 'number' || !Number.isFinite(verifiedSizeBytes))) ||
+      (reportedSizeBytes !== undefined &&
+        (typeof reportedSizeBytes !== 'number' || !Number.isFinite(reportedSizeBytes))) ||
+      (exif !== undefined &&
+        (typeof exif !== 'object' || exif === null || Array.isArray(exif)))
+    ) {
+      return null;
+    }
+    return Object.freeze({
+      uri,
+      ...(fileName !== undefined ? { fileName } : {}),
+      ...(mimeType !== undefined ? { mimeType } : {}),
+      ...(width !== undefined ? { width } : {}),
+      ...(height !== undefined ? { height } : {}),
+      ...(durationRaw !== undefined ? { durationRaw } : {}),
+      ...(exif !== undefined ? { exif: exif as Readonly<Record<string, unknown>> } : {}),
+      ...(verifiedSizeBytes !== undefined ? { verifiedSizeBytes } : {}),
+      ...(reportedSizeBytes !== undefined ? { reportedSizeBytes } : {}),
+    });
+  } catch {
+    // Revoked Proxies and hostile getters are invalid picker output, never public raw errors.
+    return null;
+  }
+}
+
+/** 보통의 presign → PUT → 서버 등록 흐름. */
 export function createLocalUploads<TAsset, TCollectionId extends string = string>(
-  config: MediaUploadConfig<TAsset, TCollectionId> & {
-    readonly files: FileSystemAdapter;
-    readonly transport: LocalFileTransport;
-    /** 생략 = core 내장 순수 TS 증분 SHA-256(§9). 네이티브 가속이 필요한 호스트만 교체한다. */
-    readonly hasher?: HashAdapter | undefined;
-    /** 생략 = 동영상 포스터 없음. 포스터 부재가 업로드를 막지 않는다(§6.2 마지막 행). */
-    readonly poster?: LocalPosterAdapter | undefined;
-    readonly posterAtMs?: number | undefined;
-    /** `DeviceUploads`/`MediaKit`이 공급한다. 있으면 업로드 후 스테이징 사본을 지운다(§7 하드닝 7). */
-    readonly staging?: StagingCache | undefined;
-  },
+  config: MediaUploadConfig<TAsset, TCollectionId> & LocalUploadAdapters,
 ): LocalUploads<TAsset, TCollectionId> {
+  return createLocalUploadPipeline<UploadResult<TAsset>, TCollectionId>(config, {
+    finish: (input) => config.api.completeUpload(input),
+    successDebugEvent: 'local.complete.done',
+    failureDebugEvent: 'local.complete.failed',
+    successDetails: (completed) => ({ duplicate: completed.duplicate }),
+  });
+}
+
+/**
+ * Presign → 네이티브 스트리밍 PUT까지만 수행하고, 나중의 도메인 트랜잭션에 연결할 attachment를 반환한다.
+ *
+ * `api`에는 `createUploadIntent`만 있으면 된다. 이 함수는 `completeUpload`를 흉내 내거나 호출하지 않는다.
+ */
+export function createDeferredLocalUploads<TCollectionId extends string = string>(
+  config: DeferredLocalUploadConfig,
+): DeferredLocalUploads<TCollectionId> {
+  const uploads = createLocalUploadPipeline<DeferredLocalUpload<TCollectionId>, TCollectionId>(
+    config,
+    {
+      finish: async (attachment) => attachment,
+      successDebugEvent: 'local.deferred.ready',
+      failureDebugEvent: 'local.deferred.failed',
+    },
+  );
+  return { uploadLocalFile: uploads.uploadLocalFile };
+}
+
+/**
+ * 로컬 URI의 공통 presign → PUT 파이프라인.
+ *
+ * completion API가 있는 앱과 attachment를 자기 트랜잭션에서 연결하는 앱은 네이티브 전송·크기
+ * 검증·해시·포스터 정책이 완전히 같다. 마지막 단계만 `finalizer`로 갈라 가짜 complete API를 만들지 않는다.
+ */
+function createLocalUploadPipeline<TOutput, TCollectionId extends string = string>(
+  config: LocalUploadRuntimeConfig,
+  finalizer: LocalUploadFinalizer<TOutput, TCollectionId>,
+): LocalUploadPipeline<TOutput, TCollectionId> {
   const { api, files, transport, platform } = config;
   const strings = config.strings ?? enMediaStrings;
   const telemetry = config.telemetry ?? noopMediaTelemetry;
@@ -253,15 +450,42 @@ export function createLocalUploads<TAsset, TCollectionId extends string = string
   async function uploadPosterLocalFile(input: {
     readonly uri: string;
     readonly fileName: string;
+    /** 본체가 이후 실패하면 호출자가 cleanup할 수 있게, 성공한 poster를 여기에 기록한다. */
+    readonly orphanedObjects: MediaOrphanedUpload[];
   }): Promise<UploadedPoster | null> {
-    const activity = telemetry.begin('media.upload.poster.native');
+    const activity = beginMediaActivitySafely({
+      telemetry,
+      operation: 'media.upload.poster.native',
+      onTelemetryFailure: (error) =>
+        debug.error('poster.local.telemetry.failed', error, { fileName: input.fileName }),
+    });
+    const failRequiredPosterUpload = (failure: {
+      readonly stage: MediaUploadFailureStage;
+      readonly error?: unknown;
+      readonly orphanedObjects: readonly MediaOrphanedUpload[];
+    }): never => {
+      // The main video cannot safely continue once a presign/PUT may have written a poster:
+      // doing so would hide an object that the caller can no longer discover for cleanup.
+      if (failure.error !== undefined) {
+        debug.error('poster.local.upload.failed', failure.error, { fileName: input.fileName });
+      }
+      const safe = safeUploadFailure({
+        message: strings.posterUploadFailed,
+        stage: failure.stage,
+        orphanedObjects: failure.orphanedObjects,
+      });
+      activity.fail(safe);
+      throw safe;
+    };
+
+    let sizeBytes: number;
     try {
       debug.log('poster.local.stat.start', {
         fileName: input.fileName,
         uri: summarizeUri(input.uri),
       });
       const stat = await files.stat(input.uri);
-      const sizeBytes = stat.kind === 'file' ? stat.sizeBytes : 0;
+      sizeBytes = stat.kind === 'file' ? stat.sizeBytes : 0;
       debug.log('poster.local.stat.done', {
         fileName: input.fileName,
         statKind: stat.kind,
@@ -271,36 +495,113 @@ export function createLocalUploads<TAsset, TCollectionId extends string = string
         activity.cancel({ extra: { reason: 'empty-poster' } });
         return null;
       }
-      const intent = await api.createUploadIntent({
+    } catch (error) {
+      // A generated frame can disappear from a transient cache. No storage object exists yet, so
+      // this remains an optional-poster failure; it is still reported with a safe error only.
+      debug.error('poster.local.stat.failed', error, { fileName: input.fileName });
+      activity.fail(new MediaError('poster-upload-failed', strings.posterUploadFailed));
+      return null;
+    }
+
+    try {
+      // poster도 스토리지 비용·셀룰러 비용을 갖는 이미지다. 본체와 다른 우회 경로로 cap을
+      // 건너뛰면 `limits.image`가 허울이 되므로, presign 이전에 같은 정책을 적용한다.
+      assertUploadSize({
+        limits: config.limits,
+        strings,
+        contentType: POSTER_CONTENT_TYPE,
+        sizeBytes,
+      });
+    } catch (error) {
+      // Poster is optional. A local policy rejection happens before presign, so it cannot create
+      // an orphan and must not turn an otherwise valid video upload into a failure.
+      if (mediaErrorCode(error) === 'file-too-large') {
+        activity.cancel({ extra: { reason: 'poster-too-large' } });
+        return null;
+      }
+      debug.error('poster.local.validation.failed', error, { fileName: input.fileName });
+      activity.fail(new MediaError('poster-upload-failed', strings.posterUploadFailed));
+      return null;
+    }
+
+    let response: unknown;
+    try {
+      response = await api.createUploadIntent({
         fileName: posterFileName(input.fileName),
         contentType: POSTER_CONTENT_TYPE,
         sizeBytes,
       });
+    } catch (error) {
+      return failRequiredPosterUpload({
+        stage: 'intent',
+        error,
+        orphanedObjects: input.orphanedObjects,
+      });
+    }
+    let intent: MediaUploadIntent | null;
+    try {
+      intent = parseMediaUploadIntent(response);
+    } catch (error) {
+      return failRequiredPosterUpload({
+        stage: 'intent',
+        error,
+        orphanedObjects: input.orphanedObjects,
+      });
+    }
+    if (!intent) {
+      // response를 로그에 넣지 않는다 — malformed object 안에도 서명 URL이 있을 수 있다.
+      return failRequiredPosterUpload({ stage: 'intent', orphanedObjects: input.orphanedObjects });
+    }
+
+    const possiblyUploaded = orphanedUpload({
+      intent,
+      contentType: POSTER_CONTENT_TYPE,
+      sizeBytes,
+      storageState: 'possibly-uploaded',
+    });
+    let status: unknown;
+    try {
       const result = await transport.putLocalFile({
         url: intent.uploadUrl,
         method: intent.method,
         headers: intent.headers,
         uri: input.uri,
       });
-      debug.log('poster.local.put.done', {
-        fileName: input.fileName,
-        status: result.status,
-        sizeBytes,
-      });
-      if (!isSuccessStatus(result.status)) {
-        throw new MediaError('poster-upload-failed', strings.posterUploadFailed);
-      }
-      activity.succeed({ extra: { sizeBucket: sizeBucket(sizeBytes) } });
-      return { objectName: intent.objectName, sizeBytes };
+      status = (result as { readonly status?: unknown } | null)?.status;
     } catch (error) {
-      activity.fail(error);
-      throw error;
+      return failRequiredPosterUpload({
+        stage: 'put',
+        error,
+        orphanedObjects: [...input.orphanedObjects, possiblyUploaded],
+      });
     }
+    debug.log('poster.local.put.done', {
+      fileName: input.fileName,
+      status,
+      sizeBytes,
+    });
+    if (typeof status !== 'number' || !isSuccessStatus(status)) {
+      return failRequiredPosterUpload({
+        stage: 'put',
+        orphanedObjects: [...input.orphanedObjects, possiblyUploaded],
+      });
+    }
+    input.orphanedObjects.push(
+      orphanedUpload({
+        intent,
+        contentType: POSTER_CONTENT_TYPE,
+        sizeBytes,
+        storageState: 'uploaded',
+      }),
+    );
+    activity.succeed({ extra: { sizeBucket: sizeBucket(sizeBytes) } });
+    return { objectName: intent.objectName, sizeBytes };
   }
 
   /**
    * 전신 `createNativeVideoPoster`(uploader.ts:305-335).
-   * ⚠ **포스터 실패가 동영상 업로드를 막지 않는다**(§7.1) — 여기서 삼키고 `null`을 반환한다.
+   * ⚠ 추출 실패·빈 프레임·로컬 cap 거절만 동영상 업로드를 막지 않는다. presign/PUT이 실패하면
+   *    서버에 poster가 생겼을 수 있으므로 안전한 failureInfo와 함께 전체 흐름을 멈춘다.
    *
    * 전신은 `LocalUploadInput.poster`로 완성된 포스터를 받았지만 새 입력 타입에는 그 필드가 없다
    * (§5.4-①). 따라서 포스터 생성은 이 팩토리 안쪽으로 내려왔고, 그 결과 `uploadLocalFile`로 올린
@@ -310,9 +611,11 @@ export function createLocalUploads<TAsset, TCollectionId extends string = string
     readonly uri: string;
     readonly fileName: string;
     readonly kind: MediaKind;
+    readonly orphanedObjects: MediaOrphanedUpload[];
   }): Promise<UploadedPoster | null> {
     const adapter = config.poster;
     if (input.kind !== 'video' || !adapter) return null;
+    let posterUri: string;
     try {
       debug.log('video.poster.create.start', {
         fileName: input.fileName,
@@ -320,17 +623,30 @@ export function createLocalUploads<TAsset, TCollectionId extends string = string
       });
       const frame = await adapter.posterFromLocalFile({ uri: input.uri, atMs: posterAtMs });
       if (!frame) return null;
-      const poster = await uploadPosterLocalFile({ uri: frame.uri, fileName: input.fileName });
-      debug.log('video.poster.create.done', {
-        fileName: input.fileName,
-        hasPoster: Boolean(poster),
-        sizeBytes: poster?.sizeBytes,
-      });
-      return poster;
+      // Read the adapter-owned frame exactly once while this boundary is still guarded. A Proxy
+      // that throws or swaps in a presigned URL must be handled as an optional extraction failure,
+      // not escape after the adapter promise has resolved.
+      const uri = frame.uri;
+      if (typeof uri !== 'string' || uri.length === 0) return null;
+      posterUri = uri;
     } catch (error) {
+      // Extraction/no-frame has no storage side effect and stays optional by design.
       debug.error('video.poster.create.failed', error, { fileName: input.fileName });
       return null;
     }
+    // Do not catch `uploadPosterLocalFile`: its presign/PUT failures carry possibly-uploaded
+    // cleanup metadata and must reach the caller rather than allowing a silent orphan.
+    const poster = await uploadPosterLocalFile({
+      uri: posterUri,
+      fileName: input.fileName,
+      orphanedObjects: input.orphanedObjects,
+    });
+    debug.log('video.poster.create.done', {
+      fileName: input.fileName,
+      hasPoster: Boolean(poster),
+      sizeBytes: poster?.sizeBytes,
+    });
+    return poster;
   }
 
   type LocalUploadPlan = {
@@ -346,11 +662,12 @@ export function createLocalUploads<TAsset, TCollectionId extends string = string
     readonly height?: number | undefined;
   };
 
-  /** presign → PUT → complete. 전신 `uploadLocalUriToIntentInternal`(uploader.ts:363-470). */
+  /** presign → PUT → 마지막 처리. 전신 `uploadLocalUriToIntentInternal`(uploader.ts:363-470). */
   async function runLocalUpload(
     plan: LocalUploadPlan,
     poster: UploadedPoster | null,
-  ): Promise<UploadResult<TAsset>> {
+    orphanedObjects: MediaOrphanedUpload[],
+  ): Promise<TOutput> {
     assertUploadSize({
       limits: config.limits,
       strings,
@@ -370,11 +687,50 @@ export function createLocalUploads<TAsset, TCollectionId extends string = string
       height: plan.height,
       uri: summarizeUri(plan.uri),
     });
-    const intent = await api.createUploadIntent({
-      fileName: plan.fileName,
-      contentType: plan.contentType,
-      sizeBytes: plan.sizeBytes,
-    });
+    let response: unknown;
+    try {
+      response = await api.createUploadIntent({
+        fileName: plan.fileName,
+        contentType: plan.contentType,
+        sizeBytes: plan.sizeBytes,
+      });
+    } catch (error) {
+      // API가 네트워크/HTTP 에러에 signed URL을 에코해도 debug만 sanitize해서 본다. public
+      // error와 `telemetry.track`에는 새로 만든 안전한 MediaError만 나간다.
+      debug.error('local.intent.failed', error, {
+        fileName: plan.fileName,
+        contentType: plan.contentType,
+        sizeBytes: plan.sizeBytes,
+      });
+      throw safeUploadFailure({
+        message: strings.imageUploadFailed,
+        stage: 'intent',
+        orphanedObjects,
+      });
+    }
+    let intent: MediaUploadIntent | null;
+    try {
+      intent = parseMediaUploadIntent(response);
+    } catch (error) {
+      debug.error('local.intent.failed', error, {
+        fileName: plan.fileName,
+        contentType: plan.contentType,
+        sizeBytes: plan.sizeBytes,
+      });
+      throw safeUploadFailure({
+        message: strings.imageUploadFailed,
+        stage: 'intent',
+        orphanedObjects,
+      });
+    }
+    if (!intent) {
+      // malformed response에는 URL·headers가 들어 있을 수 있으므로 원문 자체를 기록하지 않는다.
+      throw safeUploadFailure({
+        message: strings.imageUploadFailed,
+        stage: 'intent',
+        orphanedObjects,
+      });
+    }
     debug.log('local.put.start', {
       fileName: plan.fileName,
       contentType: plan.contentType,
@@ -382,26 +738,52 @@ export function createLocalUploads<TAsset, TCollectionId extends string = string
       method: intent.method,
       uri: summarizeUri(plan.uri),
     });
-    const result = await transport.putLocalFile({
-      url: intent.uploadUrl,
-      method: intent.method,
-      headers: intent.headers,
-      uri: plan.uri,
+    const possiblyUploaded = orphanedUpload({
+      intent,
+      contentType: plan.contentType,
+      sizeBytes: plan.sizeBytes,
+      storageState: 'possibly-uploaded',
     });
+    let status: unknown;
+    try {
+      const result = await transport.putLocalFile({
+        url: intent.uploadUrl,
+        method: intent.method,
+        headers: intent.headers,
+        uri: plan.uri,
+      });
+      status = (result as { readonly status?: unknown } | null)?.status;
+    } catch (error) {
+      debug.error('local.put.failed', error, {
+        fileName: plan.fileName,
+        contentType: plan.contentType,
+        sizeBytes: plan.sizeBytes,
+      });
+      throw safeUploadFailure({
+        message: strings.imageUploadFailed,
+        stage: 'put',
+        orphanedObjects: [...orphanedObjects, possiblyUploaded],
+      });
+    }
     debug.log('local.put.done', {
       fileName: plan.fileName,
       contentType: plan.contentType,
       sizeBytes: plan.sizeBytes,
-      status: result.status,
+      status,
     });
-    if (!isSuccessStatus(result.status)) {
+    if (typeof status !== 'number' || !isSuccessStatus(status)) {
       // ⚠ 동영상이어도 `imageUploadFailed`다 — 전신(uploader.ts:423-426)이 로컬 코어에서 동영상·사진
       //   구분 없이 이 문구를 썼고, `videoUploadFailed`는 웹 동영상 경로 전용이었다(uploader.ts:590).
       //   memorylog2 이관 시 UI 회귀 0을 위해 문구 배치를 그대로 둔다(§11).
-      throw new MediaError('upload-failed', strings.imageUploadFailed);
+      throw safeUploadFailure({
+        message: strings.imageUploadFailed,
+        stage: 'put',
+        orphanedObjects: [...orphanedObjects, possiblyUploaded],
+      });
     }
+    orphanedObjects.push({ ...possiblyUploaded, storageState: 'uploaded' });
     try {
-      const completed = await api.completeUpload({
+      const attachment: MediaUploadCompletion<TCollectionId> = {
         fileName: plan.fileName,
         contentType: plan.contentType,
         sizeBytes: plan.sizeBytes,
@@ -415,21 +797,26 @@ export function createLocalUploads<TAsset, TCollectionId extends string = string
         // poster는 objectName·sizeBytes 쌍 객체다 — 한쪽만 보내 서버가 반쪽 메타로 등록하는
         // 경로를 타입 수준에서 없앤 결과다(§6.1-②).
         ...(poster ? { poster } : {}),
-      });
-      debug.log('local.complete.done', {
+      };
+      const output = await finalizer.finish(attachment);
+      debug.log(finalizer.successDebugEvent, {
         fileName: plan.fileName,
         contentType: plan.contentType,
         sizeBytes: plan.sizeBytes,
-        duplicate: completed.duplicate,
+        ...(finalizer.successDetails?.(output) ?? {}),
       });
-      return completed;
+      return output;
     } catch (error) {
-      debug.error('local.complete.failed', error, {
+      debug.error(finalizer.failureDebugEvent, error, {
         fileName: plan.fileName,
         contentType: plan.contentType,
         sizeBytes: plan.sizeBytes,
       });
-      throw error;
+      throw safeUploadFailure({
+        message: strings.imageUploadFailed,
+        stage: 'complete',
+        orphanedObjects,
+      });
     }
   }
 
@@ -440,22 +827,33 @@ export function createLocalUploads<TAsset, TCollectionId extends string = string
    *   들어가므로(§7.2 계약) 스팬을 열기 전에 포스터 유무가 확정돼야 한다. 전신도 같은 순서였다
    *   (uploader.ts:785-796 — `createNativeVideoPoster` 후 `uploadLocalUriToIntent`).
    */
-  async function uploadPlan(plan: LocalUploadPlan): Promise<UploadResult<TAsset>> {
+  async function uploadPlan(plan: LocalUploadPlan): Promise<TOutput> {
+    // poster가 먼저 성공한 뒤 본체 intent/PUT/등록이 실패하면, 이 배열이 에러 검사 API로
+    // 돌아간다. URL은 전혀 넣지 않는다 — 앱 cleanup endpoint에는 objectName만 필요하다.
+    const orphanedObjects: MediaOrphanedUpload[] = [];
     const poster = await createPoster({
       uri: plan.uri,
       fileName: plan.fileName,
       kind: mediaKindOf(plan.contentType),
+      orphanedObjects,
     });
-    return telemetry.track(
-      'media.upload.native',
-      {
+    return trackMediaSafely({
+      telemetry,
+      operation: 'media.upload.native',
+      extra: {
         contentType: plan.contentType,
         sizeBucket: sizeBucket(plan.sizeBytes),
         hasPoster: Boolean(poster),
       },
-      async () => {
+      onTelemetryFailure: (error) =>
+        debug.error('local.telemetry.track.failed', error, {
+          fileName: plan.fileName,
+          contentType: plan.contentType,
+          sizeBytes: plan.sizeBytes,
+        }),
+      run: async () => {
         try {
-          return await runLocalUpload(plan, poster);
+          return await runLocalUpload(plan, poster, orphanedObjects);
         } catch (error) {
           debug.error('local.upload.failed', error, {
             fileName: plan.fileName,
@@ -466,7 +864,7 @@ export function createLocalUploads<TAsset, TCollectionId extends string = string
           throw error;
         }
       },
-    );
+    });
   }
 
   /** 크기 결정 — verified가 있으면 file-system stat 자체를 건너뛴다(전신 `skipFileSystemStat`). */
@@ -477,18 +875,42 @@ export function createLocalUploads<TAsset, TCollectionId extends string = string
     readonly kind: MediaKind;
     readonly fileName: string;
   }): Promise<number> {
-    const stat =
-      input.verifiedSizeBytes && input.verifiedSizeBytes > 0
-        ? undefined
-        : await files.stat(input.uri);
+    let statKind: 'file' | 'directory' | 'missing' | undefined;
+    let statSizeBytes: number | undefined;
+    try {
+      if (!(input.verifiedSizeBytes && input.verifiedSizeBytes > 0)) {
+        const stat = await files.stat(input.uri);
+        // `FileSystemAdapter` is host code. Snapshot all fields that leave its result while the
+        // adapter boundary is guarded; reading `stat.kind` later would let a hostile getter leak
+        // a raw URI/URL error outside this safe MediaError path.
+        const kind = stat.kind;
+        if (kind === 'file') {
+          statKind = kind;
+          statSizeBytes = stat.sizeBytes;
+        } else if (kind === 'directory' || kind === 'missing') {
+          statKind = kind;
+        }
+      }
+    } catch (error) {
+      // custom file adapter가 URI/URL을 포함한 Error를 던져도 public 경계에는 안전한 문구만
+      // 남긴다. debug logger는 이 원문을 sanitize해서 개발 환경에서만 관찰한다.
+      debug.error('local.stat.failed', error, {
+        fileName: input.fileName,
+        uri: summarizeUri(input.uri),
+      });
+      throw new MediaError(
+        'upload-failed',
+        input.kind === 'video' ? strings.videoSizeUnknown : strings.imageSizeUnknown,
+      );
+    }
     const resolved = resolveUploadSize({
       verifiedSizeBytes: input.verifiedSizeBytes,
-      statSizeBytes: stat?.kind === 'file' ? stat.sizeBytes : undefined,
+      statSizeBytes,
       reportedSizeBytes: input.reportedSizeBytes,
     });
     debug.log('local.stat.done', {
       fileName: input.fileName,
-      statKind: stat?.kind,
+      statKind,
       sizeBytes: resolved?.sizeBytes,
       sizeSource: resolved?.source,
       uri: summarizeUri(input.uri),
@@ -504,6 +926,11 @@ export function createLocalUploads<TAsset, TCollectionId extends string = string
 
   return {
     async uploadLocalFile(input) {
+      if (platform.os === 'web') {
+        // `createDeferredLocalUploads`는 이 메서드만 노출한다. 여기서 막아야 web/SSR이
+        // 파일 stat·presign·PUT을 하나도 시작하지 않고 BinaryUploads 정본 경로로 갈 수 있다.
+        throw new MediaError('platform-unsupported', strings.platformUnsupported);
+      }
       const contentType =
         input.contentType ?? inferMediaContentType(null, input.fileName ?? input.uri);
       const kind = mediaKindOf(contentType);
@@ -518,6 +945,9 @@ export function createLocalUploads<TAsset, TCollectionId extends string = string
         kind,
         fileName,
       });
+      // 크기를 알았으면 해시·EXIF·포스터 생성 전에 즉시 거절한다. 그렇지 않으면 2GB 파일을
+      // 전부 SHA-256으로 읽고 난 뒤에야 `file-too-large`가 되어 cap의 사용자 보호 의미가 없다.
+      assertUploadSize({ limits: config.limits, strings, contentType, sizeBytes });
       // 호출자 해시가 최우선 — 있으면 hasher를 **호출하지 않는다**(§7.1 신설 행).
       // 동기화 큐가 재시도 간 해시를 캐시하는 경로가 이것이다.
       const contentHash = input.contentHash ?? (await hashSafely(input.uri, fileName)) ?? undefined;
@@ -536,12 +966,18 @@ export function createLocalUploads<TAsset, TCollectionId extends string = string
     },
 
     async uploadPickedAsset(asset, options) {
+      const picked = snapshotPickedAsset(asset);
+      if (!picked) {
+        // We cannot safely infer a media kind when a picker getter itself failed. Use the image
+        // fallback copy rather than exposing the adapter exception (which may contain a URI).
+        throw new MediaError('picked-asset-invalid', strings.pickedPhotoInvalid);
+      }
       // uri가 없으면 종류별 문구가 달라야 하므로 contentType을 먼저 추론한다.
       // 전신은 진입점이 둘(`uploadPickerAsset`/`uploadPickerMediaAsset`)이라 각자 자기 문구를 썼다
       // (uploader.ts:678 사진 / 717 미디어). 통합되면서 kind가 그 선택을 대신한다.
-      const contentType = inferMediaContentType(asset?.mimeType, asset?.fileName ?? asset?.uri);
+      const contentType = inferMediaContentType(picked.mimeType, picked.fileName ?? picked.uri);
       const kind = mediaKindOf(contentType);
-      if (!asset?.uri) {
+      if (!picked.uri) {
         throw new MediaError(
           'picked-asset-invalid',
           kind === 'video' ? strings.pickedMediaInvalid : strings.pickedPhotoInvalid,
@@ -555,35 +991,48 @@ export function createLocalUploads<TAsset, TCollectionId extends string = string
         throw new MediaError('platform-unsupported', strings.platformUnsupported);
       }
 
-      const uri = asset.uri;
+      const uri = picked.uri;
       const fileName = mediaFileName({
-        fileName: asset.fileName,
+        fileName: picked.fileName,
         contentType,
         prefix: fileNamePrefix,
       });
       debug.log('picker.route', {
         fileName,
         contentType,
-        mimeType: asset.mimeType,
-        reportedSizeBytes: asset.reportedSizeBytes,
-        verifiedSizeBytes: asset.verifiedSizeBytes,
-        width: asset.width,
-        height: asset.height,
+        mimeType: picked.mimeType,
+        reportedSizeBytes: picked.reportedSizeBytes,
+        verifiedSizeBytes: picked.verifiedSizeBytes,
+        width: picked.width,
+        height: picked.height,
         hasCollectionId: Boolean(options?.collectionId),
         uri: summarizeUri(uri),
       });
 
       const sizeBytes = await resolveSizeBytes({
         uri,
-        verifiedSizeBytes: asset.verifiedSizeBytes,
-        reportedSizeBytes: asset.reportedSizeBytes,
+        verifiedSizeBytes: picked.verifiedSizeBytes,
+        reportedSizeBytes: picked.reportedSizeBytes,
         kind,
         fileName,
       });
+      // picker 자산도 파일 크기가 확정된 순간에 cap을 적용한다. video poster·이미지 해시보다
+      // 앞이어야 대용량 거절이 CPU·배터리·임시 파일을 소모하지 않는다.
+      assertUploadSize({ limits: config.limits, strings, contentType, sizeBytes });
 
       // ⚠ EXIF 메타데이터는 이미지에서만 뽑는다 — 전신 동작 그대로다
       //   (`uploadPickerAssetNative`만 `extractPhotoMetadata`를 호출했고 동영상 경로는 호출하지 않았다).
-      const photo = kind === 'image' ? mediaMetadataFromExif(asset.exif) : undefined;
+      let photo: MediaMetadata | undefined;
+      if (kind === 'image') {
+        try {
+          // `asset` is picker/host-provided runtime data. Reading EXIF fields can invoke getters
+          // all the way down, so do not let a hostile EXIF proxy escape with a URI or raw error.
+          photo = mediaMetadataFromExif(picked.exif);
+        } catch (error) {
+          debug.error('picker.metadata.failed', error, { fileName, contentType });
+          throw new MediaError('picked-asset-invalid', strings.pickedPhotoInvalid);
+        }
+      }
 
       // ⚠ 해시도 이미지에서만 계산한다 — 전신 동작 그대로다(uploader.ts:880 이미지 / 784-796 동영상 미해시).
       //   동영상은 수백 MB가 흔하고 순수 TS SHA-256 위에서는 그 비용이 그대로 사용자 대기가 된다(§9·§12-3).
@@ -603,15 +1052,24 @@ export function createLocalUploads<TAsset, TCollectionId extends string = string
             kind,
             strings,
           }),
-          durationMs: normalizeDurationMs(asset.durationRaw, platform.os),
-          width: normalizeDimension(asset.width),
-          height: normalizeDimension(asset.height),
+          durationMs: normalizeDurationMs(picked.durationRaw, platform.os),
+          width: normalizeDimension(picked.width),
+          height: normalizeDimension(picked.height),
         });
       } finally {
         // 전신 주석 그대로: "No-op unless the uri is a staging copy made by
         // resolveDeviceAssetForUpload; a failed attempt re-resolves anyway."
         // 누락하면 업로드한 **모든** 사진의 원본 사본이 앱 컨테이너에 영구 축적된다(§7 하드닝 7).
-        await config.staging?.cleanup(uri);
+        try {
+          await config.staging?.cleanup(uri);
+        } catch (error) {
+          // cleanup은 최선 노력이다. 여기의 raw filesystem error가 이미 안전하게 만든 업로드
+          // 결과를 덮거나 telemetry/화면으로 새면 안 된다.
+          debug.error('local.staging.cleanup.failed', error, {
+            fileName,
+            uri: summarizeUri(uri),
+          });
+        }
       }
     },
   };

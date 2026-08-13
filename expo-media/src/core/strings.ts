@@ -1,7 +1,7 @@
 // 설계 문서 §4 — 문구 주입.
 //
 // 전신의 한국어 하드코딩은 리터럴 24개(V6 실측: uploader 17 · devicePhotoLibrary 4 ·
-// saveImages 2 · hashFile 1). 그중 크기 초과 문구만 값이 섞이므로 함수, 나머지는 상수 — **19키**.
+// saveImages 2 · hashFile 1). 그중 크기 초과 문구만 값이 섞이므로 함수, 나머지는 상수 — **22키**.
 // expo-ui의 `UiStrings + enStrings/koStrings` 패턴을 그대로 계승한다.
 //
 // 우선순위: 개별 옵션 > 팩토리 `strings` > 내장 `enMediaStrings`.
@@ -25,6 +25,10 @@ export interface MediaStrings {
   readonly iCloudOnly: string;
   /** 로컬 파일 없음/판독 불가 — `device-not-found`. 전신은 hashFile.ts:71과 문구를 공유했다. */
   readonly fileNotFound: string;
+  /** 기기 라이브러리 어댑터/OS 호출 실패 — 원본 예외를 공개하지 않는다. */
+  readonly deviceLibraryFailed: string;
+  /** 피커 어댑터/웹 바이너리 로더 호출 실패 — 원본 예외를 공개하지 않는다. */
+  readonly pickerFailed: string;
 
   // ── 업로드 검증 (전신 uploader.ts) ────────────────────────────────────────
   readonly unsupportedFileType: string;
@@ -77,6 +81,8 @@ export const enMediaStrings: MediaStrings = {
   iCloudOnly:
     'The original of the selected photo is in iCloud. Download it in the Photos app and try again.',
   fileNotFound: 'The photo file could not be found.',
+  deviceLibraryFailed: 'Could not read the photo library. Please try again in a moment.',
+  pickerFailed: 'Could not open the media picker. Please try again in a moment.',
 
   unsupportedFileType:
     'Unsupported file type. Only JPG, PNG, WebP, HEIC, HEIF images or MP4, MOV, WebM videos can be uploaded.',
@@ -116,6 +122,8 @@ export const koMediaStrings: MediaStrings = {
   iCloudOnly: '선택한 사진 원본이 iCloud에 있습니다. 사진 앱에서 원본을 내려받은 뒤 다시 시도해주세요.',
   // 전신 devicePhotoLibrary.ts:325 · hashFile.ts:71 (두 곳이 같은 문구를 썼다)
   fileNotFound: '사진 파일을 찾을 수 없습니다.',
+  deviceLibraryFailed: '사진 보관함을 읽지 못했습니다. 잠시 후 다시 시도해주세요.',
+  pickerFailed: '미디어 선택기를 열지 못했습니다. 잠시 후 다시 시도해주세요.',
 
   // 전신 uploader.ts:110
   unsupportedFileType:

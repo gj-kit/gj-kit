@@ -17,14 +17,20 @@ import type {
   NamedBinarySource,
 } from '../adapters';
 import { createMediaDebugLogger } from '../debug';
-import { MediaError } from '../errors';
+import { MediaError, mediaErrorCode } from '../errors';
 import { sha256Hex } from '../hashFile';
 import type { MediaContentType } from '../mediaTypes';
 import { inferMediaContentType, mediaFileName, mediaKindOf } from '../mediaTypes';
 import { mediaMetadataFromJpeg } from '../metadata';
 import { enMediaStrings } from '../strings';
-import { noopMediaTelemetry } from '../telemetry';
-import type { MediaMetadata, UploadedPoster, UploadResult } from '../types';
+import { beginMediaActivitySafely, noopMediaTelemetry, trackMediaSafely } from '../telemetry';
+import type {
+  MediaMetadata,
+  MediaOrphanedUpload,
+  MediaUploadIntent,
+  UploadedPoster,
+  UploadResult,
+} from '../types';
 import { uploadDroppedFiles } from './webBatch';
 import type { MediaUploadConfig } from './uploader';
 import {
@@ -34,9 +40,169 @@ import {
   assertUploadSize,
   isSuccessStatus,
   normalizeCollectionId,
+  orphanedUpload,
   posterFileName,
+  safeUploadFailure,
   sizeBucket,
 } from './uploader';
+import { parseMediaUploadIntent } from './intent';
+
+/**
+ * `BinarySource` objects often come from browser loaders and canvas/poster adapters. They are
+ * runtime values, not trusted just because the public type says `Blob`-like: snapshot their
+ * primitive header once and expose only a frozen forwarding reader to the rest of the pipeline.
+ * This prevents a getter from returning a valid size/name during validation and throwing a raw
+ * presigned URL on the next telemetry, hash, or PUT read.
+ */
+function isRecord(value: unknown): value is Record<string, unknown> {
+  try {
+    return typeof value === 'object' && value !== null && !Array.isArray(value);
+  } catch {
+    return false;
+  }
+}
+
+function snapshotBinarySource(value: unknown): BinarySource | null {
+  try {
+    if (!isRecord(value)) return null;
+    const source = value as Record<string, unknown>;
+    const size = source['size'];
+    const type = source['type'];
+    const arrayBuffer = source['arrayBuffer'];
+    if (
+      typeof size !== 'number' ||
+      !Number.isFinite(size) ||
+      size < 0 ||
+      (type !== undefined && typeof type !== 'string') ||
+      typeof arrayBuffer !== 'function'
+    ) {
+      return null;
+    }
+    const readArrayBuffer = () =>
+      (arrayBuffer as () => Promise<ArrayBuffer>).call(value);
+    return Object.freeze({
+      size,
+      ...(type !== undefined ? { type } : {}),
+      // Invocation failures remain inside the existing hash/metadata/transport guards. Binding
+      // the method preserves native Blob's `this` while hiding every mutable header property.
+      arrayBuffer: () => Promise.resolve().then(readArrayBuffer),
+    });
+  } catch {
+    return null;
+  }
+}
+
+function snapshotNamedBinarySource(value: unknown): NamedBinarySource | null {
+  try {
+    if (!isRecord(value)) return null;
+    const source = value as Record<string, unknown>;
+    const size = source['size'];
+    const type = source['type'];
+    const arrayBuffer = source['arrayBuffer'];
+    const name = source['name'];
+    if (
+      typeof size !== 'number' ||
+      !Number.isFinite(size) ||
+      size < 0 ||
+      (type !== undefined && typeof type !== 'string') ||
+      typeof arrayBuffer !== 'function' ||
+      typeof name !== 'string'
+    ) {
+      return null;
+    }
+    const readArrayBuffer = () =>
+      (arrayBuffer as () => Promise<ArrayBuffer>).call(value);
+    return Object.freeze({
+      size,
+      name,
+      ...(type !== undefined ? { type } : {}),
+      arrayBuffer: () => Promise.resolve().then(readArrayBuffer),
+    });
+  } catch {
+    return null;
+  }
+}
+
+type BinaryUploadInputSnapshot<TCollectionId extends string> = {
+  readonly source: NamedBinarySource;
+  readonly collectionId: TCollectionId | null | undefined;
+  readonly fallbackExif: Readonly<Record<string, unknown>> | undefined;
+  readonly poster: BinarySource | null | undefined;
+  readonly durationMs: number | null | undefined;
+  readonly dimensions:
+    | { readonly width?: number | null | undefined; readonly height?: number | null | undefined }
+    | undefined;
+};
+
+/**
+ * Snapshot the public input before telemetry sees it. Loader-created values and direct JS callers
+ * may use getters/Proxies; an invalid shape is handled by the caller as one safe upload failure.
+ */
+function snapshotBinaryUploadInput<TCollectionId extends string>(
+  value: unknown,
+): BinaryUploadInputSnapshot<TCollectionId> | null {
+  try {
+    if (!isRecord(value)) return null;
+    const input = value as Record<string, unknown>;
+    const rawSource = input['source'];
+    const collectionId = input['collectionId'];
+    const fallbackExif = input['fallbackExif'];
+    const rawPoster = input['poster'];
+    const durationMs = input['durationMs'];
+    const rawDimensions = input['dimensions'];
+    const source = snapshotNamedBinarySource(rawSource);
+    const poster =
+      rawPoster === undefined || rawPoster === null ? rawPoster : snapshotBinarySource(rawPoster);
+    if (
+      !source ||
+      (rawPoster !== undefined && rawPoster !== null && !poster) ||
+      (collectionId !== undefined && collectionId !== null && typeof collectionId !== 'string') ||
+      (fallbackExif !== undefined &&
+        fallbackExif !== null &&
+        (!isRecord(fallbackExif) || Array.isArray(fallbackExif))) ||
+      (durationMs !== undefined &&
+        durationMs !== null &&
+        (typeof durationMs !== 'number' || !Number.isFinite(durationMs)))
+    ) {
+      return null;
+    }
+
+    let dimensions:
+      | { readonly width?: number | null | undefined; readonly height?: number | null | undefined }
+      | undefined;
+    if (rawDimensions !== undefined && rawDimensions !== null) {
+      if (!isRecord(rawDimensions)) return null;
+      const dimensionsRecord = rawDimensions as Record<string, unknown>;
+      const width = dimensionsRecord['width'];
+      const height = dimensionsRecord['height'];
+      if (
+        (width !== undefined && width !== null &&
+          (typeof width !== 'number' || !Number.isFinite(width))) ||
+        (height !== undefined && height !== null &&
+          (typeof height !== 'number' || !Number.isFinite(height)))
+      ) {
+        return null;
+      }
+      dimensions = Object.freeze({
+        ...(width !== undefined ? { width } : {}),
+        ...(height !== undefined ? { height } : {}),
+      });
+    }
+
+    return Object.freeze({
+      source,
+      collectionId: collectionId as TCollectionId | null | undefined,
+      ...(fallbackExif !== undefined && fallbackExif !== null
+        ? { fallbackExif: fallbackExif as Readonly<Record<string, unknown>> }
+        : { fallbackExif: undefined }),
+      poster,
+      durationMs: durationMs as number | null | undefined,
+      dimensions,
+    });
+  } catch {
+    return null;
+  }
+}
 
 export interface BinaryUploads<TAsset, TCollectionId extends string = string> {
   uploadBinary(input: {
@@ -135,54 +301,130 @@ export function createBinaryUploads<TAsset, TCollectionId extends string = strin
   }): Promise<UploadedPoster | null> {
     const sizeBytes = input.source.size;
     if (!sizeBytes) return null;
-    const activity = telemetry.begin('media.upload.poster.web', {
-      sizeBucket: sizeBucket(sizeBytes),
+    const activity = beginMediaActivitySafely({
+      telemetry,
+      operation: 'media.upload.poster.web',
+      extra: { sizeBucket: sizeBucket(sizeBytes) },
+      onTelemetryFailure: (error) =>
+        debug.error('binary.poster.telemetry.failed', error, { fileName: input.fileName }),
     });
+
     try {
-      const intent = await api.createUploadIntent({
+      // 동영상 본체가 cap 안이어도 canvas/외부 adapter가 만든 poster는 별도의 큰 바이너리일 수
+      // 있다. 이 cap을 건너뛰면 poster가 이미지 정책의 우회 통로가 된다.
+      assertUploadSize({
+        limits: config.limits,
+        strings,
+        contentType: POSTER_CONTENT_TYPE,
+        sizeBytes,
+      });
+    } catch (error) {
+      // Cap rejection happens before presign, so no object can exist. Poster remains optional here.
+      if (mediaErrorCode(error) === 'file-too-large') {
+        activity.cancel({ extra: { reason: 'poster-too-large' } });
+        return null;
+      }
+      debug.error('binary.poster.validation.failed', error, { fileName: input.fileName });
+      activity.fail(new MediaError('poster-upload-failed', strings.posterUploadFailed));
+      return null;
+    }
+
+    const failRequiredPosterUpload = (failure: {
+      readonly stage: 'intent' | 'put';
+      readonly error?: unknown;
+      readonly orphanedObjects: readonly MediaOrphanedUpload[];
+    }): never => {
+      // Continuing after presign/PUT can silently lose a possibly-stored poster. Surface only the
+      // URL-free cleanup candidate; raw backend/transport errors remain debug-only and sanitized.
+      if (failure.error !== undefined) {
+        debug.error('binary.poster.upload.failed', failure.error, { fileName: input.fileName });
+      }
+      const safe = safeUploadFailure({
+        message: strings.posterUploadFailed,
+        stage: failure.stage,
+        orphanedObjects: failure.orphanedObjects,
+      });
+      activity.fail(safe);
+      throw safe;
+    };
+
+    let response: unknown;
+    try {
+      response = await api.createUploadIntent({
         fileName: posterFileName(input.fileName),
         contentType: POSTER_CONTENT_TYPE,
         sizeBytes,
       });
+    } catch (error) {
+      return failRequiredPosterUpload({ stage: 'intent', error, orphanedObjects: [] });
+    }
+    let intent: MediaUploadIntent | null;
+    try {
+      intent = parseMediaUploadIntent(response);
+    } catch (error) {
+      return failRequiredPosterUpload({ stage: 'intent', error, orphanedObjects: [] });
+    }
+    if (!intent) return failRequiredPosterUpload({ stage: 'intent', orphanedObjects: [] });
+
+    const possiblyUploaded = orphanedUpload({
+      intent,
+      contentType: POSTER_CONTENT_TYPE,
+      sizeBytes,
+      storageState: 'possibly-uploaded',
+    });
+    let status: unknown;
+    try {
       const result = await transport.putBinary({
         url: intent.uploadUrl,
         method: intent.method,
         headers: intent.headers,
         body: input.source,
       });
-      if (!isSuccessStatus(result.status)) {
-        throw new MediaError('poster-upload-failed', strings.posterUploadFailed);
-      }
-      activity.succeed();
-      return { objectName: intent.objectName, sizeBytes };
+      status = (result as { readonly status?: unknown } | null)?.status;
     } catch (error) {
-      activity.fail(error);
-      throw error;
+      return failRequiredPosterUpload({
+        stage: 'put',
+        error,
+        orphanedObjects: [possiblyUploaded],
+      });
     }
+    if (typeof status !== 'number' || !isSuccessStatus(status)) {
+      return failRequiredPosterUpload({ stage: 'put', orphanedObjects: [possiblyUploaded] });
+    }
+    activity.succeed();
+    return { objectName: intent.objectName, sizeBytes };
   }
 
   /**
-   * 3상태 해석 + 실패 삼킴. **포스터 실패가 동영상 업로드를 막지 않는다**(§7.1) —
-   * 전신 uploader.ts:565-575의 `try { … } catch { poster = null }` 그대로다.
+   * 3상태 해석. 추출 실패·빈 프레임·local cap은 optional로 삼키되, poster presign/PUT은
+   * possibly-uploaded object를 남길 수 있으므로 safe failureInfo와 함께 호출자에게 전파한다.
    */
   async function resolvePoster(input: {
     readonly source: BinarySource;
     readonly fileName: string;
     readonly requested: BinarySource | null | undefined;
   }): Promise<UploadedPoster | null> {
+    if (input.requested !== undefined) {
+      return input.requested
+        ? uploadPosterBinary({ source: input.requested, fileName: input.fileName })
+        : null;
+    }
+    const adapter = config.poster;
+    if (!adapter) return null;
+    let frame: BinarySource | null;
     try {
-      const adapter = config.poster;
-      const frame =
-        input.requested === undefined
-          ? adapter
-            ? await adapter.posterFromBinary({ source: input.source, atMs: posterAtMs })
-            : null
-          : input.requested;
-      return frame ? await uploadPosterBinary({ source: frame, fileName: input.fileName }) : null;
+      const adapterFrame = await adapter.posterFromBinary({ source: input.source, atMs: posterAtMs });
+      if (!adapterFrame) return null;
+      // A poster adapter result can be a Proxy too. Snapshot its header while the extraction seam
+      // is guarded so `uploadPosterBinary` never reads a hostile `size` getter after this catch.
+      frame = snapshotBinarySource(adapterFrame);
+      if (!frame) return null;
     } catch (error) {
+      // Extraction itself has no storage side effect, so the video can proceed without a poster.
       debug.error('binary.poster.failed', error, { fileName: input.fileName });
       return null;
     }
+    return uploadPosterBinary({ source: frame, fileName: input.fileName });
   }
 
   async function putAndComplete(input: {
@@ -200,25 +442,90 @@ export function createBinaryUploads<TAsset, TCollectionId extends string = strin
     readonly width: number | null | undefined;
     readonly height: number | null | undefined;
   }): Promise<UploadResult<TAsset>> {
-    const intent = await api.createUploadIntent({
-      fileName: input.fileName,
+    const message = input.kind === 'video' ? strings.videoUploadFailed : strings.imageUploadFailed;
+    // `resolvePoster`가 본체보다 먼저 성공한 경우, 이후 API/PUT/등록 실패는 poster를
+    // attachment로 돌려주지 못한다. 실패 검사 API가 이 URL 없는 후보를 앱 cleanup에 준다.
+    const orphanedObjects: MediaOrphanedUpload[] = input.poster
+      ? [
+          {
+            objectName: input.poster.objectName,
+            contentType: POSTER_CONTENT_TYPE,
+            sizeBytes: input.poster.sizeBytes,
+            storageState: 'uploaded',
+          },
+        ]
+      : [];
+
+    let response: unknown;
+    try {
+      response = await api.createUploadIntent({
+        fileName: input.fileName,
+        contentType: input.contentType,
+        sizeBytes: input.sizeBytes,
+      });
+    } catch (error) {
+      debug.error('binary.intent.failed', error, {
+        fileName: input.fileName,
+        contentType: input.contentType,
+        sizeBytes: input.sizeBytes,
+      });
+      throw safeUploadFailure({ message, stage: 'intent', orphanedObjects });
+    }
+    let intent: MediaUploadIntent | null;
+    try {
+      intent = parseMediaUploadIntent(response);
+    } catch (error) {
+      debug.error('binary.intent.failed', error, {
+        fileName: input.fileName,
+        contentType: input.contentType,
+        sizeBytes: input.sizeBytes,
+      });
+      throw safeUploadFailure({ message, stage: 'intent', orphanedObjects });
+    }
+    if (!intent) {
+      // Malformed response may itself contain a signed URL; do not log or echo it.
+      throw safeUploadFailure({ message, stage: 'intent', orphanedObjects });
+    }
+
+    const possiblyUploaded = orphanedUpload({
+      intent,
       contentType: input.contentType,
       sizeBytes: input.sizeBytes,
+      storageState: 'possibly-uploaded',
     });
-    const result = await transport.putBinary({
-      url: intent.uploadUrl,
-      method: intent.method,
-      headers: intent.headers,
-      body: input.source,
-    });
-    if (!isSuccessStatus(result.status)) {
-      // 전신은 웹 경로에서만 종류별 문구를 갈랐다(uploader.ts:518 사진 / 590 동영상).
-      throw new MediaError(
-        'upload-failed',
-        input.kind === 'video' ? strings.videoUploadFailed : strings.imageUploadFailed,
-      );
+    let status: unknown;
+    try {
+      const result = await transport.putBinary({
+        url: intent.uploadUrl,
+        method: intent.method,
+        headers: intent.headers,
+        body: input.source,
+      });
+      status = (result as { readonly status?: unknown } | null)?.status;
+    } catch (error) {
+      debug.error('binary.put.failed', error, {
+        fileName: input.fileName,
+        contentType: input.contentType,
+        sizeBytes: input.sizeBytes,
+      });
+      throw safeUploadFailure({
+        message,
+        stage: 'put',
+        orphanedObjects: [...orphanedObjects, possiblyUploaded],
+      });
     }
-    return api.completeUpload({
+    if (typeof status !== 'number' || !isSuccessStatus(status)) {
+      // HTTP 실패도 object 저장 여부를 절대라고 가정하지 않는다. cleanup API가 idempotent하게
+      // `possibly-uploaded` 후보를 처리해야 응답 유실/프록시 실패에도 orphan이 남지 않는다.
+      throw safeUploadFailure({
+        message,
+        stage: 'put',
+        orphanedObjects: [...orphanedObjects, possiblyUploaded],
+      });
+    }
+    orphanedObjects.push({ ...possiblyUploaded, storageState: 'uploaded' });
+
+    const completion = {
       fileName: input.fileName,
       contentType: input.contentType,
       sizeBytes: input.sizeBytes,
@@ -231,7 +538,17 @@ export function createBinaryUploads<TAsset, TCollectionId extends string = strin
       ...(input.width ? { width: input.width } : {}),
       ...(input.height ? { height: input.height } : {}),
       ...(input.poster ? { poster: input.poster } : {}),
-    });
+    };
+    try {
+      return await api.completeUpload(completion);
+    } catch (error) {
+      debug.error('binary.complete.failed', error, {
+        fileName: input.fileName,
+        contentType: input.contentType,
+        sizeBytes: input.sizeBytes,
+      });
+      throw safeUploadFailure({ message, stage: 'complete', orphanedObjects });
+    }
   }
 
   async function uploadImage(input: {
@@ -251,10 +568,18 @@ export function createBinaryUploads<TAsset, TCollectionId extends string = strin
     });
     // ⚠ 인자 2개(`fallbackExif`·`contentType`)가 계약이다(§5.3 4규칙) —
     //   비-JPEG는 파싱하지 않고 fallback을 그대로 쓰고, 병합은 **필드 단위**다.
-    const photo = await mediaMetadataFromJpeg(input.source, {
-      fallbackExif: input.fallbackExif,
-      contentType: input.contentType,
-    });
+    let photo: MediaMetadata | undefined;
+    try {
+      photo = await mediaMetadataFromJpeg(input.source, {
+        fallbackExif: input.fallbackExif,
+        contentType: input.contentType,
+      });
+    } catch (error) {
+      // BinarySource 구현이 URI/서명 URL을 포함한 예외를 던질 수 있어, telemetry.track 밖으로
+      // raw error를 내보내지 않는다. 해시와 달리 메타 파서는 조용히 생략하면 EXIF 유실을 숨긴다.
+      debug.error('binary.metadata.failed', error, { fileName: input.fileName });
+      throw new MediaError('upload-failed', strings.imageUploadFailed);
+    }
     const contentHash = await hashSafely(input.source, input.fileName);
     return putAndComplete({
       source: input.source,
@@ -316,44 +641,59 @@ export function createBinaryUploads<TAsset, TCollectionId extends string = strin
 
   const uploads: BinaryUploads<TAsset, TCollectionId> = {
     async uploadBinary(input) {
+      const snapshot = snapshotBinaryUploadInput<TCollectionId>(input);
+      if (!snapshot) {
+        // A source/header getter may have thrown an adapter-provided URL. Do not hand it to
+        // telemetry or the caller; this is the same retryable safe failure as malformed upload
+        // input from a host integration.
+        throw new MediaError('upload-failed', strings.imageUploadFailed);
+      }
+      const { source, collectionId: rawCollectionId, fallbackExif, poster, durationMs, dimensions } = snapshot;
       // 전신은 이미지 경로가 `inferContentType`(이미지 전용), 동영상 경로가 `inferMediaContentType`
       // 이었다. 후자는 미디어를 못 찾으면 전자로 폴백하므로(mediaTypes.ts:120-123) 한 번의 호출이
       // 두 경로를 모두 재현한다.
-      const contentType = inferMediaContentType(input.source.type, input.source.name);
+      const contentType = inferMediaContentType(source.type, source.name);
       const kind = mediaKindOf(contentType);
       const fileName = mediaFileName({
-        fileName: input.source.name,
+        fileName: source.name,
         contentType,
         prefix: fileNamePrefix,
       });
       const collectionId = normalizeCollectionId({
-        collectionId: input.collectionId,
+        collectionId: rawCollectionId,
         kind,
         strings,
       });
-      return telemetry.track(
-        kind === 'video' ? 'media.upload.web-video' : 'media.upload.web-image',
-        { contentType, sizeBucket: sizeBucket(input.source.size) },
-        () =>
+      return trackMediaSafely({
+        telemetry,
+        operation: kind === 'video' ? 'media.upload.web-video' : 'media.upload.web-image',
+        extra: { contentType, sizeBucket: sizeBucket(source.size) },
+        onTelemetryFailure: (error) =>
+          debug.error('binary.telemetry.track.failed', error, {
+            fileName,
+            contentType,
+            sizeBytes: source.size,
+          }),
+        run: () =>
           kind === 'video'
             ? uploadVideo({
-                source: input.source,
+                source,
                 fileName,
                 contentType,
                 collectionId,
-                requestedPoster: input.poster,
-                durationMs: input.durationMs,
-                width: input.dimensions?.width,
-                height: input.dimensions?.height,
+                requestedPoster: poster,
+                durationMs,
+                width: dimensions?.width,
+                height: dimensions?.height,
               })
             : uploadImage({
-                source: input.source,
+                source,
                 fileName,
                 contentType,
                 collectionId,
-                fallbackExif: input.fallbackExif,
+                fallbackExif,
               }),
-      );
+      });
     },
 
     uploadDropped(files, options) {

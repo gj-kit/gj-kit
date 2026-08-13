@@ -7,11 +7,13 @@
 - **런타임 의존성 0** — `js-sha256`도 없다. 순수 TS 증분 SHA-256이 내장돼 있다.
 - **peer 5종 전부 optional** — "어느 엔트리를 import했나"가 peer 그래프를 결정한다. 런타임 마법(지연 `require`) 0.
 - **코어는 순수하다** — `src/core/**`에 `react-native`·`expo-*` import 0, DOM 전역 참조 0. 그래서 전 파이프라인이 네이티브 모킹 없이 vitest에서 돈다.
-- **문구는 전부 주입** — `MediaStrings` 19키 + 내장 `enMediaStrings`/`koMediaStrings`. 라이브러리 소스에 사용자 노출 리터럴이 없음을 정적 가드가 강제한다.
-- **에러는 전부 `code`로 분기 가능** — `MediaError` 14코드. bare `Error`가 남아 있지 않다.
+- **문구는 전부 주입** — `MediaStrings` 22키 + 내장 `enMediaStrings`/`koMediaStrings`. 라이브러리 소스에 사용자 노출 리터럴이 없음을 정적 가드가 강제한다.
+- **운영 파이프라인 오류는 전부 `code`로 분기 가능** — 업로드·피커·기기·저장 등 공개
+  파이프라인이 만드는 실패는 `MediaError` 16코드로 정규화한다. 개발자 단언과 직접 호출한
+  저수준 어댑터의 오류는 이 계약 밖이며, 어댑터를 호출하는 파이프라인에서만 안전하게 감싼다.
 
 > **SDK 요구 (엔트리별로 다르다 — 이 두 줄이 전부다)**
-> - `.` · `./picker` · `./device` · `./save`는 **Expo SDK 56 이상**을 요구한다 (`expo-file-system@56.0.0`의 `File.upload()` / `expo-media-library@56.0.5`의 `/legacy` 서브패스가 하한을 지배한다).
+> - `.` · `./picker` · `./device` · `./save`는 **Expo SDK 56 의존성 그래프에서 검증**된다 (`expo-file-system@56.0.0`의 `File.upload()` / `expo-media-library@56.0.5`의 `/legacy` 서브패스가 하한을 지배한다). peer의 하한은 이후 SDK 호환성을 자동으로 보장하지 않으며, 새 SDK는 별도 검증 뒤 지원 범위에 추가한다.
 > - `./core` · `./web` · `./testing`은 **peer 0**이라 **SDK와 무관하다.** bare RN·웹 전용·Node 스크립트에서 그대로 쓴다.
 
 ```sh
@@ -48,12 +50,155 @@ const { asset, duplicate } = await media.uploadLocalFile({
 > - `UploadResult.duplicate`는 **필수 필드**다. 옵셔널이면 호스트가 판정을 돌려주지 않을 때 킷이 "새로 만들어졌다"로 오독하고, 중복 취소 경로가 **사용자의 예전 사진을 지운다.**
 > - 완료 페이로드의 포스터는 `{ objectName, sizeBytes }` **쌍 객체**다. 전신의 `posterObjectName`/`posterSizeBytes` 2필드는 반쪽만 채운 채 등록되는 경로가 있었다.
 
+### 지연 연결 — `createDeferredLocalUploads`
+
+백엔드가 presign URL과 `objectName`만 발급하고, 실제 레코드 생성·수정 트랜잭션에서 나중에
+첨부를 연결하는 앱은 `completeUpload`를 꾸며 낼 필요가 없다. `MediaUploadIntentApi`의 유일한
+메서드인 `createUploadIntent`만 주면, 같은 크기 검증·해시·동영상 포스터·**네이티브 스트리밍** PUT을
+거친 뒤 `MediaUploadCompletion` 형태의 attachment를 돌려준다.
+
+```ts
+import {
+  createDeferredLocalUploads,
+  createExpoFileSystem,
+  createExpoLocalFileTransport,
+  expoPlatform,
+} from '@gj-kit/expo-media';
+import type {
+  MediaOrphanedUpload,
+  MediaUploadCompletion,
+  MediaUploadFailureStage,
+  MediaUploadIntentApi,
+} from '@gj-kit/expo-media';
+
+declare const appApi: {
+  createUploadIntent(
+    input: Parameters<MediaUploadIntentApi['createUploadIntent']>[0],
+  ): ReturnType<MediaUploadIntentApi['createUploadIntent']>;
+  updateDraft(input: { readonly draftId: string; readonly cover: MediaUploadCompletion }): Promise<void>;
+  reconcileUnattachedUploads(input: {
+    readonly stage: MediaUploadFailureStage;
+    readonly candidates: readonly MediaOrphanedUpload[];
+  }): Promise<void>;
+};
+declare const localPhotoUri: string;
+declare const draftId: string;
+
+const presignOnlyApi: MediaUploadIntentApi = {
+  async createUploadIntent({ fileName, contentType, sizeBytes }) {
+    const issued = await appApi.createUploadIntent({ fileName, contentType, sizeBytes });
+    return {
+      uploadUrl: issued.uploadUrl,
+      method: 'PUT',
+      headers: issued.headers,
+      objectName: issued.objectName,
+    };
+  },
+};
+
+const uploads = createDeferredLocalUploads({
+  api: presignOnlyApi,             // completeUpload 없음
+  limits: { image: { maxBytes: 15 * 1024 * 1024 } },
+  platform: expoPlatform(),
+  files: createExpoFileSystem(),
+  transport: createExpoLocalFileTransport(),
+});
+
+const attachment = await uploads.uploadLocalFile({
+  uri: localPhotoUri,
+  fileName: 'draft-cover.jpg',
+});
+
+// 이 호출이 앱의 실제 등록/연결 경계다. 라이브러리는 이 트랜잭션을 대신하거나 흉내 내지 않는다.
+await appApi.updateDraft({ draftId, cover: attachment });
+```
+
+`attachment`의 PUT 성공은 **스토리지에 객체가 올라갔다는 뜻일 뿐**, 레코드에 연결·검증·공개됐다는
+뜻은 아니다. 앱이 트랜잭션 실패·취소 시 orphan object 정리와 재시도 정책을 맡아야 한다. 이 경로는
+로컬 URI를 네이티브 transport로 스트리밍하는 용도이며, 원본 URI를 보관하거나 압축·크롭하지 않는다.
+웹 `Blob`/`File`은 `createBinaryUploads` 경로를 사용한다. `uploadLocalFile`만 노출하므로, 피커
+선택 결과는 앱이 URI를 확보한 뒤 이 함수에 넘기거나 일반 `createMediaKit` 흐름을 사용한다. web/SSR에서
+이 메서드는 file stat·presign·PUT **전에** `platform-unsupported`로 끝난다.
+
+#### 실패 후 스토리지 정리 — 일반/지연 흐름 공통
+
+`createLocalUploads`와 `createDeferredLocalUploads` 모두 presign·PUT·등록(finalizer) 실패를
+`MediaError('upload-failed')`로 정규화한다. `mediaUploadFailureInfo()`는 code splitting으로 코어 사본이
+갈려도 읽히는 URL 없는 recovery metadata다. `objectName`, `contentType`, `sizeBytes`, `storageState`만
+주며 presigned URL·헤더·원본 네트워크 에러는 절대 돌려주지 않는다.
+`objectName`은 최대 1024자의 ASCII unreserved 경로 세그먼트(`[A-Za-z0-9._~-]`)를 `/`로 잇는
+키만 허용한다. URL·query·percent encoding·공백은 받지 않으므로, backend 발급 키도 이 문법을 따라야 한다.
+
+```ts
+import { mediaUploadFailureInfo } from '@gj-kit/expo-media';
+import type { MediaOrphanedUpload, MediaUploadCompletion } from '@gj-kit/expo-media';
+
+declare const uploads: {
+  uploadLocalFile(input: { readonly uri: string }): Promise<MediaUploadCompletion>;
+};
+declare const localPhotoUri: string;
+declare const draftId: string;
+declare const appApi: {
+  updateDraft(input: { readonly draftId: string; readonly cover: MediaUploadCompletion }): Promise<void>;
+  reconcileUnattachedUploads(input: {
+    readonly stage: 'intent' | 'put' | 'complete';
+    readonly candidates: readonly MediaOrphanedUpload[];
+  }): Promise<void>;
+};
+
+function attachmentCandidates(attachment: MediaUploadCompletion): readonly MediaOrphanedUpload[] {
+  return [
+    {
+      objectName: attachment.objectName,
+      contentType: attachment.contentType,
+      sizeBytes: attachment.sizeBytes,
+      storageState: 'uploaded',
+    },
+    ...(attachment.poster
+      ? [{
+          objectName: attachment.poster.objectName,
+          contentType: 'image/jpeg' as const,
+          sizeBytes: attachment.poster.sizeBytes,
+          storageState: 'uploaded' as const,
+        }]
+      : []),
+  ];
+}
+
+let attachment: MediaUploadCompletion | null = null;
+try {
+  attachment = await uploads.uploadLocalFile({ uri: localPhotoUri });
+  await appApi.updateDraft({ draftId, cover: attachment });
+} catch (error) {
+  const failure = mediaUploadFailureInfo(error);
+  // deferred attachment가 이미 완성된 뒤 app transaction이 실패한 경우도 같은 서버 경계로 보낸다.
+  const candidates = failure?.orphanedObjects ?? (attachment ? attachmentCandidates(attachment) : []);
+  if (candidates.length > 0) {
+    // 서버가 로그인한 사용자의 소유권과 "아직 어떤 레코드에도 연결되지 않음"을 재검증한다.
+    // 이 endpoint는 storageState를 받아도 멱등이어야 한다.
+    await appApi.reconcileUnattachedUploads({
+      stage: failure?.stage ?? 'complete',
+      candidates,
+    });
+  }
+  throw error;
+}
+```
+
+`uploaded`는 클라이언트가 2xx를 확인한 후보이고, `possibly-uploaded`는 PUT 응답 유실·전송 예외처럼
+서버에는 이미 도달했을 수도 있는 후보다. 특히 `stage: 'complete'`는 **서버 등록이 이미 성공했을
+가능성도 있다.** cleanup endpoint는 클라이언트 메타데이터만 보고 삭제하면 안 되며, 인증된 소유자,
+객체의 현재 attachment 상태를 서버에서 다시 확인해 **미연결인 자기 객체만** 삭제해야 한다. 존재하지
+않는 후보도 성공으로 처리하는 멱등 API가 정답이다. 포스터는 no-frame·추출 실패·로컬 cap 초과면 선택적으로
+건너뛰지만, presign/PUT이 시작된 뒤 실패하면 possibly-uploaded poster를 숨기지 않고 이 recovery 경로로
+전파한다.
+
 ## 2. 서브패스 8개와 peer
 
 | 엔트리 | 내용 | 정적 import하는 peer |
 |---|---|---|
 | `.` | `./core` 전체 재export + `createMediaKit` + expo 기본 어댑터 | `react-native`, `expo-file-system` |
-| `./core` | 팩토리 7종, 어댑터 계약, `MediaError`(14코드), `MediaStrings`(19키), mediaTypes 테이블, EXIF 파서, 순수 TS SHA-256, `StagingCache`, 서명 URL 새니타이저 | **없음** (DOM lib도 없음) |
+| `./core` | 팩토리 8종, 어댑터 계약, `MediaError`(16코드), `MediaStrings`(22키), mediaTypes 테이블, EXIF 파서, 순수 TS SHA-256, `StagingCache`, 서명 URL 새니타이저 | **없음** (DOM lib도 없음) |
 | `./picker` | `expoPicker` — OS 피커/카메라, 권한, iOS 원본 fast path | `expo-image-picker`, `react-native` |
 | `./device` | `expoDeviceLibrary` — granular 권한·페이지네이션·앨범·자산정보 | `expo-media-library/legacy`, `react-native` |
 | `./save` | `expoDeviceSave({ isExpoGo })` — MediaLibrary 저장 | `expo-media-library/legacy`, `react-native` |
@@ -66,6 +211,7 @@ const { asset, duplicate } = await media.uploadLocalFile({
 | 소비자 | 필요한 엔트리 | 설치 불필요한 peer |
 |---|---|---|
 | 백그라운드 동기화(로컬 URI 업로드만) | `.` | image-picker, media-library, video-thumbnails |
+| 레코드 트랜잭션에서 나중에 연결 | `.` (`createDeferredLocalUploads`) | image-picker, media-library, video-thumbnails |
 | 웹 드롭존 / 웹 관리자 도구 | `./core` + `./web` | expo-* 전부, react-native |
 | OS 피커 업로드(이미지 전용) | `.` + `./picker` | media-library, video-thumbnails |
 | bare RN 커스텀 어댑터 | `./core` | 전부 |
@@ -199,7 +345,7 @@ const results = await uploads.uploadDropped(droppedFiles, { maxFiles: 12 });
 
 ## 4. 문구 주입
 
-사용자에게 보이는 문구는 **19키 전부** `MediaStrings`에서 온다. 내장 번들은 `enMediaStrings`(기본)와 `koMediaStrings`.
+사용자에게 보이는 문구는 **22키 전부** `MediaStrings`에서 온다. 내장 번들은 `enMediaStrings`(기본)와 `koMediaStrings`.
 
 ```ts
 import { koMediaStrings } from '@gj-kit/expo-media/core';
@@ -219,7 +365,7 @@ const strings: MediaStrings = {
 > **왜 `Partial<MediaStrings>`가 아닌가**
 > 부분 객체를 허용하면 라이브러리가 새 문구 키를 추가했을 때 손조립 번들이 조용히 영어로 새어 나온다. 완전 객체를 요구하면 그 순간 **컴파일 에러로 표면화**된다 — 커스텀은 언제나 스프레드가 정답이다.
 
-## 5. 에러 — `code` 14종
+## 5. 에러 — `code` 16종
 
 ```ts
 import { isMediaError, mediaErrorCode, mediaErrorUserMessage } from '@gj-kit/expo-media/core';
@@ -241,10 +387,12 @@ try {
 | `device-timeout` | 자산 정보 조회 데드라인 초과(15s / iCloud 옵트인 시 60s) |
 | `device-icloud-only` | 원본이 iCloud에만 있고 다운로드 옵트인이 없음 |
 | `device-not-found` | 로컬 파일 없음/판독 불가 |
+| `device-library-failed` | 기기 라이브러리 adapter/OS 조회 실패 — 원문은 공개하지 않음 |
+| `picker-failed` | 피커 adapter/웹 바이너리 로더 실패 — 원문은 공개하지 않음 |
 | `unsupported-file-type` | 지원 8형식 밖 |
 | `file-too-large` | `limits` 초과 |
-| `upload-failed` | 스토리지 PUT 실패 |
-| `poster-upload-failed` | 포스터 PUT 실패 |
+| `upload-failed` | presign·스토리지 PUT·등록(finalizer) 실패 — `mediaUploadFailureInfo()`로 정리 후보 확인 |
+| `poster-upload-failed` | 포스터 프레임의 로컬 생성/검증 실패(포스터 자체는 선택 사항) |
 | `save-permission-denied` | 기기 저장 권한 거부 |
 | `save-download-failed` | 저장용 다운로드가 2xx가 아님 |
 | `permission-denied` | 사진/미디어/카메라 권한 거부 — 호스트가 "설정으로 이동" UI를 띄울 근거 |
@@ -282,6 +430,10 @@ export const mediaTelemetry: MediaTelemetry = {
 | `media.save-to-device` | `track` | `{ imageCount, mode }` |
 
 `operation`은 리터럴 유니언(`MediaOperation`)이라 오타가 컴파일 에러다. **이름과 `sizeBucket` 경계(`under-1mb`/`1-10mb`/`10-100mb`/`over-100mb`)는 계약이다** — 바꾸면 소비자 대시보드와 과거 로그 비교가 깨진다. 유닛 테스트가 `MEDIA_OPERATIONS`를 인라인 리터럴 배열로 단언하고(스냅샷은 `-u`로 조용히 갱신되므로 쓰지 않는다), 전 파이프라인을 페이크 텔레메트리로 돌려 관측된 집합이 정확히 일치하는지 확인한다.
+
+텔레메트리는 관측자다. 호스트의 `track`/`begin` 또는 span 종료 메서드가 throw·reject·미종료여도
+업로드·저장 결과를 바꾸거나 멈출 수 없으며, 어댑터 자체가 받은 raw 오류는 public error·다른
+telemetry sink로 전달되지 않는다. 구현은 그래도 `run()`의 결과를 그대로 return/rethrow해야 한다.
 
 기기 라이브러리 경로는 **의도적으로 텔레메트리를 방출하지 않는다** — 그 진단은 앱 경계에 두는 것이 전신의 결정이었고, 방출 지점 없는 슬롯은 죽은 인자다. 그래서 `createDeviceLibrary`·`createDeviceUploads`에는 `telemetry` 인자가 아예 없다.
 
@@ -336,14 +488,14 @@ await uploads.uploadBinary({
 | **Android 13+ granular 권한** | 목록을 생략하면 매니페스트의 **모든** 권한이 대상이 되어, 거부된 `READ_MEDIA_AUDIO`가 유효한 사진 허용을 거부처럼 보이게 만든다 | 읽기 경로는 `['photo','video']` 고정. `hardening-guard`가 `src/device/**`의 권한 호출에 목록 인자를 강제한다(저장 경로의 `writeOnly` 요청만 명시 예외) |
 | **iCloud 원본 무단 다운로드** | 레거시 API는 `shouldDownloadFromNetwork` 기본이 **true**라 백그라운드 동기화가 셀룰러 전송을 시작한다 | 기본 **false** + 전경 옵트인, **15s/60s 이중 타임아웃**, `onICloudDownload`는 `finally` 보장. 어댑터는 `downloadFromNetwork`를 **필수 인자**로 받아 기본값 결정권이 없다 |
 | **스테이징 사본 누수** | 정리 누락 시 업로드한 **모든 사진의 원본 사본**이 앱 컨테이너에 영구 축적된다 | `staging`이 `createDeviceLibrary`의 **필수 인자** — 사본을 만드는 주체가 지우는 주체를 반드시 갖는다. 삭제는 프리픽스 3조건(캐시 디렉토리 시작 + 파일명 prefix + 하위 경로 없음)으로 자기 파일만. 호스트 이름 누출(`memorylog-upload-`) 대신 `namespace` 설정 |
-| **서명 URL 로그 유출** | iOS URLSession 실패가 **임시 자격증명이 든 서명 URL 전문**을 에러 메시지로 에코했다 | `summarizeUri`/`sanitizeMediaErrorMessage` — URL→`[URL]` 치환 + 1000자 절단, URI는 shape만 로깅. `hardening-guard`가 로거에 원문 `uri`/`url` 전달을 금지 |
+| **서명 URL 로그·공개 에러 유출** | iOS URLSession/백엔드/등록 실패가 **임시 자격증명이 든 서명 URL 전문**을 에러 메시지로 에코했다 | debug만 `summarizeUri`/`sanitizeMediaErrorMessage`로 URL→`[URL]` 치환 + 1000자 절단. public error·telemetry에는 새 `MediaError`만 전달하고, recovery API에는 URL 없는 object metadata만 남긴다 |
 | **base64 청크 정렬** | 3바이트 = base64 4문자. 청크가 3의 배수가 아니면 윈도우 경계에 패딩이 끼어 **해시가 조용히 틀린다** | `HASH_CHUNK_BYTES = 3*256*1024` 고정 + 가드가 `% 3 === 0`을 단언. 공개 `computeChunkRanges(size)`에서 `chunkBytes` 인자를 **제거**(전신은 기본 인자로 열려 있었고 그게 회귀 통로였다). node:crypto 대조 13종 크기 |
 | **혼합 드롭 부분 업로드** | 미지원 파일을 필터링하고 나머지를 올려서, 사용자가 결과도 모르고 거절된 파일을 고칠 수도 없었다 | `uploadDropped`가 **첫 presign 이전에** 배치 전체 검증. 유닛이 `createUploadIntent` 호출 0회를 단언 |
 | **EXIF 타임존** | EXIF DateTime에는 타임존이 없다. UTC로 읽으면 12:30 KST 촬영이 경로에 따라 9시간 어긋나 MediaLibrary `creationTime` 경로와 다른 날짜에 묶인다 | `capturedAtFromExif()`가 **기기 로컬 벽시계**로 해석. GPS 도분초·유리수·부호(S·W), IFD 순환 방지, 경계 검사 전부 보존. `TZ=Asia/Seoul`·`TZ=UTC` 두 실행으로 검증 |
 
-그 밖에 유지되는 것들: iOS 피커 원본 fast path 고정 조합(`quality:1`+`exif:true`+`allowsEditing:false`+`Current` — 단일/다중 선택이 달라지면 안 된다) · 그리드에서 자산별 `getAssetInfoAsync` 호출 금지(60장 직렬 ≈ 페이지당 20초) · 기기 자산 업로드 루프의 의도적 순차 실행 · dedup 해시 실패가 업로드를 막지 않음 · 호출자 제공 `contentHash`가 있으면 hasher 미호출 · 포스터 실패가 동영상 업로드를 막지 않음 · 정보 조회 실패 시 `MediaError`는 **항상 재throw**하고 raw 예외만 폴백 후보로 생존 · 웹 포스터 이벤트 3000ms 타임아웃과 seek 상한 `min(atMs/1000, duration−0.05)` · 웹 저장의 CORS 실패 시 숨김 iframe 폴백(60초 후 제거) · 다운로드 2xx 범위 검증 + 실패 시 임시 파일 정리 · 저장 파일명 우선순위(fileName → contentType → URL 확장자 → jpg, **5자 초과 확장자 거부**).
+그 밖에 유지되는 것들: iOS 피커 원본 fast path 고정 조합(`quality:1`+`exif:true`+`allowsEditing:false`+`Current` — 단일/다중 선택이 달라지면 안 된다) · 그리드에서 자산별 `getAssetInfoAsync` 호출 금지(60장 직렬 ≈ 페이지당 20초) · 기기 자산 업로드 루프의 의도적 순차 실행 · dedup 해시 실패가 업로드를 막지 않음 · 호출자 제공 `contentHash`가 있으면 hasher 미호출 · 포스터의 no-frame·추출 실패·로컬 cap 초과만 선택적으로 건너뜀(이미 presign/PUT을 시작한 poster 실패는 recovery metadata와 함께 중단) · 정보 조회 실패 시 **core가 만든 deadline만** 재throw하고, 호스트 어댑터 실패는 후보가 있으면 생존·없으면 URL 없는 `device-library-failed`로 정규화 · 웹 포스터 이벤트 3000ms 타임아웃과 seek 상한 `min(atMs/1000, duration−0.05)` · 웹 저장의 CORS 실패 시 숨김 iframe 폴백(60초 후 제거) · 다운로드 2xx 범위 검증 + 실패 시 임시 파일 정리 · 저장 파일명 우선순위(fileName → contentType → URL 확장자 → jpg, **5자 초과 확장자 거부**).
 
-> **`.`의 `localTransport`를 web/SSR에서 태우지 마라.** `expo-file-system`의 web 셰이프는 업로드가 `{body:'', status:0, headers:{}}`를 반환하는 **no-op**이라 조용히 성공한 것처럼 보인다. 웹 바이너리 업로드의 정본은 `./web`의 `createFetchBinaryTransport` 하나뿐이다.
+> **`.`의 `localTransport`를 web/SSR에서 태우지 마라.** `expo-file-system`의 web 셰이프는 업로드가 `{body:'', status:0, headers:{}}`를 반환하는 **no-op**이다. `uploadLocalFile`/`uploadPickedAsset`은 이제 stat·presign·PUT 전에 `platform-unsupported`로 막고, 웹 바이너리 업로드의 정본은 `./web`의 `createFetchBinaryTransport` 하나뿐이다.
 
 ## 9. 오용 = 컴파일 에러 요약
 

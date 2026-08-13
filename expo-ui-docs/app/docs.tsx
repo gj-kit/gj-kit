@@ -29,7 +29,7 @@ import {
   componentSeoEntries,
   componentDocsPath,
   getComponentSeoEntryByReference,
-  isReleasedComponent,
+  isSourcePreview,
   publishedPackageVersion,
 } from '../src/seo-content';
 import { SeoHead, breadcrumbSchema, webPageSchema } from '../src/seo';
@@ -109,8 +109,8 @@ const docsIcons: UiIcons = {
 type SectionId = 'start' | 'theme' | 'components' | 'insets' | 'tailwind' | 'contracts';
 
 const SOURCE_COMPONENT_COUNT = componentSeoEntries.length;
-const RELEASED_COMPONENT_COUNT = componentSeoEntries.filter(isReleasedComponent).length;
-const PREVIEW_COMPONENT_COUNT = SOURCE_COMPONENT_COUNT - RELEASED_COMPONENT_COUNT;
+const PREVIEW_COMPONENT_COUNT = componentSeoEntries.filter(isSourcePreview).length;
+const RELEASED_COMPONENT_COUNT = SOURCE_COMPONENT_COUNT - PREVIEW_COMPONENT_COUNT;
 
 function navItems(
   t: DocsHubStrings,
@@ -135,7 +135,7 @@ const COMPONENT_GROUPS = [
   {
     title: 'Actions',
     items: [
-      { name: 'Button', detail: '6 variants · 3 sizes · loading' },
+      { name: 'Button', detail: '7 variants · 3 sizes · loading' },
       { name: 'IconButton', detail: 'required accessibilityLabel' },
       { name: 'Link', detail: 'native anchor · destination union' },
       { name: 'FloatingActionButton', detail: 'safe-area placement · required name' },
@@ -147,6 +147,7 @@ const COMPONENT_GROUPS = [
       { name: 'TextField', detail: 'label · helper · error · counter' },
       { name: 'SearchField', detail: 'localized placeholder · icon slot' },
       { name: 'FormField', detail: 'label · description · error IDREFs' },
+      { name: 'Rating', detail: 'controlled dots · half steps · readonly' },
       { name: 'Select', detail: 'web combobox · native radio surface' },
       { name: 'Tabs', detail: 'roving focus · typed panels' },
       { name: 'Collapsible', detail: 'controlled disclosure · ARIA links' },
@@ -159,7 +160,7 @@ const COMPONENT_GROUPS = [
       { name: 'SelectionIndicator', detail: '16 · 18 · 20 · 24 sizes' },
       { name: 'SelectableRow', detail: 'selected and disabled states' },
       { name: 'SelectAllRow', detail: 'localized select / deselect' },
-      { name: 'Chip', detail: 'action · filter · removable union' },
+      { name: 'Chip', detail: 'action · filter · static · removable union' },
     ],
   },
   {

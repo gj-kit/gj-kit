@@ -50,7 +50,7 @@ export function OverlayHost({ style, className, testID }: OverlayHostProps): Rea
       testID={testID}
       {...nativeWindProps(className)}
       style={[
-        StyleSheet.absoluteFillObject,
+        StyleSheet.absoluteFill,
         { position, pointerEvents: 'box-none' },
         style,
       ]}

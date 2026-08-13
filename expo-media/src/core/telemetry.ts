@@ -57,8 +57,9 @@ export interface MediaActivity {
 
 export interface MediaTelemetry {
   /**
-   * `run()`을 감싸 성공/예외를 자동 보고하고 결과를 그대로 통과시킨다.
-   * ⚠ 예외는 **반드시 재throw**한다 — 텔레메트리가 업로드 실패를 삼키면 안 된다.
+   * `run()`을 감싸 성공/예외를 자동 보고한다. 구현은 `run()`의 결과·예외를 그대로
+   * return/rethrow해야 한다. 라이브러리는 호스트 텔레메트리를 관측자로 취급하므로,
+   * 구현 자체의 예외는 실제 업로드·저장 결과를 바꾸지 않는다.
    */
   track<T>(
     operation: MediaOperation,
@@ -71,12 +72,109 @@ export interface MediaTelemetry {
   ): MediaActivity;
 }
 
+/** @internal debug-only reporting hook for a telemetry adapter that itself misbehaves. */
+export type MediaTelemetryFailureReporter = ((error: unknown) => void) | undefined;
+
+function reportTelemetryFailure(
+  reporter: MediaTelemetryFailureReporter,
+  error: unknown,
+): void {
+  // Observability is strictly best-effort. In particular, a custom debug context/logger may also
+  // be host code; it must not turn a telemetry failure back into a public upload/save failure.
+  try {
+    reporter?.(error);
+  } catch {
+    // no-op
+  }
+}
+
 /** 전신 `NOOP_ACTIVITY`(types.ts:88-92). */
 const noopMediaActivity: MediaActivity = {
   succeed() {},
   fail() {},
   cancel() {},
 };
+
+/**
+ * Make the manual telemetry span an observer rather than an execution dependency.
+ *
+ * A host can accidentally throw from `begin`, `succeed`, `fail`, or `cancel` (for example while
+ * serializing a native transport error that includes a presigned URL). Returning a guarded facade
+ * means the actual storage operation and its already-safe error keep their original outcome.
+ * This internal helper deliberately does not pass raw errors anywhere except the optional reporter.
+ */
+export function beginMediaActivitySafely(input: {
+  readonly telemetry: MediaTelemetry;
+  readonly operation: MediaOperation;
+  readonly extra?: Readonly<Record<string, unknown>> | undefined;
+  readonly onTelemetryFailure?: MediaTelemetryFailureReporter;
+}): MediaActivity {
+  let activity: MediaActivity;
+  try {
+    activity = input.telemetry.begin(input.operation, input.extra);
+  } catch (error) {
+    reportTelemetryFailure(input.onTelemetryFailure, error);
+    return noopMediaActivity;
+  }
+
+  return {
+    succeed(finish) {
+      try {
+        activity.succeed(finish);
+      } catch (error) {
+        reportTelemetryFailure(input.onTelemetryFailure, error);
+      }
+    },
+    fail(error, finish) {
+      try {
+        activity.fail(error, finish);
+      } catch (telemetryError) {
+        reportTelemetryFailure(input.onTelemetryFailure, telemetryError);
+      }
+    },
+    cancel(finish) {
+      try {
+        activity.cancel(finish);
+      } catch (error) {
+        reportTelemetryFailure(input.onTelemetryFailure, error);
+      }
+    },
+  };
+}
+
+/**
+ * Run a telemetry wrapper without allowing it to alter the work's semantics.
+ *
+ * `track()` implementations are third-party host code. A bad implementation can throw before it
+ * calls `run`, throw after `run` succeeds, resolve without calling `run`, or never settle at
+ * all. Start the canonical promise before observing so none of those cases can block the work.
+ * A delayed or repeated callback receives that same promise, so the upload/save is never
+ * duplicated. This deliberately makes telemetry an observer, not an execution dependency.
+ */
+export async function trackMediaSafely<T>(input: {
+  readonly telemetry: MediaTelemetry;
+  readonly operation: MediaOperation;
+  readonly extra: Readonly<Record<string, unknown>>;
+  readonly run: () => Promise<T>;
+  readonly onTelemetryFailure?: MediaTelemetryFailureReporter;
+}): Promise<T> {
+  // Schedule first rather than waiting for untrusted host telemetry to call `run`. `then` also
+  // captures a synchronous throw as the canonical rejected promise.
+  const result: Promise<T> = Promise.resolve().then(input.run);
+  const runOnce = (): Promise<T> => result;
+
+  try {
+    // Do not await host telemetry: a Promise that never settles must not hold an upload/save
+    // hostage. Attach a rejection observer immediately so a late telemetry failure is neither
+    // public nor an unhandled rejection.
+    void Promise.resolve(input.telemetry.track(input.operation, input.extra, runOnce)).catch((error) =>
+      reportTelemetryFailure(input.onTelemetryFailure, error),
+    );
+  } catch (error) {
+    reportTelemetryFailure(input.onTelemetryFailure, error);
+  }
+  return result;
+}
 
 /**
  * 팩토리 기본값. `track`은 run()을 그대로 실행하고 `begin`은 no-op 활동을 준다

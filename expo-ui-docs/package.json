@@ -7,33 +7,33 @@
     "dev": "expo start",
     "web": "expo start --web",
     "generate:seo": "node scripts/generate-seo.mjs",
-    "export:web": "pnpm run verify && expo export --platform web",
+    "export:web": "corepack pnpm run verify && expo export --platform web",
     "check:seo": "node scripts/check-seo.mjs",
     "check:links": "node scripts/check-link-styles.mjs",
     "generate:props": "node scripts/generate-props.mjs",
-    "verify": "pnpm run check:links && pnpm run check:locale && pnpm run check:breakpoints && pnpm run generate:seo && pnpm run generate:props && pnpm run typecheck",
+    "verify": "corepack pnpm run check:links && corepack pnpm run check:locale && corepack pnpm run check:breakpoints && corepack pnpm run generate:seo && corepack pnpm run generate:props && corepack pnpm run typecheck",
     "typecheck": "tsc --noEmit",
     "check:locale": "node scripts/check-locale-strings.mjs",
     "generate:og": "node scripts/generate-og.mjs",
     "check:breakpoints": "node scripts/check-breakpoints.mjs"
   },
   "dependencies": {
+    "@expo/metro-runtime": "~56.0.19",
     "@gj-kit/expo-ui": "workspace:*",
-    "@expo/metro-runtime": "~6.1.2",
-    "expo": "~54.0.0",
-    "expo-constants": "~18.0.13",
-    "expo-linking": "~8.0.12",
-    "expo-router": "~6.0.0",
-    "expo-status-bar": "~3.0.0",
-    "react": "19.1.0",
-    "react-dom": "19.1.0",
-    "react-native": "0.81.5",
-    "react-native-safe-area-context": "~5.6.0",
-    "react-native-screens": "~4.16.0",
+    "expo": "~56.0.19",
+    "expo-constants": "~56.0.23",
+    "expo-linking": "~56.0.16",
+    "expo-router": "~56.2.18",
+    "expo-status-bar": "~56.0.4",
+    "react": "19.2.3",
+    "react-dom": "19.2.3",
+    "react-native": "0.85.3",
+    "react-native-safe-area-context": "~5.7.0",
+    "react-native-screens": "~4.26.0",
     "react-native-web": "~0.21.0"
   },
   "devDependencies": {
-    "@types/react": "~19.1.0",
-    "typescript": "~5.9.0"
+    "@types/react": "~19.2.0",
+    "typescript": "~6.0.3"
   }
 }

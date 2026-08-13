@@ -21,6 +21,18 @@ function compareVersions(first, second) {
   return 0;
 }
 
+function isPublished(version) {
+  return compareVersions(catalog.publishedVersion, version) >= 0;
+}
+
+function hasUnreleasedSourceUpdates(entry) {
+  return entry.sourceUpdatesSince !== undefined && !isPublished(entry.sourceUpdatesSince);
+}
+
+function isFullyReleased(entry) {
+  return isPublished(entry.since) && !hasUnreleasedSourceUpdates(entry);
+}
+
 function assertEntries(entries, label) {
   if (!Array.isArray(entries) || entries.length === 0) {
     throw new Error(`SEO catalog ${label} must be a non-empty array.`);
@@ -50,6 +62,15 @@ for (const entry of catalog.components) {
   }
   if (!/^\d+\.\d+\.\d+$/u.test(entry.since)) {
     throw new Error(`Invalid component version for ${entry.name}: ${entry.since}`);
+  }
+  if (
+    entry.sourceUpdatesSince !== undefined &&
+    (!/^\d+\.\d+\.\d+$/u.test(entry.sourceUpdatesSince) ||
+      compareVersions(entry.sourceUpdatesSince, entry.since) <= 0)
+  ) {
+    throw new Error(
+      `Invalid source update version for ${entry.name}: ${entry.sourceUpdatesSince}`,
+    );
   }
   for (const related of entry.related ?? []) {
     if (!componentReferences.has(related)) {
@@ -114,9 +135,7 @@ for (const guide of catalog.guides) {
   }
 }
 
-const releasedComponents = catalog.components.filter(
-  (entry) => compareVersions(catalog.publishedVersion, entry.since) >= 0,
-);
+const releasedComponents = catalog.components.filter(isFullyReleased);
 const routes = [
   '/',
   '/docs',
@@ -140,7 +159,7 @@ const sitemap = [
 
 /**
  * 카탈로그를 소비자별로 쪼갠다. seo-catalog.json은 손으로 쓰는 정본이지만
- * 통째로 import하면 랜딩까지 49종의 본문 전체를 내려받는다. 목록·검색에 필요한
+ * 통째로 import하면 랜딩까지 모든 컴포넌트의 본문 전체를 내려받는다. 목록·검색에 필요한
  * 가벼운 부분만 공용으로 두고, 상세 본문은 그 페이지의 청크에만 들어가게
  * 파일 경계를 나눈다. Metro가 import 그래프를 따라 청크를 가르므로,
  * 경계는 파일 하나로 충분하고 lazy 로딩은 필요 없다(프리렌더도 그대로 동작).
@@ -151,6 +170,9 @@ const catalogIndex = {
     slug: entry.slug,
     name: entry.name,
     since: entry.since,
+    ...(entry.sourceUpdatesSince === undefined
+      ? {}
+      : { sourceUpdatesSince: entry.sourceUpdatesSince }),
     related: entry.related,
     ...Object.fromEntries(
       LOCALES.map((locale) => [

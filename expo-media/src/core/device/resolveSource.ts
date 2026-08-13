@@ -19,7 +19,7 @@ import type {
 } from '../adapters';
 import type { MediaDebugLogger } from '../debug';
 import { isPhotoKitUri, summarizeUri } from '../debug';
-import { MediaError, isMediaError } from '../errors';
+import { MediaError } from '../errors';
 import type { StagingCache } from '../staging';
 import type { MediaStrings } from '../strings';
 
@@ -39,6 +39,124 @@ declare const clearTimeout: (handle: unknown) => void;
 export const DEVICE_ASSET_INFO_TIMEOUT_MS = 15_000;
 /** 전신 devicePhotoLibrary.ts:16 — iCloud 원본 다운로드 데드라인(§5.4.1-10). */
 export const DEVICE_ASSET_NETWORK_DOWNLOAD_TIMEOUT_MS = 60_000;
+
+/**
+ * Private wrapper for a rejection that came from a host `DeviceLibraryAdapter`.
+ *
+ * `MediaError` deliberately uses a global symbol so copies of this package can classify each
+ * other’s errors. That makes it useful to callers, but it is not a trust boundary: an adapter can
+ * construct or forge one with a signed URL in its message. Keep the raw value inside this module
+ * only long enough for debug sanitization and never use its public brand to make policy decisions.
+ */
+class DeviceAssetInfoAdapterFailure {
+  constructor(readonly cause: unknown) {}
+}
+
+const MAX_EXIF_SNAPSHOT_DEPTH = 8;
+const MAX_EXIF_SNAPSHOT_ENTRIES = 256;
+
+/**
+ * Copy the adapter-owned EXIF graph before it crosses the device boundary.
+ *
+ * Device adapters are application code. Returning their object verbatim leaves getters and
+ * Proxies live after `getAssetInfo()` resolves, which means a later metadata read can throw an
+ * adapter-owned error (and potentially echo a signed URL) outside the normal error boundary.
+ * EXIF needs only JSON-shaped values for this package's metadata parser, so take a bounded,
+ * frozen snapshot instead of retaining a host object. EXIF is optional, however: an unfamiliar
+ * Core Image value must be dropped rather than making an otherwise uploadable local URI fail.
+ */
+function snapshotExifValue(
+  value: unknown,
+  depth: number,
+  seen: WeakSet<object>,
+): unknown {
+  if (
+    value === null ||
+    typeof value === 'string' ||
+    typeof value === 'boolean' ||
+    (typeof value === 'number' && Number.isFinite(value))
+  ) {
+    return value;
+  }
+  if (typeof value !== 'object' || depth >= MAX_EXIF_SNAPSHOT_DEPTH || seen.has(value)) {
+    throw new TypeError('Invalid device EXIF value');
+  }
+  seen.add(value);
+
+  if (Array.isArray(value)) {
+    if (value.length > MAX_EXIF_SNAPSHOT_ENTRIES) {
+      throw new TypeError('Device EXIF array is too large');
+    }
+    const snapshot: unknown[] = [];
+    for (let index = 0; index < value.length; index += 1) {
+      snapshot.push(snapshotExifValue(value[index], depth + 1, seen));
+    }
+    return Object.freeze(snapshot);
+  }
+
+  const prototype = Object.getPrototypeOf(value);
+  if (prototype !== Object.prototype && prototype !== null) {
+    throw new TypeError('Invalid device EXIF record');
+  }
+  const keys = Object.keys(value);
+  if (keys.length > MAX_EXIF_SNAPSHOT_ENTRIES) {
+    throw new TypeError('Device EXIF record is too large');
+  }
+  const snapshot: Record<string, unknown> = {};
+  const record = value as Record<string, unknown>;
+  for (const key of keys) {
+    snapshot[key] = snapshotExifValue(record[key], depth + 1, seen);
+  }
+  return Object.freeze(snapshot);
+}
+
+/** Snapshot and validate a successful host response while its adapter boundary is still active. */
+function snapshotDeviceAssetInfo(value: unknown): DeviceAssetInfo {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    throw new TypeError('Invalid device asset info');
+  }
+  const record = value as Record<string, unknown>;
+  // Read each field exactly once. In particular, do not validate a getter and then read it again
+  // into the returned value: a Proxy can return a safe value on the first access and a URL on the
+  // second one.
+  const localUri = record['localUri'];
+  const uri = record['uri'];
+  const isNetworkAsset = record['isNetworkAsset'];
+  if (
+    (localUri !== undefined && typeof localUri !== 'string') ||
+    (uri !== undefined && typeof uri !== 'string') ||
+    typeof isNetworkAsset !== 'boolean'
+  ) {
+    throw new TypeError('Invalid device asset info');
+  }
+  let exifSnapshot: Readonly<Record<string, unknown>> | undefined;
+  try {
+    // This read and clone are deliberately isolated. Adapter EXIF is optional metadata, not a
+    // capability required to resolve bytes. A hostile getter or a native-only value is discarded
+    // without exposing its exception or sacrificing an otherwise valid asset.
+    const exif = record['exif'];
+    exifSnapshot = exif === undefined ? undefined : snapshotExifRecord(exif);
+  } catch {
+    exifSnapshot = undefined;
+  }
+  return Object.freeze({
+    ...(localUri !== undefined ? { localUri } : {}),
+    ...(uri !== undefined ? { uri } : {}),
+    ...(exifSnapshot !== undefined ? { exif: exifSnapshot } : {}),
+    isNetworkAsset,
+  });
+}
+
+function snapshotExifRecord(value: unknown): Readonly<Record<string, unknown>> {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    throw new TypeError('Invalid device EXIF record');
+  }
+  const snapshot = snapshotExifValue(value, 0, new WeakSet<object>());
+  if (typeof snapshot !== 'object' || snapshot === null || Array.isArray(snapshot)) {
+    throw new TypeError('Invalid device EXIF record');
+  }
+  return snapshot as Readonly<Record<string, unknown>>;
+}
 
 /**
  * 기기 자산 해석 옵션(§5.4-④).
@@ -196,7 +314,19 @@ export async function normalizeUploadUri(
  * 일반 경로는 로컬 상태를 먼저 조회하며, 전경 업로드의 명시적 옵트인만이 iCloud 원본을
  * 요청할 수 있다 — 그것도 자기 데드라인을 달고."
  */
-export function getDeviceAssetInfoWithDeadline(input: {
+function deviceAssetInfoFailure(input: {
+  readonly strings: MediaStrings;
+  readonly platform?: PlatformAdapter | undefined;
+}): MediaError {
+  // The supported non-native adapter intentionally has no device asset source. Reconstruct the
+  // public error from this library’s strings instead of trusting the adapter’s branded Error.
+  if (input.platform?.os === 'web') {
+    return new MediaError('platform-unsupported', input.strings.platformUnsupported);
+  }
+  return new MediaError('device-library-failed', input.strings.deviceLibraryFailed);
+}
+
+function getDeviceAssetInfoAttempt(input: {
   readonly adapter: DeviceLibraryAdapter;
   readonly strings: MediaStrings;
   readonly assetId: string;
@@ -209,7 +339,11 @@ export function getDeviceAssetInfoWithDeadline(input: {
     ? (input.downloadTimeoutMs ?? DEVICE_ASSET_NETWORK_DOWNLOAD_TIMEOUT_MS)
     : (input.infoTimeoutMs ?? DEVICE_ASSET_INFO_TIMEOUT_MS);
 
-  const infoPromise = adapter.getAssetInfo(assetId, { downloadFromNetwork });
+  // Promise.resolve().then also turns a synchronously throwing host implementation into the same
+  // private failure channel as a rejected Promise.
+  const infoPromise = Promise.resolve().then(() =>
+    adapter.getAssetInfo(assetId, { downloadFromNetwork }),
+  );
 
   return new Promise<DeviceAssetInfo>((resolve, reject) => {
     const timer = setTimeout(() => {
@@ -223,14 +357,44 @@ export function getDeviceAssetInfoWithDeadline(input: {
     void infoPromise.then(
       (info) => {
         clearTimeout(timer);
-        resolve(info);
+        try {
+          resolve(snapshotDeviceAssetInfo(info));
+        } catch (error) {
+          reject(new DeviceAssetInfoAdapterFailure(error));
+        }
       },
       (error: unknown) => {
         clearTimeout(timer);
-        reject(error);
+        reject(new DeviceAssetInfoAdapterFailure(error));
       },
     );
   });
+}
+
+/**
+ * Public-safe asset-info lookup. Host adapter failures are always reconstructed from injected
+ * strings; only the core-owned deadline retains its more specific `device-timeout` code.
+ */
+export async function getDeviceAssetInfoWithDeadline(input: {
+  readonly adapter: DeviceLibraryAdapter;
+  readonly strings: MediaStrings;
+  readonly platform?: PlatformAdapter | undefined;
+  readonly assetId: string;
+  readonly downloadFromNetwork: boolean;
+  readonly infoTimeoutMs?: number | undefined;
+  readonly downloadTimeoutMs?: number | undefined;
+}): Promise<DeviceAssetInfo> {
+  try {
+    return await getDeviceAssetInfoAttempt(input);
+  } catch (error) {
+    if (error instanceof DeviceAssetInfoAdapterFailure) {
+      throw deviceAssetInfoFailure(input);
+    }
+    // This branch is a `MediaError('device-timeout')` constructed in the attempt above, or an
+    // internal runtime failure before a host adapter is called. The public method never exposes
+    // the adapter’s global-brand value because attempts wrap it first.
+    throw error;
+  }
 }
 
 /**
@@ -239,15 +403,13 @@ export function getDeviceAssetInfoWithDeadline(input: {
  * 없고, 전경의 사용자 개시 업로드만 옵트인할 수 있다. 두 경로 모두 조회에 데드라인을 걸고
  * iOS 파일은 우리 캐시에 실체화한다.
  *
- * ⚠ **정보 조회 실패 2조건**(§7.1 [개정] · §5.4-④(b)) — 전신 devicePhotoLibrary.ts:289
- *   `if (error instanceof PhotoUploadError || !extraCandidates.length) throw error;`
- *   ① `MediaError`는 폴백 후보 유무와 **무관하게 항상 재throw**한다.
- *      유일하게 타입화되는 정보-조회 실패가 15초 타임아웃(`device-timeout`)이므로,
- *      이것을 후보로 삼켜버리면 하드닝 6이 조용히 무력화되고 사용자는
- *      "재시도하면 되는 실패"를 영영 알 수 없다.
- *   ② 그 외(어댑터 raw 예외)는 폴백 후보가 있으면 생존, 없으면 원 에러를 그대로 표면화한다.
- *      재시도 가능한 실패를 "파일 없음"으로 오독하지 않기 위해서다
- *      (전신 devicePhotoLibrary.ts:286-288 주석).
+ * ⚠ **정보 조회 실패 2조건**(§7.1 [개정] · §5.4-④(b)):
+ *   ① core가 만든 데드라인(`device-timeout`)은 폴백 후보 유무와 무관하게 항상 재throw한다.
+ *      이를 후보로 삼켜버리면 15s/60s 하드닝이 조용히 무력화되고 사용자는 재시도 가능한
+ *      원인을 알 수 없다.
+ *   ② host adapter 실패는 후보가 있으면 생존하고, 없으면 새 `device-library-failed`로
+ *      정규화한다. `MediaError`의 global brand는 사본 간 분류용이지 신뢰 경계가 아니므로,
+ *      adapter가 던진 branded error/message를 재throw해서는 안 된다.
  *
  * ⚠ `extraCandidates`는 **정보 조회와 무관하게 존재하는 후보**만 센다. 조회가 실패하면
  * `info.localUri`·`info.uri`는 애초에 없으므로 생존 판정의 근거가 될 수 없다.
@@ -264,7 +426,7 @@ export async function resolveDeviceAssetSource(
   let info: DeviceAssetInfo | undefined;
 
   try {
-    info = await getDeviceAssetInfoWithDeadline({
+    info = await getDeviceAssetInfoAttempt({
       adapter,
       strings,
       assetId: asset.id,
@@ -281,11 +443,21 @@ export async function resolveDeviceAssetSource(
       isNetworkAsset: info.isNetworkAsset,
     });
   } catch (error) {
-    debug.error('upload-asset.info.failed', error, {
+    const cause = error instanceof DeviceAssetInfoAdapterFailure ? error.cause : error;
+    debug.error('upload-asset.info.failed', cause, {
       assetId: asset.id,
       fileName: asset.filename,
     });
-    if (isMediaError(error) || extraCandidates.length === 0) throw error;
+    if (!(error instanceof DeviceAssetInfoAdapterFailure)) throw error;
+    // `./device` on web deliberately has no asset source. Do not let its stable unsupported
+    // outcome disappear behind a caller-provided file candidate merely because adapter failures
+    // are otherwise eligible for native fallback.
+    if (deps.platform.os === 'web') {
+      throw deviceAssetInfoFailure({ strings, platform: deps.platform });
+    }
+    if (extraCandidates.length === 0) {
+      throw deviceAssetInfoFailure({ strings, platform: deps.platform });
+    }
   }
 
   if (info?.isNetworkAsset) {
@@ -296,11 +468,20 @@ export async function resolveDeviceAssetSource(
     if (!options.downloadFromICloud) {
       throw new MediaError('device-icloud-only', strings.iCloudOnly);
     }
-    options.onICloudDownload?.(true);
+    try {
+      options.onICloudDownload?.(true);
+    } catch (error) {
+      debug.error('upload-asset.info.network-download.notify.failed', error, {
+        assetId: asset.id,
+        fileName: asset.filename,
+      });
+      throw new MediaError('device-library-failed', strings.deviceLibraryFailed);
+    }
     try {
       info = await getDeviceAssetInfoWithDeadline({
         adapter,
         strings,
+        platform: deps.platform,
         assetId: asset.id,
         downloadFromNetwork: true,
         infoTimeoutMs: options.infoTimeoutMs,
@@ -315,7 +496,16 @@ export async function resolveDeviceAssetSource(
     } finally {
       // ⚠ finally 보장(§7 하드닝 6). 다운로드가 실패하든 데드라인을 넘기든 호스트의
       // "iCloud에서 가져오는 중" 표시는 반드시 꺼진다 — 아니면 화면이 영구히 스피너를 문다.
-      options.onICloudDownload?.(false);
+      try {
+        options.onICloudDownload?.(false);
+      } catch (error) {
+        // A UI callback is an observer, never an authority over upload resolution. In particular,
+        // do not replace a typed deadline/upload error with a host callback’s raw message.
+        debug.error('upload-asset.info.network-download.notify.failed', error, {
+          assetId: asset.id,
+          fileName: asset.filename,
+        });
+      }
     }
   }
 

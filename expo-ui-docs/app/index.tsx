@@ -78,7 +78,7 @@ import {
 } from '../src/site-theme';
 import {
   componentSeoEntries,
-  isReleasedComponent,
+  isSourcePreview,
   publishedPackageVersion,
 } from '../src/seo-content';
 import { useHydratedWindowWidth } from '../src/responsive';
@@ -112,8 +112,8 @@ const DEMO_CATEGORY_ORDER: readonly DemoCategory[] = [
 ];
 
 const SOURCE_COMPONENT_COUNT = componentSeoEntries.length;
-const RELEASED_COMPONENT_COUNT = componentSeoEntries.filter(isReleasedComponent).length;
-const PREVIEW_COMPONENT_COUNT = SOURCE_COMPONENT_COUNT - RELEASED_COMPONENT_COUNT;
+const PREVIEW_COMPONENT_COUNT = componentSeoEntries.filter(isSourcePreview).length;
+const RELEASED_COMPONENT_COUNT = SOURCE_COMPONENT_COUNT - PREVIEW_COMPONENT_COUNT;
 
 // 미리보기가 0이면 "· 0 preview"는 정보가 아니라 잡음이다.
 const RELEASE_BADGE =
@@ -133,7 +133,7 @@ function footerLinks(t: LandingStrings): readonly { label: string; href: string 
 const COMPONENT_GROUPS = [
   { label: 'Foundation', items: ['Text'] },
   { label: 'Actions', items: ['Button', 'IconButton', 'Link', 'FloatingActionButton'] },
-  { label: 'Inputs', items: ['TextField', 'SearchField', 'FormField', 'Select'] },
+  { label: 'Inputs', items: ['TextField', 'SearchField', 'FormField', 'Rating', 'Select'] },
   { label: 'Navigation', items: ['Tabs', 'Collapsible', 'Pagination'] },
   { label: 'Selection', items: ['SelectionIndicator', 'SelectableRow', 'SelectAllRow', 'Chip'] },
   { label: 'Controls', items: ['Checkbox', 'Switch', 'RadioGroup', 'Slider', 'ToggleGroup'] },

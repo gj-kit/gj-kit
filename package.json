@@ -6,13 +6,19 @@
     "node": ">=20"
   },
   "scripts": {
-    "build": "pnpm -r build",
-    "typecheck": "pnpm -r typecheck",
-    "test": "pnpm -r test",
-    "test:types": "pnpm -r test:types",
+    "build": "corepack pnpm -r build",
+    "typecheck": "corepack pnpm -r typecheck",
+    "test": "corepack pnpm -r test",
+    "test:types": "corepack pnpm -r test:types",
+    "check:readme": "corepack pnpm --filter @gj-kit/expo-ui check:readme && corepack pnpm --filter @gj-kit/expo-media check:readme && corepack pnpm --filter @gj-kit/toss-payments check:readme",
+    "check:pack": "node scripts/check-pack-contents.mjs",
+    "check:expo-sdk": "corepack pnpm --filter @gj-kit/expo-media check:expo-sdk",
+    "check:docs": "corepack pnpm --filter @gj-kit/expo-ui-docs export:web && corepack pnpm --filter @gj-kit/expo-ui-docs check:seo",
+    "verify:release": "corepack pnpm run build && corepack pnpm run typecheck && corepack pnpm run test && corepack pnpm run test:types && corepack pnpm run check:readme && corepack pnpm run check:pack && corepack pnpm run check:expo-sdk && corepack pnpm run check:docs",
     "changeset": "changeset",
     "version:packages": "changeset version",
-    "release:npm": "pnpm run build && changeset publish && node scripts/publish-github-packages.mjs"
+    "publish:npm": "changeset publish && node scripts/publish-github-packages.mjs",
+    "release:npm": "corepack pnpm run verify:release && corepack pnpm run publish:npm"
   },
   "devDependencies": {
     "@changesets/cli": "^2.29.0"

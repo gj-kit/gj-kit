@@ -17,6 +17,7 @@
     "lib": ["ES2022"],
     "types": [],
     "skipLibCheck": false,
+    "ignoreDeprecations": "6.0",
     "baseUrl": ".",
     "paths": { "@gj-kit/expo-media/*": ["../../dist/*"] }
   },

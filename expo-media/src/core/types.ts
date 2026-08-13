@@ -54,6 +54,46 @@ export type MediaUploadIntentRequest = {
 };
 
 /**
+ * 스토리지에 쓸 수 있는 이름으로 발급된 오브젝트의 안전한 식별 정보.
+ *
+ * URL·헤더·서명은 의도적으로 없다. 앱은 이 값만 자기 cleanup API에 넘겨, 실패한
+ * 업로드가 남긴 object를 best-effort로 정리할 수 있다. `objectName`의 권한 검증은
+ * 언제나 서버가 다시 해야 하며, 이 타입은 클라이언트 권한 증명이 아니다. 런타임에서는
+ * 1024자 이하 ASCII unreserved 경로 세그먼트(`[A-Za-z0-9._~-]`)와 `/`만 허용한다.
+ * URL/query/percent-encoding/공백을 받지 않으므로, 서버는 그 문법을 발급 키에도 맞춰야 한다.
+ */
+export type MediaUploadObject = {
+  readonly objectName: string;
+  readonly contentType: MediaContentType;
+  readonly sizeBytes: number;
+};
+
+/**
+ * 실패 시 정리 후보인 스토리지 오브젝트.
+ *
+ * `uploaded`는 2xx 응답까지 확인한 PUT, `possibly-uploaded`는 응답 유실·전송 예외처럼
+ * 서버에는 도달했을 수도 있는 PUT이다. 후자도 cleanup endpoint가 멱등으로 처리해야 한다.
+ */
+export type MediaOrphanedUpload = MediaUploadObject & {
+  readonly storageState: 'uploaded' | 'possibly-uploaded';
+};
+
+/** 업로드 파이프라인에서 안전하게 공개할 수 있는 실패 단계. URL·헤더·원본 예외는 포함하지 않는다. */
+export type MediaUploadFailureStage = 'intent' | 'put' | 'complete';
+
+/**
+ * `mediaUploadFailureInfo(error)`가 돌려주는, cross-entry-safe 실패 복구 정보.
+ *
+ * 이 정보는 에러에 전역 심볼로 비열거형 각인되므로 code splitting으로 코어 사본이 갈린
+ * 엔트리에서도 검사할 수 있다. `orphanedObjects`는 attachment/등록이 끝나기 전에 남은
+ * 정리 후보이며, 앱은 자신의 권한 있는 cleanup API로만 처리해야 한다.
+ */
+export type MediaUploadFailureInfo = {
+  readonly stage: MediaUploadFailureStage;
+  readonly orphanedObjects: readonly MediaOrphanedUpload[];
+};
+
+/**
  * 구 `posterObjectName` / `posterSizeBytes` 2필드를 쌍 객체로 통합(§6.1-②).
  * 한쪽만 채워 보내면 서버가 반쪽 메타로 등록해 **썸네일이 영구 누락**된다 — 그 상태를
  * 표현 불가능하게 만든다.
@@ -91,11 +131,24 @@ export type UploadResult<TAsset> = {
 };
 
 /**
+ * Presign-only backend seam.
+ *
+ * Some products deliberately attach the uploaded object in a later domain
+ * transaction (for example, after creating a record). They must not pretend
+ * that a registration endpoint exists just to use the local streaming path.
+ * `MediaUploadApi` extends this narrower contract for the usual
+ * presign → PUT → complete flow.
+ */
+export interface MediaUploadIntentApi {
+  createUploadIntent(input: MediaUploadIntentRequest): Promise<MediaUploadIntent>;
+}
+
+/**
  * 백엔드 계약: presigned 슬롯을 발급받고, 올라간 오브젝트를 등록한다.
  * `TAsset`은 호스트 API가 저장된 자산으로 반환하는 무엇이든 된다.
  */
-export interface MediaUploadApi<TAsset, TCollectionId extends string = string> {
-  createUploadIntent(input: MediaUploadIntentRequest): Promise<MediaUploadIntent>;
+export interface MediaUploadApi<TAsset, TCollectionId extends string = string>
+  extends MediaUploadIntentApi {
   completeUpload(input: MediaUploadCompletion<TCollectionId>): Promise<UploadResult<TAsset>>;
 }
 

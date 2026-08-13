@@ -101,3 +101,13 @@ export const defaultThemes: ThemePair = createThemes();
 export function isThemePair(value: Theme | ThemePair): value is ThemePair {
   return 'light' in value && 'dark' in value;
 }
+
+/**
+ * Resolves a ThemePair to a concrete Theme without reading React, platform, or
+ * module-global state. Use this in SSR and static configuration paths, where a
+ * request-owned `colorScheme` is already known. A single Theme is returned
+ * unchanged regardless of the requested scheme.
+ */
+export function resolveTheme(theme: Theme | ThemePair, colorScheme: ColorScheme): Theme {
+  return isThemePair(theme) ? theme[colorScheme] : theme;
+}

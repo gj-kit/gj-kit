@@ -22,12 +22,16 @@ function compareVersions(first, second) {
   return 0;
 }
 
-const released = catalog.components.filter(
-  (entry) => compareVersions(catalog.publishedVersion, entry.since) >= 0,
-);
-const previews = catalog.components.filter(
-  (entry) => compareVersions(catalog.publishedVersion, entry.since) < 0,
-);
+function isFullyReleased(entry) {
+  return (
+    compareVersions(catalog.publishedVersion, entry.since) >= 0 &&
+    (entry.sourceUpdatesSince === undefined ||
+      compareVersions(catalog.publishedVersion, entry.sourceUpdatesSince) >= 0)
+  );
+}
+
+const released = catalog.components.filter(isFullyReleased);
+const previews = catalog.components.filter((entry) => !isFullyReleased(entry));
 const indexableRoutes = [
   '/',
   '/docs',
@@ -112,7 +116,7 @@ for (const entry of previews) {
   const html = await readFile(routeFile(route), 'utf8');
   const expectedUrl = `${siteUrl}${route}`;
   if (!/name="robots"[^>]+content="[^"]*noindex/i.test(html)) {
-    fail(`${route} must remain noindex until npm v${entry.since} is public`);
+    fail(`${route} must remain noindex until npm v${entry.sourceUpdatesSince ?? entry.since} is public`);
   }
   const canonical = matchContent(
     html,

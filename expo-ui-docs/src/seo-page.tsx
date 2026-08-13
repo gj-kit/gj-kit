@@ -463,9 +463,12 @@ export function BulletList({ items }: { readonly items: readonly string[] }): Re
 export function PreviewPanel({
   children,
   note,
+  sourcePreview = false,
 }: {
   readonly children: ReactNode;
   readonly note?: string | undefined;
+  /** The workspace component includes API that npm latest does not yet export. */
+  readonly sourcePreview?: boolean | undefined;
 }): ReactElement {
   const theme = useTheme();
   const t = siteStrings(useLocale().locale);
@@ -474,7 +477,7 @@ export function PreviewPanel({
       <View style={styles.previewTopline}>
         <RNText style={[styles.previewEyebrow, { color: theme.colors.primaryStrong }]}>{t.livePreview}</RNText>
         <RNText style={[styles.previewHint, { color: theme.colors.textMuted }]}>
-          {t.livePreviewHint}
+          {sourcePreview ? t.sourcePreviewHint : t.livePreviewHint}
         </RNText>
       </View>
       <View style={[styles.previewCanvas, { backgroundColor: theme.colors.background, borderColor: theme.colors.line }]}>

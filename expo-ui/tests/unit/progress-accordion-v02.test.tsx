@@ -33,6 +33,9 @@ describe('Spinner / ProgressBar', () => {
         sortUnsorted: '정렬되지 않음',
         previousPage: '이전 페이지',
         nextPage: '다음 페이지',
+        ratingNoValue: '평점 없음',
+        ratingValue: (value, maxRating) => `${value}점 / ${maxRating}점`,
+        clearRating: '평점 지우기',
       }}>
         <Spinner />
       </UiProvider>,

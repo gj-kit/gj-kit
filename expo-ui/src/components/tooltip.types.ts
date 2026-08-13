@@ -61,6 +61,7 @@ const VARIANTS: readonly ButtonVariant[] = [
   'primary',
   'primary-outline',
   'secondary',
+  'ghost',
   'destructive',
   'destructive-outline',
   'inverse',

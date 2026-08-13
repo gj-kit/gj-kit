@@ -23,6 +23,7 @@
       "slug": "button",
       "name": "Button",
       "since": "0.1.0",
+      "sourceUpdatesSince": "0.5.0",
       "related": [
         "IconButton",
         "ConfirmActionRow",
@@ -30,11 +31,11 @@
       ],
       "en": {
         "category": "Actions",
-        "description": "An Expo and React Native button with primary, outline, destructive, and inverse variants, three sizes, and a loading state."
+        "description": "An Expo and React Native button with primary, outline, ghost, destructive, and inverse variants, three sizes, and a loading state."
       },
       "ko": {
         "category": "액션",
-        "description": "primary, outline, destructive, inverse 변형과 세 가지 크기, 로딩 상태를 제공하는 Expo·React Native 버튼입니다."
+        "description": "primary, outline, ghost, destructive, inverse 변형과 세 가지 크기, 로딩 상태를 제공하는 Expo·React Native 버튼입니다."
       }
     },
     {
@@ -59,6 +60,7 @@
       "slug": "chip",
       "name": "Chip",
       "since": "0.4.0",
+      "sourceUpdatesSince": "0.5.0",
       "related": [
         "Button",
         "Checkbox",
@@ -66,11 +68,11 @@
       ],
       "en": {
         "category": "Actions",
-        "description": "An Expo and React Native Chip that separates action, filter, and removable semantics through a discriminated union while keeping selection state and the remove action accessible."
+        "description": "An Expo and React Native Chip that separates action, filter, static, and removable semantics through a discriminated union while keeping selection state and the remove action accessible."
       },
       "ko": {
         "category": "액션",
-        "description": "action·filter·removable 의미를 판별 유니언으로 분리하고 선택 상태와 제거 액션의 접근성을 지키는 Expo·React Native Chip입니다."
+        "description": "action·filter·static·removable 의미를 판별 유니언으로 분리하고 선택 상태와 제거 액션의 접근성을 지키는 Expo·React Native Chip입니다."
       }
     },
     {
@@ -359,6 +361,24 @@
       "ko": {
         "category": "선택",
         "description": "toolbar 안의 toggle button 집합에서 single·multiple controlled 상태, roving focus와 방향키 탐색을 제공하는 Expo·React Native ToggleGroup입니다."
+      }
+    },
+    {
+      "slug": "rating",
+      "name": "Rating",
+      "since": "0.5.0",
+      "related": [
+        "Slider",
+        "RadioGroup",
+        "ProgressBar"
+      ],
+      "en": {
+        "category": "Inputs",
+        "description": "A controlled Expo and React Native Rating with half-step selection, keyboard and native accessibility actions, and read-only output."
+      },
+      "ko": {
+        "category": "입력",
+        "description": "0.5 단위 선택, 키보드·네이티브 접근성 액션, 읽기 전용 표시를 제공하는 controlled Expo·React Native Rating입니다."
       }
     },
     {

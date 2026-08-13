@@ -48,8 +48,8 @@ const EMPTY_PAGE: DeviceAssetPage = { assets: [], hasNextPage: false, totalCount
  *    없었다**(devicePhotoLibrary.web.ts:29). 개선점이다.
  *
  * ⚠ 코어의 `resolveForUpload`/`resolvePickedAsset`도 이 메서드를 거치므로 자동으로
- *   `platform-unsupported`가 된다 — **`MediaError`는 폴백 후보 유무와 무관하게 항상 재throw**
- *   되기 때문이다(§7.1 [개정] 정보 조회 실패 2조건 ① · resolveSource.ts:288).
+ *   `platform-unsupported`가 된다 — 비네이티브 어댑터의 실패는 core가 이 안정된 공개 코드로
+ *   재구성하기 때문이다(§7.1 [개정] 정보 조회 실패 2조건 · resolveSource.ts).
  */
 export function expoDeviceLibrary(): DeviceLibraryAdapter {
   return {
@@ -70,9 +70,8 @@ export function expoDeviceLibrary(): DeviceLibraryAdapter {
     },
 
     async getAssetInfo(): Promise<DeviceAssetInfo> {
-      // 문구는 기존 19키 중 이 상황에 가장 가까운 것을 재사용한다 — 비네이티브에는 기기 원본
-      // 파일이라는 개념 자체가 없으므로 사용자가 보는 결과는 "파일을 찾을 수 없음"과 같다.
-      // (§4 규약상 새 리터럴을 지어낼 수 없고 `MediaStrings`는 19키로 닫혀 있다.)
+      // `platformUnsupported`는 비네이티브 포크의 전용 문구다. 이 어댑터에는 문구 주입구가
+      // 없으므로 기본 번들을 사용하고, core는 외부 어댑터의 message를 신뢰하지 않는다.
       throw new MediaError('platform-unsupported', strings.platformUnsupported);
     },
   };

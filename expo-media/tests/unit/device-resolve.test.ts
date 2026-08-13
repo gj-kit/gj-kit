@@ -21,6 +21,7 @@ import {
   createMemoryFileSystem,
   fakeBytes,
   fakePlatform,
+  signedUrlErrorMessage,
 } from '../../src/testing';
 
 const FILE_URI = 'file:///dcim/IMG_0001.jpg';
@@ -286,25 +287,26 @@ describe('iCloud 원본(§7 하드닝 6)', () => {
 });
 
 describe('정보 조회 실패 2조건(§7.1 [개정])', () => {
-  it('① MediaError는 후보가 있어도 항상 재throw된다 — 하드닝 6이 삼켜지지 않게', async () => {
+  it('① core가 만든 deadline은 후보가 있어도 항상 재throw된다 — 하드닝 6이 삼켜지지 않게', async () => {
+    vi.useFakeTimers();
     const { files, device } = setup({
       os: 'android',
-      library: { failInfoWith: new MediaError('device-timeout', 'timed out') },
+      library: { hangInfo: true },
     });
 
-    const error = await device
-      .resolveForUpload(ASSET, { extraCandidates: [FILE_URI] })
-      .catch((thrown: unknown) => thrown);
+    const pending = device.resolveForUpload(ASSET, { extraCandidates: [FILE_URI] });
+    const assertion = expect(pending).rejects.toMatchObject({ code: 'device-timeout' });
+    await vi.advanceTimersByTimeAsync(15_000);
+    await assertion;
 
-    expect(mediaErrorCode(error)).toBe('device-timeout');
     // 후보를 시도조차 하지 않는다 — "재시도하면 되는 실패"를 사용자에게 알려야 하기 때문이다.
     expect(files.calls.copy).toEqual([]);
   });
 
-  it('② 어댑터 raw 예외 + 후보 있음 → 생존해 해석에 성공한다', async () => {
+  it('② 어댑터가 던진 branded 오류도 후보가 있으면 생존해 해석에 성공한다', async () => {
     const { device } = setup({
       os: 'android',
-      library: { failInfoWith: new Error('native bridge exploded') },
+      library: { failInfoWith: new MediaError('device-timeout', signedUrlErrorMessage()) },
     });
 
     const resolved = await device.resolveForUpload(ASSET, { extraCandidates: [FILE_URI] });
@@ -312,14 +314,68 @@ describe('정보 조회 실패 2조건(§7.1 [개정])', () => {
     expect(resolved).toMatchObject({ uri: FILE_URI, staged: false, exif: null });
   });
 
-  it('② 어댑터 raw 예외 + 후보 없음 → 그 예외를 그대로 표면화한다', async () => {
-    const raw = new Error('native bridge exploded');
+  it('② 어댑터 raw 예외 + 후보 없음 → URL 없는 device-library-failed로 정규화한다', async () => {
+    const raw = new Error(signedUrlErrorMessage());
     const { device } = setup({ os: 'android', library: { failInfoWith: raw } });
 
     const error = await device.resolveForUpload(ASSET).catch((thrown: unknown) => thrown);
 
-    // ⚠ `device-not-found`로 바꾸면 재시도 가능한 실패가 "파일 없음"으로 오독된다.
-    expect(error).toBe(raw);
+    // ⚠ `device-not-found`로 바꾸면 재시도 가능한 라이브러리 실패가 "파일 없음"으로 오독된다.
+    expect(mediaErrorCode(error)).toBe('device-library-failed');
+    expect((error as Error).message).not.toContain('https://');
+    expect((error as Error).message).not.toContain('X-Amz-Signature');
+  });
+
+  it('성공 응답의 hostile getter도 어댑터 경계 안에서 정규화한다', async () => {
+    const raw = signedUrlErrorMessage();
+    const { device } = setup({
+      os: 'android',
+      adapter: (fake) => ({
+        ...fake,
+        getAssetInfo: async () =>
+          ({
+            get localUri() {
+              throw new Error(raw);
+            },
+            uri: FILE_URI,
+            isNetworkAsset: false,
+          }) as DeviceAssetInfo,
+      }),
+    });
+
+    const error = await device.getAssetInfo('A1').catch((thrown: unknown) => thrown);
+
+    expect(mediaErrorCode(error)).toBe('device-library-failed');
+    expect((error as Error).message).not.toContain('https://');
+    expect((error as Error).message).not.toContain('X-Amz-Signature');
+  });
+
+  it('선택 EXIF의 hostile/rich 값은 버리되 업로드 가능한 URI는 계속 해석한다', async () => {
+    const raw = signedUrlErrorMessage();
+    const { device } = setup({
+      os: 'android',
+      adapter: (fake) => ({
+        ...fake,
+        getAssetInfo: async () =>
+          ({
+            localUri: FILE_URI,
+            isNetworkAsset: false,
+            get exif() {
+              throw new Error(raw);
+            },
+          }) as DeviceAssetInfo,
+      }),
+    });
+
+    await expect(device.getAssetInfo('A1')).resolves.toEqual({
+      localUri: FILE_URI,
+      isNetworkAsset: false,
+    });
+    await expect(device.resolveForUpload(ASSET)).resolves.toMatchObject({
+      uri: FILE_URI,
+      exif: null,
+      staged: false,
+    });
   });
 });
 

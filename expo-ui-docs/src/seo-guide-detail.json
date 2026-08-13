@@ -84,7 +84,7 @@
         },
         {
           "title": "Owning the scheme, and consuming it outside React",
-          "body": "colorScheme on UiProvider accepts light, dark, or system, and components read only the single resolved theme through useTheme. Outside the React tree — navigation configuration, for example — use getActiveTheme and subscribeActiveTheme."
+          "body": "colorScheme on UiProvider accepts light, dark, or system, and components read only the single resolved theme through useTheme. For request-owned paths outside React, such as SSR or static navigation configuration, resolve a concrete theme with resolveTheme(theme, 'light' | 'dark')."
         }
       ]
     },
@@ -108,7 +108,7 @@
         },
         {
           "title": "스킴 소유와 비 React 소비",
-          "body": "UiProvider의 colorScheme은 light, dark, system을 받고 컴포넌트는 useTheme으로 해석된 단일 테마만 읽습니다. 내비게이션처럼 React 트리 밖에서는 getActiveTheme과 subscribeActiveTheme을 사용할 수 있습니다."
+          "body": "UiProvider의 colorScheme은 light, dark, system을 받고 컴포넌트는 useTheme으로 해석된 단일 테마만 읽습니다. SSR·정적 내비게이션 설정처럼 React 트리 밖의 요청 소유 경로에서는 resolveTheme(theme, 'light' | 'dark')로 구체 Theme을 해석합니다."
         }
       ]
     }

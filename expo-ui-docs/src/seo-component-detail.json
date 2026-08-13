@@ -26,24 +26,24 @@
   "button": {
     "en": {
       "headline": "Loading and destructive states in a type-safe Button",
-      "summary": "Button requires either a label or non-empty children, so a button with no content fails to type-check. variant, size, an icon render function, and loading compose freely, while colors and dimensions resolve from the active theme.",
+      "summary": "Button requires either a label or non-empty children, so a button with no content fails to type-check. In current source, variant, size, an icon render function, and loading compose freely; enabled actions require onPress and rich children require an explicit accessibilityLabel. Colors and dimensions resolve from the active theme.",
       "features": [
-        "primary, primary-outline, secondary, destructive, destructive-outline, and inverse variants",
+        "primary, primary-outline, secondary, ghost, destructive, destructive-outline, and inverse variants",
         "sm, md, and lg sizes with theme-based icon sizes and maximum font scaling",
-        "Shows an ActivityIndicator while loading and blocks repeat presses"
+        "Shows an ActivityIndicator while loading, blocks repeat presses, and requires onPress for enabled actions"
       ],
-      "accessibility": "The button role plus the disabled and busy states are reported to both the native accessibility APIs and web ARIA. A string label is used as the default accessible name, and the button is disabled while loading.",
+      "accessibility": "The button role plus the disabled and busy states are reported to both the native accessibility APIs and web ARIA. A string label is the default accessible name, rich children require an explicit name, and the button is disabled while loading.",
       "snippet": "<Button label=\"Save\" loading={saving} onPress={save} />"
     },
     "ko": {
       "headline": "로딩과 위험 작업까지 표현하는 타입 안전 Button",
-      "summary": "Button은 label 또는 비어 있지 않은 children을 반드시 요구해 내용 없는 버튼을 타입 단계에서 막습니다. variant, size, icon 렌더 함수와 loading을 조합하면서 색상과 치수는 활성 테마에서 해석합니다.",
+      "summary": "Button은 label 또는 비어 있지 않은 children을 반드시 요구해 내용 없는 버튼을 타입 단계에서 막습니다. 현재 소스에서는 variant, size, icon 렌더 함수와 loading을 조합하고, 활성 상태에 onPress를 요구하며 rich children에는 명시적 accessibilityLabel을 요구합니다. 색상과 치수는 활성 테마에서 해석합니다.",
       "features": [
-        "primary, primary-outline, secondary, destructive, destructive-outline, inverse 변형",
+        "primary, primary-outline, secondary, ghost, destructive, destructive-outline, inverse 변형",
         "sm, md, lg 크기와 테마 기반 아이콘 크기·최대 글꼴 배율",
-        "loading 중 ActivityIndicator를 표시하고 중복 입력을 차단"
+        "loading 중 ActivityIndicator를 표시하고 중복 입력을 차단하며, 활성 action은 onPress를 요구"
       ],
-      "accessibility": "button 역할과 disabled·busy 상태를 네이티브 접근성 API와 웹 ARIA에 함께 전달합니다. 문자열 label은 기본 접근성 이름으로 사용되며 loading 중에는 버튼이 비활성화됩니다.",
+      "accessibility": "button 역할과 disabled·busy 상태를 네이티브 접근성 API와 웹 ARIA에 함께 전달합니다. 문자열 label은 기본 접근성 이름으로 사용되고, rich children은 명시적 이름을 요구하며 loading 중에는 버튼이 비활성화됩니다.",
       "snippet": "<Button label=\"저장\" loading={saving} onPress={save} />"
     }
   },
@@ -53,7 +53,7 @@
       "summary": "IconButton accepts either a static node or a render function receiving color and size as its icon. Changing the diameter recalculates the icon mark proportionally, and code that omits accessibilityLabel does not compile.",
       "features": [
         "accessibilityLabel is enforced as a required prop",
-        "Shares the same six color variants and loading state as Button",
+        "Shares the same seven color variants and loading state as Button",
         "Icon size is computed automatically from a custom diameter"
       ],
       "accessibility": "Because the icon itself carries no text, the required accessibilityLabel describes the action. The button role and the disabled and busy states are exposed through platform-specific accessibility attributes.",
@@ -64,7 +64,7 @@
       "summary": "IconButton은 정적 노드나 color와 size를 받는 렌더 함수를 아이콘으로 사용합니다. 지름을 바꾸면 아이콘 마크가 비율에 맞춰 계산되며, accessibilityLabel을 생략한 코드는 컴파일되지 않습니다.",
       "features": [
         "accessibilityLabel을 필수 prop으로 강제",
-        "Button과 같은 여섯 가지 색상 변형 및 loading 상태 공유",
+        "Button과 같은 일곱 가지 색상 변형 및 loading 상태 공유",
         "사용자 지정 지름에 맞춰 아이콘 크기를 자동 계산"
       ],
       "accessibility": "아이콘 자체가 텍스트를 제공하지 않아도 필수 accessibilityLabel로 동작을 설명합니다. button 역할, disabled와 busy 상태가 플랫폼별 접근성 속성으로 노출됩니다.",
@@ -74,24 +74,24 @@
   "chip": {
     "en": {
       "headline": "Interaction semantics fixed by kind in a type-safe Chip",
-      "summary": "Behind one pill shape, Chip pins a different meaning and a different set of allowed props for action, filter, and removable. filter uses controlled selected state, and removable renders a separate remove button rather than nesting an interactive element inside the value container. All kinds share the filled and outlined variants and the sm and md sizes.",
+      "summary": "Behind one pill shape, Chip pins a different meaning and a different set of allowed props for action, filter, static, and removable. filter uses controlled selected state, static provides visual state without interaction, and removable renders a separate remove button rather than nesting an interactive element inside the value container. All kinds share the filled and outlined variants and the sm and md sizes.",
       "features": [
-        "kind makes the onPress, onSelectedChange, and onRemove contracts mutually exclusive",
+        "kind makes the onPress, onSelectedChange, and onRemove contracts mutually exclusive, and static forbids interaction",
         "filled and outlined variants, sm and md sizes, and a leading icon slot",
         "Falls back to the Provider check icon for a selected filter and the Provider close icon for removable"
       ],
-      "accessibility": "action is exposed as a named button, while filter is exposed as a toggle button whose name never changes, carrying pressed and checked state. removable renders the static value and a separate remove button with a required removeAccessibilityLabel as siblings, which avoids nested interactions.",
+      "accessibility": "action is exposed as a named button, while filter is exposed as a toggle button whose name never changes, carrying pressed and checked state. static is ordinary text with no widget or ARIA selection state. removable renders the static value and a separate remove button with a required removeAccessibilityLabel as siblings, which avoids nested interactions.",
       "snippet": "<Chip kind=\"filter\" label=\"Done\" selected={done} onSelectedChange={setDone} />"
     },
     "ko": {
       "headline": "동작 의미를 kind로 고정하는 타입 안전 Chip",
-      "summary": "Chip은 비슷한 pill 모양 안에서도 action, filter, removable의 의미와 허용 prop을 다르게 고정합니다. filter는 controlled selected 상태를 사용하고 removable은 값 컨테이너 안에 인터랙티브 요소를 중첩하지 않은 별도 제거 버튼을 제공하며, filled·outlined와 sm·md 크기를 공유합니다.",
+      "summary": "Chip은 비슷한 pill 모양 안에서도 action, filter, static, removable의 의미와 허용 prop을 다르게 고정합니다. filter는 controlled selected 상태를 사용하고, static은 상호작용 없는 시각 상태만 제공하며, removable은 값 컨테이너 안에 인터랙티브 요소를 중첩하지 않은 별도 제거 버튼을 제공합니다. 모두 filled·outlined와 sm·md 크기를 공유합니다.",
       "features": [
-        "kind에 따라 onPress·onSelectedChange·onRemove 계약을 상호 배타적으로 제한",
+        "kind에 따라 onPress·onSelectedChange·onRemove 계약을 상호 배타적으로 제한하고 static은 상호작용을 금지",
         "filled·outlined 변형, sm·md 크기와 leading 아이콘 슬롯",
         "선택된 filter의 Provider check와 removable의 Provider close 아이콘 폴백"
       ],
-      "accessibility": "action은 이름이 있는 button으로, filter는 이름이 변하지 않는 toggle button과 pressed·checked 상태로 노출됩니다. removable은 정적 값과 필수 removeAccessibilityLabel을 가진 별도 제거 button을 형제 관계로 렌더링해 중첩 인터랙션을 피합니다.",
+      "accessibility": "action은 이름이 있는 button으로, filter는 이름이 변하지 않는 toggle button과 pressed·checked 상태로 노출됩니다. static은 widget 의미나 ARIA selection 상태가 없는 일반 텍스트이며, removable은 정적 값과 필수 removeAccessibilityLabel을 가진 별도 제거 button을 형제 관계로 렌더링해 중첩 인터랙션을 피합니다.",
       "snippet": "<Chip kind=\"filter\" label=\"완료\" selected={done} onSelectedChange={setDone} />"
     }
   },
@@ -479,6 +479,30 @@
       "snippet": "<ToggleGroup selectionMode=\"single\" value={density} onValueChange={setDensity} accessibilityLabel=\"목록 밀도\" items={densityItems} allowEmpty={false} />"
     }
   },
+  "rating": {
+    "en": {
+      "headline": "Half-step input and read-only output kept distinct in Rating",
+      "summary": "Rating is a compact dot control whose value stays owned by the app. The interactive branch requires onChange and a non-empty accessible name, while the readonly branch exposes only one image announcement. Empty is undefined, and maxRating is bounded from 1 through 10 to keep visual items and hit targets safe.",
+      "features": [
+        "Controlled integer or halfStep 0.5 values with clearable selection removal",
+        "Web Arrow, Home, End, and Delete keys plus native adjustable increment, decrement, and clear actions",
+        "Value and clear announcements from UiProvider strings, with integer Android ranges for half steps"
+      ],
+      "accessibility": "Interactive Rating exposes one named adjustable control while the dots and each hit target stay decorative. The web keeps a real half-step ARIA range; Android uses an integer-scaled range together with spoken text in the original scale. Readonly output is one image announcement.",
+      "snippet": "<Rating value={rating} onChange={setRating} halfStep clearable accessibilityLabel=\"Coffee rating\" />"
+    },
+    "ko": {
+      "headline": "0.5 단위 입력과 읽기 전용 표시를 분리하는 Rating",
+      "summary": "Rating은 평점 값을 앱이 소유하는 compact dot control입니다. interactive branch는 onChange와 비어 있지 않은 접근성 이름을 요구하고, readonly branch는 단일 image announcement로만 노출됩니다. 빈 값은 undefined이며 maxRating은 1부터 10까지 제한해 시각 항목과 hit target 수를 안전하게 유지합니다.",
+      "features": [
+        "정수 또는 halfStep 0.5 단위의 controlled value와 clearable 선택 해제",
+        "웹 Arrow·Home·End·Delete 키와 native adjustable increment·decrement·clear action",
+        "UiProvider strings 기반의 값·clear announcement와 Android half-step 정수 range 보정"
+      ],
+      "accessibility": "interactive Rating은 이름 있는 adjustable control 하나로 노출되고 점과 각 hit target은 장식 처리됩니다. 웹은 실제 0.5 단위 ARIA range를 유지하며, Android half-step은 정수 스케일 range와 원래 단위의 spoken text를 함께 사용합니다. readonly는 단일 image announcement를 제공합니다.",
+      "snippet": "<Rating value={rating} onChange={setRating} halfStep clearable accessibilityLabel=\"커피 평점\" />"
+    }
+  },
   "surface": {
     "en": {
       "headline": "Padding, radius, and shadow composed from tokens with Surface",
@@ -585,7 +609,7 @@
         "Body gap driven by spacing tokens"
       ],
       "accessibility": "Section provides a visual grouping but does not impose a landmark or heading role. When a document hierarchy is required, give the title content an appropriate accessibility role alongside it.",
-      "snippet": "<Section title=\"Recent entries\" subtitle=\"Updated today\" actions={<Button label=\"Add\" />}>{content}</Section>"
+      "snippet": "<Section title=\"Recent entries\" subtitle=\"Updated today\" actions={<Button label=\"Add\" onPress={addEntry} />}>{content}</Section>"
     },
     "ko": {
       "headline": "제목·부제·액션을 정렬하는 Section",
@@ -596,7 +620,7 @@
         "spacing 토큰 기반의 본문 gap"
       ],
       "accessibility": "Section은 시각적 구역을 제공하지만 landmark나 heading 역할을 강제하지 않습니다. 문서 계층이 필요하면 제목 콘텐츠에 적절한 접근성 역할을 함께 설계합니다.",
-      "snippet": "<Section title=\"최근 기록\" subtitle=\"오늘 업데이트\" actions={<Button label=\"추가\" />}>{content}</Section>"
+      "snippet": "<Section title=\"최근 기록\" subtitle=\"오늘 업데이트\" actions={<Button label=\"추가\" onPress={addEntry} />}>{content}</Section>"
     }
   },
   "sticky-action-bar": {

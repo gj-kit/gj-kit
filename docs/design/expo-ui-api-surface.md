@@ -276,15 +276,17 @@ export function useResolvedColorScheme(): ColorScheme;
 ### 3.5 비-React 접근
 
 ```ts
-/** 루트 UiProvider가 현재 흘리는 테마 스냅샷. Provider 이전/부재 시 lightTheme.
- *  리렌더 비유발 — expo-router 정적 옵션, 내비게이션 테마 등 비-React 경로 전용.
- *  중첩 Provider는 스냅샷을 쓰지 않는다(루트만 기록) — 다중 Provider 앱에서도 정의가 유일. */
+/** ThemePair를 구체 Theme으로 순수 해석한다. SSR·server component·정적 설정처럼
+ *  요청/앱 설정이 colorScheme을 소유한 경로는 이 함수를 쓴다. */
+export function resolveTheme(theme: Theme | ThemePair, colorScheme: ColorScheme): Theme;
+
+/** @deprecated client-only module snapshot. SSR 요청별 값이나 정적 설정에는 쓰지 않는다. */
 export function getActiveTheme(): Theme;
-/** 루트 테마 교체 구독(내비게이션 테마 동기화 용). 반환값은 해제 함수. */
+/** @deprecated client-only module snapshot 구독. 반환값은 해제 함수. */
 export function subscribeActiveTheme(listener: (theme: Theme) => void): () => void;
 ```
 
-정적 소비는 앱 테마 모듈에서 `import { light } from './theme'`으로 — 전신 `uiTokens` 상수는 `lightTheme`(또는 앱 테마)로 대체.
+정적 소비는 앱 테마 모듈에서 `resolveTheme(themes, 'light')`처럼 앱이 소유한 스킴을 넘긴다. 전신 `uiTokens` 상수는 `lightTheme`(또는 앱 테마)로 대체.
 
 **스타일 캐시(§0 A)**: Theme은 깊은 동결로 정체성이 안정 — 내부 `makeStyles(theme)` 팩토리가 `WeakMap<Theme, Styles>` 캐시. 렌더마다 스타일 재생성 없이 토큰 관통.
 

@@ -33,4 +33,5 @@ export {
   lightTheme,
   darkTheme,
   defaultThemes,
+  resolveTheme,
 } from './theme/createTheme';

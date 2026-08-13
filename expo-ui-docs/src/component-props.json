@@ -33,12 +33,14 @@
       {
         "name": "accessibilityLabel",
         "type": "string",
-        "required": false
+        "required": false,
+        "conditional": true
       },
       {
         "name": "children",
-        "type": "ReactNode | NonNullable<ReactNode>",
-        "required": false
+        "type": "ReactNode | ButtonTextChildren | ButtonCustomChildren",
+        "required": false,
+        "conditional": true
       },
       {
         "name": "className",
@@ -48,8 +50,9 @@
       },
       {
         "name": "disabled",
-        "type": "boolean",
-        "required": false
+        "type": "boolean | true",
+        "required": false,
+        "conditional": true
       },
       {
         "name": "icon",
@@ -67,6 +70,7 @@
         "name": "label",
         "type": "string",
         "required": false,
+        "description": "Visible text and the default accessible name.",
         "conditional": true
       },
       {
@@ -81,8 +85,9 @@
       },
       {
         "name": "loading",
-        "type": "boolean",
-        "required": false
+        "type": "boolean | true",
+        "required": false,
+        "conditional": true
       },
       {
         "name": "maxFontSizeMultiplier",
@@ -92,8 +97,9 @@
       },
       {
         "name": "onPress",
-        "type": "() => void",
-        "required": false
+        "type": "ButtonAction",
+        "required": false,
+        "conditional": true
       },
       {
         "name": "size",
@@ -138,18 +144,21 @@
       },
       {
         "name": "disabled",
-        "type": "boolean",
-        "required": false
+        "type": "boolean | true",
+        "required": false,
+        "conditional": true
       },
       {
         "name": "loading",
-        "type": "boolean",
-        "required": false
+        "type": "boolean | true",
+        "required": false,
+        "conditional": true
       },
       {
         "name": "onPress",
-        "type": "() => void",
-        "required": false
+        "type": "ButtonAction",
+        "required": false,
+        "conditional": true
       },
       {
         "name": "size",
@@ -179,7 +188,7 @@
     "props": [
       {
         "name": "kind",
-        "type": "'action' | 'filter' | 'removable'",
+        "type": "'action' | 'filter' | 'static' | 'removable'",
         "required": true
       },
       {
@@ -196,7 +205,8 @@
       {
         "name": "disabled",
         "type": "boolean",
-        "required": false
+        "required": false,
+        "conditional": true
       },
       {
         "name": "labelClassName",
@@ -281,7 +291,8 @@
         "name": "accessibilityLabel",
         "type": "string",
         "required": false,
-        "description": "When only an icon is visible, the action name is required."
+        "description": "When only an icon is visible, the action name is required.",
+        "conditional": true
       },
       {
         "name": "bottomInset",
@@ -302,7 +313,8 @@
       {
         "name": "icon",
         "type": "RenderIcon | NonNullable<ReactNode>",
-        "required": false
+        "required": false,
+        "conditional": true
       },
       {
         "name": "label",
@@ -313,12 +325,14 @@
       {
         "name": "labelClassName",
         "type": "string",
-        "required": false
+        "required": false,
+        "conditional": true
       },
       {
         "name": "labelStyle",
         "type": "StyleProp<TextStyle>",
-        "required": false
+        "required": false,
+        "conditional": true
       },
       {
         "name": "loading",
@@ -571,7 +585,8 @@
       {
         "name": "required",
         "type": "false | true",
-        "required": false
+        "required": false,
+        "conditional": true
       },
       {
         "name": "requiredAccessibilityLabel",
@@ -629,7 +644,8 @@
       {
         "name": "accessibilityLabel",
         "type": "string",
-        "required": false
+        "required": false,
+        "conditional": true
       },
       {
         "name": "alignOffset",
@@ -904,7 +920,8 @@
         "name": "onOpenError",
         "type": "(error: unknown) => void",
         "required": false,
-        "description": "Called when Linking.openURL fails on native."
+        "description": "Called when Linking.openURL fails on native.",
+        "conditional": true
       },
       {
         "name": "onPress",
@@ -915,7 +932,8 @@
       {
         "name": "rel",
         "type": "string",
-        "required": false
+        "required": false,
+        "conditional": true
       },
       {
         "name": "style",
@@ -925,7 +943,8 @@
       {
         "name": "target",
         "type": "LinkTarget",
-        "required": false
+        "required": false,
+        "conditional": true
       },
       {
         "name": "testID",
@@ -1207,7 +1226,8 @@
       {
         "name": "accessibilityLabel",
         "type": "string",
-        "required": false
+        "required": false,
+        "conditional": true
       },
       {
         "name": "className",
@@ -1270,7 +1290,8 @@
       {
         "name": "accessibilityLabel",
         "type": "string",
-        "required": false
+        "required": false,
+        "conditional": true
       },
       {
         "name": "className",
@@ -1418,12 +1439,14 @@
         "name": "minDistance",
         "type": "number",
         "required": false,
-        "description": "Minimum numeric distance between lower and upper values. Default 0."
+        "description": "Minimum numeric distance between lower and upper values. Default 0.",
+        "conditional": true
       },
       {
         "name": "mode",
         "type": "'single' | 'range'",
-        "required": false
+        "required": false,
+        "conditional": true
       },
       {
         "name": "onValueCommit",
@@ -1522,7 +1545,8 @@
         "name": "allowEmpty",
         "type": "boolean",
         "required": false,
-        "description": "Whether pressing the active item again can clear it to null. Defaults to true."
+        "description": "Whether pressing the active item again can clear it to null. Defaults to true.",
+        "conditional": true
       },
       {
         "name": "className",
@@ -1585,6 +1609,98 @@
         "name": "variant",
         "type": "ToggleGroupVariant",
         "required": false
+      }
+    ]
+  },
+  "rating": {
+    "typeName": "RatingProps",
+    "props": [
+      {
+        "name": "accessibilityLabel",
+        "type": "string",
+        "required": true,
+        "description": "The item being rated. A visible label can live outside the component."
+      },
+      {
+        "name": "value",
+        "type": "number",
+        "required": true,
+        "description": "Current rating. `undefined` is the only empty value."
+      },
+      {
+        "name": "className",
+        "type": "string",
+        "required": false,
+        "description": "Passed to the native element without interpretation — NativeWind is a host concern (§5)."
+      },
+      {
+        "name": "clearable",
+        "type": "boolean",
+        "required": false,
+        "description": "A second activation of the selected dot clears it. Default false.",
+        "conditional": true
+      },
+      {
+        "name": "clearAccessibilityLabel",
+        "type": "string",
+        "required": false,
+        "description": "Optional localized name for the screen-reader clear action.",
+        "conditional": true
+      },
+      {
+        "name": "disabled",
+        "type": "boolean",
+        "required": false,
+        "description": "Disables pointer, keyboard and native accessibility actions.",
+        "conditional": true
+      },
+      {
+        "name": "halfStep",
+        "type": "boolean",
+        "required": false,
+        "description": "Enables .5 values and splits every dot into left/right touch targets."
+      },
+      {
+        "name": "maxRating",
+        "type": "number",
+        "required": false,
+        "description": "Number of dots. Must be a safe integer from 1 through 10. Default 5."
+      },
+      {
+        "name": "onChange",
+        "type": "(value: number | undefined) => void",
+        "required": false,
+        "description": "Calls with the next selected rating, or `undefined` when a selection is cleared.",
+        "conditional": true
+      },
+      {
+        "name": "readonly",
+        "type": "false | true",
+        "required": false,
+        "description": "Interactive is the default branch.",
+        "conditional": true
+      },
+      {
+        "name": "size",
+        "type": "RatingSize",
+        "required": false,
+        "description": "Visual dot size. Default 'md'. The interactive hit targets remain touch-friendly."
+      },
+      {
+        "name": "style",
+        "type": "StyleProp<ViewStyle>",
+        "required": false
+      },
+      {
+        "name": "testID",
+        "type": "string",
+        "required": false
+      },
+      {
+        "name": "valueText",
+        "type": "(value: number | undefined, maxRating: number) => string",
+        "required": false,
+        "description": "Optional localized value announcement."
       }
     ]
   },
@@ -2155,7 +2271,8 @@
       {
         "name": "children",
         "type": "ReactNode | NonNullable<ReactNode>",
-        "required": false
+        "required": false,
+        "conditional": true
       },
       {
         "name": "className",
@@ -2289,7 +2406,8 @@
         "name": "max",
         "type": "number",
         "required": false,
-        "description": "Only finite positive numbers are used; anything else is normalized to 100."
+        "description": "Only finite positive numbers are used; anything else is normalized to 100.",
+        "conditional": true
       },
       {
         "name": "size",
@@ -2338,7 +2456,8 @@
       {
         "name": "decorative",
         "type": "false | true",
-        "required": false
+        "required": false,
+        "conditional": true
       },
       {
         "name": "fallback",
@@ -2446,12 +2565,14 @@
       {
         "name": "accessibilityHint",
         "type": "string",
-        "required": false
+        "required": false,
+        "conditional": true
       },
       {
         "name": "accessibilityLabel",
         "type": "string",
-        "required": false
+        "required": false,
+        "conditional": true
       },
       {
         "name": "className",
@@ -2472,7 +2593,8 @@
       {
         "name": "disabled",
         "type": "boolean",
-        "required": false
+        "required": false,
+        "conditional": true
       },
       {
         "name": "leading",
@@ -2634,7 +2756,8 @@
       {
         "name": "presentation",
         "type": "'table' | 'auto' | 'list'",
-        "required": false
+        "required": false,
+        "conditional": true
       },
       {
         "name": "renderListRow",
@@ -2702,7 +2825,8 @@
       {
         "name": "boundaryCount",
         "type": "PaginationBoundaryCount",
-        "required": false
+        "required": false,
+        "conditional": true
       },
       {
         "name": "busy",
@@ -2754,7 +2878,8 @@
       {
         "name": "getPageAccessibilityLabel",
         "type": "(details: PaginationPageLabelDetails) => string",
-        "required": false
+        "required": false,
+        "conditional": true
       },
       {
         "name": "hasNextPage",
@@ -2808,7 +2933,8 @@
       {
         "name": "presentation",
         "type": "PaginationPresentation",
-        "required": false
+        "required": false,
+        "conditional": true
       },
       {
         "name": "previousLabel",
@@ -2819,7 +2945,8 @@
       {
         "name": "siblingCount",
         "type": "PaginationSiblingCount",
-        "required": false
+        "required": false,
+        "conditional": true
       },
       {
         "name": "size",
@@ -2835,7 +2962,8 @@
         "name": "statusLabel",
         "type": "string",
         "required": false,
-        "description": "Optional visible status override. Page totals use `page / pageCount`;\nitem totals use the one-based visible item range and total item count."
+        "description": "Optional visible status override. Page totals use `page / pageCount`;\nitem totals use the one-based visible item range and total item count.",
+        "conditional": true
       },
       {
         "name": "statusStyle",
@@ -2887,7 +3015,8 @@
         "name": "collapsible",
         "type": "boolean",
         "required": false,
-        "description": "When false, the last open item cannot be closed. Defaults to true."
+        "description": "When false, the last open item cannot be closed. Defaults to true.",
+        "conditional": true
       },
       {
         "name": "contentStyle",
@@ -2933,7 +3062,8 @@
       {
         "name": "type",
         "type": "'single' | 'multiple'",
-        "required": false
+        "required": false,
+        "conditional": true
       }
     ]
   },
@@ -2960,7 +3090,8 @@
         "name": "accessibilityLabel",
         "type": "string",
         "required": false,
-        "description": "modal name override. inline presentation does not expose modal naming semantics."
+        "description": "modal name override. inline presentation does not expose modal naming semantics.",
+        "conditional": true
       },
       {
         "name": "animationType",
@@ -3016,7 +3147,8 @@
       {
         "name": "presentation",
         "type": "DialogPresentation | 'modal' | 'inline'",
-        "required": false
+        "required": false,
+        "conditional": true
       },
       {
         "name": "testID",
@@ -3250,12 +3382,14 @@
       {
         "name": "contentContainerClassName",
         "type": "string",
-        "required": false
+        "required": false,
+        "conditional": true
       },
       {
         "name": "contentContainerStyle",
         "type": "StyleProp<ViewStyle>",
-        "required": false
+        "required": false,
+        "conditional": true
       },
       {
         "name": "description",
@@ -3329,7 +3463,8 @@
       {
         "name": "scrollMode",
         "type": "'internal' | 'provided'",
-        "required": false
+        "required": false,
+        "conditional": true
       },
       {
         "name": "style",
@@ -3452,7 +3587,8 @@
       {
         "name": "iconOnly",
         "type": "false | true",
-        "required": false
+        "required": false,
+        "conditional": true
       },
       {
         "name": "initialFocusRef",
@@ -3513,7 +3649,8 @@
       {
         "name": "triggerIcon",
         "type": "ReactNode | RenderIcon | NonNullable<ReactNode>",
-        "required": false
+        "required": false,
+        "conditional": true
       },
       {
         "name": "triggerLabelClassName",
@@ -3741,7 +3878,8 @@
       {
         "name": "iconOnly",
         "type": "false | true",
-        "required": false
+        "required": false,
+        "conditional": true
       },
       {
         "name": "itemClassName",
@@ -3807,7 +3945,8 @@
       {
         "name": "triggerIcon",
         "type": "ReactNode | RenderIcon | NonNullable<ReactNode>",
-        "required": false
+        "required": false,
+        "conditional": true
       },
       {
         "name": "triggerLabelClassName",

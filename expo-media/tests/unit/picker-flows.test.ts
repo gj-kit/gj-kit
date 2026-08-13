@@ -12,6 +12,7 @@ import type {
   MediaPlatform,
   NamedBinarySource,
   PickedAsset,
+  PickerAdapter,
 } from '../../src/core/adapters';
 import { mediaErrorCode } from '../../src/core/errors';
 import { createBinaryUploads } from '../../src/core/upload/binary';
@@ -26,6 +27,7 @@ import {
   createRecordingTransport,
   fakeBytes,
   fakePlatform,
+  signedUrlErrorMessage,
 } from '../../src/testing';
 
 const DENIED = { granted: false, canAskAgain: true, limited: false } as const;
@@ -44,6 +46,10 @@ function setup(options?: {
   readonly libraryPermission?: { granted: boolean; canAskAgain: boolean; limited: boolean };
   readonly cameraPermission?: { granted: boolean; canAskAgain: boolean; limited: boolean };
   readonly withWebLoader?: boolean;
+  /** 호스트 피커를 일부만 바꿔 public boundary 회귀를 재현한다. */
+  readonly adapter?: (fake: PickerAdapter) => PickerAdapter;
+  /** 웹 loader는 피커와 독립된 호스트 seam이다. */
+  readonly loader?: BinarySourceLoader;
   /** 웹 로더가 만들어 낼 바이너리의 MIME. 동영상 경로를 태울 때 'video/mp4'로 준다. */
   readonly loaderType?: string;
 }) {
@@ -54,11 +60,12 @@ function setup(options?: {
   const transport = createRecordingTransport();
   const api = createFakeUploadApi<string>({ asset: (input) => input.objectName });
   const platform = fakePlatform(options?.os ?? 'ios');
-  const picker = createFakePicker(assets, {
+  const fakePicker = createFakePicker(assets, {
     ...(options?.libraryPermission ? { libraryPermission: options.libraryPermission } : {}),
     ...(options?.cameraPermission ? { cameraPermission: options.cameraPermission } : {}),
     ...(options?.captureAssets ? { captureAssets: options.captureAssets } : {}),
   });
+  const picker = options?.adapter ? options.adapter(fakePicker) : fakePicker;
   const uploads = createLocalUploads<string>({
     api,
     limits: 'server-enforced',
@@ -74,7 +81,7 @@ function setup(options?: {
   });
 
   const loaded: { readonly uri: string; readonly fileName: string }[] = [];
-  const loader: BinarySourceLoader = {
+  const defaultLoader: BinarySourceLoader = {
     fromUri({ uri, fileName }): Promise<NamedBinarySource> {
       loaded.push({ uri, fileName });
       return Promise.resolve(
@@ -85,6 +92,7 @@ function setup(options?: {
       );
     },
   };
+  const loader = options?.loader ?? defaultLoader;
 
   const flows = createPickerFlows<string>({
     picker,
@@ -93,7 +101,7 @@ function setup(options?: {
     ...(options?.withWebLoader ? { web: { uploads: binaryUploads, loader } } : {}),
   });
 
-  return { api, transport, picker, flows, loaded };
+  return { api, transport, picker: fakePicker, flows, loaded };
 }
 
 describe('pick — 권한 게이트와 max 자르기', () => {
@@ -125,6 +133,47 @@ describe('pick — 권한 게이트와 max 자르기', () => {
       .pick({ kinds: ['image', 'video'] })
       .catch((thrown: unknown) => thrown);
     expect((error as Error).message).toBe('Photo and video access permission is required.');
+  });
+
+  it('라이브러리 권한 어댑터의 raw 오류는 picker-failed로 정규화한다', async () => {
+    const raw = signedUrlErrorMessage();
+    const { flows } = setup({
+      adapter: (fake) => ({
+        ...fake,
+        requestLibraryPermission: async () => {
+          throw new Error(raw);
+        },
+      }),
+    });
+
+    const error = await flows.pick().catch((thrown: unknown) => thrown);
+
+    expect(mediaErrorCode(error)).toBe('picker-failed');
+    expect((error as Error).message).not.toContain('https://');
+    expect((error as Error).message).not.toContain('X-Amz-Signature');
+  });
+
+  it('피커 결과의 hostile getter는 업로드 코드에 도달하기 전에 봉인한다', async () => {
+    const raw = signedUrlErrorMessage();
+    const { flows } = setup({
+      adapter: (fake) => ({
+        ...fake,
+        pickFromLibrary: async () =>
+          [
+            {
+              get uri() {
+                throw new Error(raw);
+              },
+            },
+          ] as unknown as readonly PickedAsset[],
+      }),
+    });
+
+    const error = await flows.pick().catch((thrown: unknown) => thrown);
+
+    expect(mediaErrorCode(error)).toBe('picker-failed');
+    expect((error as Error).message).not.toContain('https://');
+    expect((error as Error).message).not.toContain('X-Amz-Signature');
   });
 });
 
@@ -169,6 +218,26 @@ describe('pickAndUpload — 웹 라우팅(§5.7.4 · §8.5)', () => {
     expect(transport.puts[0]?.sizeBytes).toBe(64);
     // fallbackExif(asset.exif)가 살아 있으면 촬영시각·위치가 등록된다.
     expect(api.completions[0]?.photo).toMatchObject({ geoPoint: { latitude: 37.5665 } });
+  });
+
+  it('웹 loader의 raw 오류는 picker-failed로 정규화한다', async () => {
+    const raw = signedUrlErrorMessage();
+    const { flows } = setup({
+      os: 'web',
+      assets: [asset(0)],
+      withWebLoader: true,
+      loader: {
+        fromUri: async () => {
+          throw new Error(raw);
+        },
+      },
+    });
+
+    const error = await flows.pickAndUpload().catch((thrown: unknown) => thrown);
+
+    expect(mediaErrorCode(error)).toBe('picker-failed');
+    expect((error as Error).message).not.toContain('https://');
+    expect((error as Error).message).not.toContain('X-Amz-Signature');
   });
 });
 
@@ -229,5 +298,23 @@ describe('captureAndUpload', () => {
     expect(mediaErrorCode(error)).toBe('permission-denied');
     expect((error as Error).message).toBe('Camera access permission is required.');
     expect(picker.calls.capture).toEqual([]);
+  });
+
+  it('카메라 adapter의 raw 오류는 picker-failed로 정규화한다', async () => {
+    const raw = signedUrlErrorMessage();
+    const { flows } = setup({
+      adapter: (fake) => ({
+        ...fake,
+        capture: async () => {
+          throw new Error(raw);
+        },
+      }),
+    });
+
+    const error = await flows.captureAndUpload().catch((thrown: unknown) => thrown);
+
+    expect(mediaErrorCode(error)).toBe('picker-failed');
+    expect((error as Error).message).not.toContain('https://');
+    expect((error as Error).message).not.toContain('X-Amz-Signature');
   });
 });

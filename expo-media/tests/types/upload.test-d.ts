@@ -14,6 +14,7 @@ import {
   POSTER_CONTENT_TYPE,
   computeChunkRanges,
   createBinaryUploads,
+  createDeferredLocalUploads,
   createLocalUploads,
   createPickerFlows,
 } from '../../src/core';
@@ -28,6 +29,9 @@ import type {
   HashAdapter,
   LocalFileTransport,
   LocalPosterAdapter,
+  DeferredLocalUpload,
+  DeferredLocalUploadConfig,
+  DeferredLocalUploads,
   LocalUploadInput,
   LocalUploads,
   MediaContentType,
@@ -35,6 +39,7 @@ import type {
   MediaTelemetry,
   MediaUploadCompletion,
   MediaUploadConfig,
+  MediaUploadIntentApi,
   MediaUploadLimits,
   MediaUploadApi,
   NamedBinarySource,
@@ -54,6 +59,7 @@ type StoredAsset = { readonly id: string };
 const forge = <T>(): T => undefined as T;
 
 declare const api: MediaUploadApi<StoredAsset>;
+declare const presignOnlyApi: MediaUploadIntentApi;
 declare const limits: MediaUploadLimits;
 declare const platform: PlatformAdapter;
 declare const files: FileSystemAdapter;
@@ -69,6 +75,9 @@ declare const localBase: MediaUploadConfig<StoredAsset> & {
   readonly files: FileSystemAdapter;
   readonly transport: LocalFileTransport;
 };
+
+/** `createDeferredLocalUploads`가 요구하는 최소 조합 — complete API는 의도적으로 없다. */
+declare const deferredLocalBase: DeferredLocalUploadConfig;
 
 /** `createBinaryUploads`가 요구하는 최소 조합. */
 declare const binaryBase: MediaUploadConfig<StoredAsset> & {
@@ -217,6 +226,38 @@ describe('업로드 팩토리 필수 인자 — 누락은 컴파일 에러', () 
       fileNamePrefix: undefined,
       debug: undefined,
     });
+  });
+});
+
+describe('presign-only 지연 연결 — 등록 API를 흉내 내지 않는다', () => {
+  it('`MediaUploadIntentApi`에는 createUploadIntent만 있고 deferred 결과는 completion 형태다', () => {
+    expectTypeOf<DeferredLocalUpload>().toEqualTypeOf<MediaUploadCompletion>();
+    // @ts-expect-error deferred 흐름은 서버 등록 메서드를 요구하거나 갖고 있지 않다
+    void presignOnlyApi.completeUpload;
+  });
+
+  it('로컬 스트리밍에 필요한 seam은 보통 경로와 같고, 반환은 attachment뿐이다', () => {
+    expectTypeOf(createDeferredLocalUploads(deferredLocalBase)).toEqualTypeOf<
+      DeferredLocalUploads<string>
+    >();
+    expectTypeOf(
+      createDeferredLocalUploads({
+        api: presignOnlyApi,
+        limits,
+        platform,
+        files,
+        transport,
+      }),
+    ).toEqualTypeOf<DeferredLocalUploads<string>>();
+  });
+
+  it('api·limits·platform·files·transport 중 하나라도 없으면 조립할 수 없다', () => {
+    // @ts-expect-error transport 없이는 로컬 URI를 네이티브 스트리밍할 수 없다
+    createDeferredLocalUploads({ api: presignOnlyApi, limits, platform, files });
+    // @ts-expect-error files 없이는 크기 검증·해시 경로가 없다
+    createDeferredLocalUploads({ api: presignOnlyApi, limits, platform, transport });
+    // @ts-expect-error limits는 명시적 정책이어야 한다
+    createDeferredLocalUploads({ api: presignOnlyApi, platform, files, transport });
   });
 });
 

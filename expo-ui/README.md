@@ -4,12 +4,12 @@
 
 이 라이브러리는 "parse, don't validate" 철학을 UI에 적용한다: 반쪽 테마 객체, 접근성 라벨 없는 아이콘 버튼, 핸들러 없는 액션 버튼, 토큰 키 오타 — 이런 것들은 런타임에서 조용히 깨지는 대신 타입 검사에서 거부된다.
 
-> **릴리스 상태 (2026-08-11)**
-> npm `latest`는 **v0.3.0·31종**이다. 이 저장소의 `main`에는 다음 minor를 위한 **v0.4 소스 프리뷰·49종**이 들어 있으며, 아래에서 “v0.4 소스 프리뷰”로 표시한 API는 아직 npm `latest`에 포함되지 않았다. `pnpm add @gj-kit/expo-ui`만 실행한 사용자는 안정판 31종을 받는다.
+> **릴리스 안내**
+> 이 문서는 저장소 `main`의 공개 API와 다음 배포 후보 변경을 함께 설명할 수 있다. 실제로 설치되는 표면은 사용 중인 package 버전과 CHANGELOG를 기준으로 확인한다. npm의 현재 `latest`는 `npm view @gj-kit/expo-ui version`으로 확인할 수 있다.
 
 - **직접 런타임 의존성 0** — 필수 peer는 `react`, `react-native`뿐이다. 웹 조건 빌드는 optional peer `react-native-web >= 0.21`을 직접 사용하고, 아이콘·문구는 앱에서 주입받는다.
 - **라이트/다크 내장** — `createThemes` 한 번으로 양 스킴 브랜드 테마 쌍을 만들고, Provider가 시스템 다크를 추종한다.
-- **npm v0.3 안정판 31종·소스 v0.4 프리뷰 49종·31개 색상 role** — 폼 제어, 상태 피드백, 진행률, identity, disclosure, 데이터 표시와 interaction foundation을 같은 토큰·타입 규칙으로 제공한다.
+- **31개 색상 role 기반 UI foundation** — 폼 제어, 상태 피드백, 진행률, identity, disclosure, 데이터 표시와 interaction foundation을 같은 토큰·타입 규칙으로 제공한다.
 - **NativeWind 무의존, 그러나 우호적** — `className` 패스스루와 테마 파생 tailwind preset(`./tailwind`)을 제공한다.
 - **키보드·safe-area 유틸 내장**(`./insets`) — Android 엣지투엣지 Modal의 키보드 워크어라운드 포함. `react-native-safe-area-context`는 이 서브패스를 쓸 때만 필요한 optional peer다.
 
@@ -74,7 +74,7 @@ export default function RootLayout() {
 > - `UiProvider`의 `theme`은 브랜드 타입(`Theme | ThemePair`)만 받는다. 손으로 조립한 토큰 객체는 **컴파일 에러** — 키 하나 빠진 반쪽 테마가 런타임 undefined 스타일로 새는 사고를 타입이 차단한다.
 > - `createThemes`의 반환은 라이트/다크가 **둘 다 완성된** 쌍이다. 다크 팔레트를 깜빡한 채 다크 전환이 켜지는 상태가 타입상 존재하지 않는다.
 > - 문구를 `strings`로 주입하면(내장 `koStrings`/`enStrings`) 컴포넌트별 기본 문구가 전부 바뀐다. 커스텀 번들은 `{ ...koStrings, retry: '다시 시도' }` — **부분 객체는 컴파일 에러**라서, 라이브러리가 새 문구 키를 추가하면 손조립 번들에서 즉시 표면화된다.
-> - 루트 `UiProvider`는 v0.4의 Menu·Select·Popover·Tooltip·Sheet와 modal Dialog가 공유하는 overlay 환경도 자동으로 만든다. 중첩 `UiProvider`는 테마·문구·아이콘만 재정의하고 바깥 stack과 tooltip coordinator를 재사용하므로 일반 앱은 `OverlayProvider`를 따로 추가하지 않는다.
+> - 루트 `UiProvider`는 Menu·Select·Popover·Tooltip·Sheet와 modal Dialog가 공유하는 overlay 환경도 자동으로 만든다. 중첩 `UiProvider`는 테마·문구·아이콘만 재정의하고 바깥 stack과 tooltip coordinator를 재사용하므로 일반 앱은 `OverlayProvider`를 따로 추가하지 않는다.
 
 테마 Provider 없이 Menu·Select·Popover·Tooltip을 쓰거나 Sheet·Dialog를 포함한 overlay stack을 의도적으로 공유·격리할 때는 `children`만 받는 공개 `OverlayProvider`를 직접 둘 수 있다. Host·Portal·`asChild` trigger 합성은 내부 경계이며 공개 컴포넌트나 prop이 아니다. 일반 앱에서는 루트 `UiProvider` 범위를 권장한다.
 
@@ -104,7 +104,20 @@ function Root({ children }: { children: ReactNode }) {
 }
 ```
 
-컴포넌트는 `useTheme()` 하나만 읽는다 — `colors`가 이미 스킴 해석 완료라서 컴포넌트에 다크 분기가 존재하지 않는다. 비-React 경로(내비게이션 테마 등)는 `getActiveTheme()`/`subscribeActiveTheme()`을 쓴다(루트 Provider 기준).
+컴포넌트는 `useTheme()` 하나만 읽는다 — `colors`가 이미 스킴 해석 완료라서 컴포넌트에 다크 분기가 존재하지 않는다.
+
+### SSR·정적 설정의 테마 해석
+
+SSR, server component, 정적 route 옵션처럼 React Provider가 렌더·effect를 실행하지 않는 경로에서는 순수 함수 `resolveTheme(theme, colorScheme)`를 쓴다. `colorScheme`은 요청·쿠키·앱 설정처럼 해당 경로가 소유한 `'light' | 'dark'` 값이어야 한다.
+
+```ts
+import { resolveTheme } from '@gj-kit/expo-ui/theme';
+import { themes } from '../src/theme';
+
+export const staticNavigationTheme = resolveTheme(themes, 'light');
+```
+
+기존 `getActiveTheme()`과 `subscribeActiveTheme()`은 네이티브 클라이언트의 레거시 동기화 호환을 위해 남아 있지만 **deprecated client-only snapshot API**다. 모듈 전역 상태라 요청별 SSR 값이 아니며, SSR·정적 설정에는 사용하지 않는다.
 
 ### 토큰이 실제로 관통되는가
 
@@ -125,9 +138,9 @@ import {
 } from '@gj-kit/expo-ui';
 ```
 
-위 31종이 현재 npm v0.3.0 안정판이다. v0.3에서 상태(Badge/Alert), identity·구조(Avatar/Divider/ListItem), 진행률(Spinner/ProgressBar), 폼 제어(Checkbox/Switch/RadioGroup), disclosure(Accordion)를 추가했다.
+이 문서의 API는 상태(Badge/Alert), identity·구조(Avatar/Divider/ListItem), 진행률(Spinner/ProgressBar), 폼 제어(Checkbox/Switch/RadioGroup), disclosure(Accordion)와 interaction·data·overlay foundation을 같은 토큰·접근성 계약으로 제공한다. 설치 전에는 위 릴리스 안내에 따라 해당 버전의 공개 표면을 확인한다.
 
-`main`의 v0.4 소스 프리뷰에는 다음 18종이 추가돼 총 49종이다. 아직 npm에서 아래 import를 사용하면 안 된다.
+다음은 interaction·data·overlay foundation API다.
 
 ```tsx
 import {
@@ -173,9 +186,9 @@ void Tooltip;
 void useToastQueue;
 ```
 
-프리뷰 18종도 `style`·`className`·`testID` 계열의 명시적 스타일 꼬리, 테마 토큰, 라이트/다크, Provider 아이콘 규칙을 그대로 따른다. `useToastQueue`는 새 컴포넌트 수에 포함하지 않는 `ToastViewport`의 상태 훅이고, `OverlayProvider`는 Menu·Select·Popover·Tooltip·Sheet와 Dialog가 공유하는 인프라이므로 컴포넌트 수에서 제외한다. 공개 전에는 이름이나 세부 계약이 바뀔 수 있다.
+이 API들도 `style`·`className`·`testID` 계열의 명시적 스타일 꼬리, 테마 토큰, 라이트/다크, Provider 아이콘 규칙을 그대로 따른다. `useToastQueue`는 새 컴포넌트 수에 포함하지 않는 `ToastViewport`의 상태 훅이고, `OverlayProvider`는 Menu·Select·Popover·Tooltip·Sheet와 Dialog가 공유하는 인프라이므로 컴포넌트 수에서 제외한다.
 
-2026-08-11 현재 `main`은 **unit 534개 + type-contract 91개 = 625개** 검증과 platform build, 아래 README 코드 블록 컴파일을 통과한다. 이 소스 검증은 npm v0.4가 이미 배포됐다는 뜻이 아니다.
+현재 `main`의 정확한 검증 수와 공개 표면은 CI 및 npm package/CHANGELOG를 기준으로 확인한다.
 
 ### Text — 서체는 role로
 
@@ -191,13 +204,17 @@ void useToastQueue;
 ```tsx
 <Button label="저장" onPress={save} />
 <Button label="삭제" variant="destructive" size="sm" loading={deleting} onPress={remove} />
+<Button label="취소" variant="ghost" onPress={() => {}} />
 <Button label="더보기" icon={({ color, size }) => <Feather name="plus" size={size} color={color} />} onPress={more} />
 <IconButton accessibilityLabel="설정 열기" icon={({ color, size }) => <Feather name="settings" size={size} color={color} />} onPress={openSettings} />
 ```
 
 > **왜 이 단계를 건너뛸 수 없는가**
 > - `label`도 `children`도 없는 버튼은 **컴파일 에러**다. 아이콘 단독 버튼은 `IconButton`으로 — 그리고 `IconButton`은 `accessibilityLabel`이 **필수**라서 스크린리더 공백이 생기지 않는다.
+> - `label` 또는 문자열 `children`은 버튼의 기본 접근성 이름이 되며 빈 문자열은 런타임에서도 거부한다. 아이콘·View 같은 rich children은 추론할 이름이 없으므로 `accessibilityLabel`이 **필수**다.
+> - 활성 `Button`과 `IconButton`은 `onPress`가 **필수**다. `disabled` 또는 `loading`일 때만 handler를 생략할 수 있으며, 이는 의도적으로 inert인 상태를 표현한다.
 > - variant `'inverse'`는 전신의 `'dark'`를 대체한다 — 다크 테마에서 "dark 버튼이 밝아지는" 의미 역전을 이름에서 제거했다.
+> - variant `'ghost'`는 배경·테두리 없이 `colors.text`로 렌더하는 보조 action이다. disabled일 때도 투명 배경을 유지하고 `colors.textSubtle` 및 일반 button의 disabled 접근성 계약을 따른다.
 
 ### TextField / SearchField
 
@@ -361,9 +378,7 @@ export function FrequentlyAskedQuestions() {
 
 기본 `type="single"`은 `value: T | null`, `type="multiple"`은 `value: readonly T[]` 계약으로 분리된다. `collapsible={false}`는 열린 단일 항목을 잠그며 multiple 모드에서는 사용할 수 없다. 웹은 heading/button/panel 관계, `aria-expanded`, Enter·Space를 제공하고 네이티브는 같은 펼침·disabled 상태를 접근성 API로 전달한다.
 
-### v0.4 소스 프리뷰 — interaction·data·overlay foundation 18종
-
-> 아래 API는 `main` 소스에는 구현돼 있지만 아직 npm v0.3.0에는 없다. v0.4가 배포되기 전까지 평가·마이그레이션 준비 용도로만 읽는다.
+### Interaction·data·overlay foundation
 
 #### Chip — 생김새가 아니라 동작으로 분기
 
@@ -373,9 +388,10 @@ export function FrequentlyAskedQuestions() {
 |---|---|---|
 | `action` | `label`, `onPress` | 한 번 실행하는 button |
 | `filter` | `label`, `selected`, `onSelectedChange` | 이름이 바뀌지 않는 controlled toggle |
+| `static` | `label`, 선택 `selected` | 읽기 전용 값 또는 선택 상태를 보이는 일반 텍스트 (button/selection widget 아님) |
 | `removable` | `label`, `onRemove`, `removeAccessibilityLabel` | 정적 값 + 별도 제거 button |
 
-공통 선택지는 `variant="filled" | "outlined"`(기본 filled), `size="sm" | "md"`(기본 md), `leading`, `disabled`다. removable 컨테이너 전체를 Pressable로 만들지 않아 인터랙티브 요소 중첩을 피한다.
+공통 선택지는 `variant="filled" | "outlined"`(기본 filled), `size="sm" | "md"`(기본 md), `leading`이다. `disabled`는 interactive action/filter/removable에만 쓴다. static의 `selected`는 시각 상태만 바꾸며 ARIA selection state를 만들지 않는다. removable 컨테이너 전체를 Pressable로 만들지 않아 인터랙티브 요소 중첩을 피한다.
 
 ```tsx
 import { useState } from 'react';
@@ -393,6 +409,7 @@ export function TopicChips() {
         selected={featured}
         onSelectedChange={setFeatured}
       />
+      <Chip kind="static" label="다크 초콜릿" selected />
       <Chip
         kind="removable"
         label="React Native"
@@ -644,7 +661,7 @@ export function ArticlePreview() {
 
 `FormField`는 `label`과 `children(controlProps) => ReactElement`가 필수인 render-prop 컴포넌트다. `helperText`, 이를 우선하는 `error`, `required`, `labelAccessory`를 받고, 생성한 label/control/helper/error ID와 invalid/required 관계를 `FormFieldControlProps`로 넘긴다. `required`일 때는 iOS VoiceOver에도 상태가 남도록 현지화된 전체 이름 `requiredAccessibilityLabel`도 필수다. root는 `style`/`className`/`testID`, 텍스트 슬롯은 `labelStyle`/`labelClassName`과 `helperStyle`/`helperClassName`으로 연다. 임의 child를 clone하지 않으므로 어떤 제어에 어느 prop을 적용할지 앱이 결정한다. 오류 문구는 polite live region이다. disabled 상태는 제어마다 적용 위치와 의미가 다르므로 FormField가 소유하지 않고 실제 control에 직접 준다.
 
-v0.4의 `TextField`도 단독 사용 시 label·helper·error ID를 자동 생성해 RN `accessibilityLabelledBy`/`accessibilityHint`와 웹 `aria-labelledby`/`aria-describedby`/`aria-errormessage`를 연결한다. 외부 `FormField`가 넘긴 `nativeID`·관계 prop도 보존하므로 둘을 함께 사용할 수 있다.
+`TextField`는 단독 사용 시에도 label·helper·error ID를 자동 생성해 RN `accessibilityLabelledBy`/`accessibilityHint`와 웹 `aria-labelledby`/`aria-describedby`/`aria-errormessage`를 연결한다. 외부 `FormField`가 넘긴 `nativeID`·관계 prop도 보존하므로 둘을 함께 사용할 수 있다.
 
 ```tsx
 import { useState } from 'react';
@@ -703,6 +720,45 @@ export function PriceRange() {
       accessibilityLabels={['최저 가격', '최고 가격']}
       valueText={(value) => `${value.toLocaleString()}원`}
     />
+  );
+}
+```
+
+#### Rating — 0.5단위 입력과 읽기 전용 점 표시
+
+`Rating`은 `value: number | undefined`를 받는 controlled dot rating이다. interactive branch는 `onChange`와 비어 있지 않은 `accessibilityLabel`을 요구하고, `readonly` branch는 단일 image announcement로 표시한다. 빈 값은 반드시 `undefined`이며, 선택 가능한 값은 기본 `1..5` 또는 `halfStep`일 때 `0.5` 단위다. `maxRating`은 렌더 항목과 hit target 수를 제한하기 위해 **1..10**의 정수다.
+
+`clearable`이면 현재 선택된 값을 다시 누를 때 `onChange(undefined)`가 호출된다. 웹에서는 Arrow/Home/End와 Backspace/Delete, 네이티브에서는 adjustable increment/decrement 및 clear action을 제공한다. 점 자체는 장식 처리되므로 screen reader에는 중복 button이 노출되지 않는다. 기본 announcement와 clear action 이름은 `UiProvider strings`의 `UiStrings.ratingNoValue`·`ratingValue`·`clearRating`에서 온다. 인스턴스별 표현만 바꿀 때 `valueText`와 `clearAccessibilityLabel`을 제공한다. native half-step range 값은 정수 스케일로 노출해 Android의 range 정수 처리에도 0.5 단위를 잃지 않으며, 말하는 텍스트는 원래 단위를 유지한다. haptic feedback은 이 컴포넌트의 의존성이 아니므로 필요한 앱에서 `onChange` 주변에 추가한다.
+
+```tsx
+import { useState } from 'react';
+import { Rating } from '@gj-kit/expo-ui';
+
+export function CoffeeRating() {
+  const [rating, setRating] = useState<number | undefined>(undefined);
+
+  return (
+    <>
+      <Rating
+        value={rating}
+        onChange={setRating}
+        halfStep
+        clearable
+        accessibilityLabel="커피 평점"
+        clearAccessibilityLabel="평점 지우기"
+        valueText={(value, maxRating) =>
+          value === undefined ? '평점 없음' : `${value}점 / ${maxRating}점`
+        }
+      />
+      <Rating
+        value={4.5}
+        readonly
+        halfStep
+        size="sm"
+        accessibilityLabel="기록 평점"
+        valueText={(value, maxRating) => `${value}점 / ${maxRating}점`}
+      />
+    </>
   );
 }
 ```
@@ -976,7 +1032,7 @@ export function ReleaseChannelSelect() {
 
 #### ToastViewport / useToastQueue — 수명과 순서를 선언적으로 소유
 
-기존 v0.3의 `Toast/useToastController`는 단일 알림 호환 API로 유지한다. v0.4의 `useToastQueue`는 FIFO 전체 `records`, 현재 보이는 `visibleToasts`, `queuedCount`와 `show/update/dismiss/dismissAll/pause/resume`을 반환한다. 기본은 한 개 표시·아홉 개 대기(총 10개), 5000ms이며 `durationMs={null}`은 사용자가 닫을 때까지 유지한다. 타이머는 보이는 Toast에만 시작되고, update 또는 같은 `dedupeKey`의 show는 기존 id와 위치를 보존하면서 내용을 바꾸고 수명을 다시 시작한다. 상한을 넘으면 가장 오래 기다린 항목을 결정적으로 제거하고 `queue-overflow`를 보고한다.
+기존 `Toast/useToastController`는 단일 알림 호환 API로 유지한다. `useToastQueue`는 FIFO 전체 `records`, 현재 보이는 `visibleToasts`, `queuedCount`와 `show/update/dismiss/dismissAll/pause/resume`을 반환한다. 기본은 한 개 표시·아홉 개 대기(총 10개), 5000ms이며 `durationMs={null}`은 사용자가 닫을 때까지 유지한다. 타이머는 보이는 Toast에만 시작되고, update 또는 같은 `dedupeKey`의 show는 기존 id와 위치를 보존하면서 내용을 바꾸고 수명을 다시 시작한다. 상한을 넘으면 가장 오래 기다린 항목을 결정적으로 제거하고 `queue-overflow`를 보고한다.
 
 `ToastViewport`는 top/bottom 배치와 offset만 소유하고 상태를 훅에 되돌린다. 각 Toast에는 `UiProvider strings.close`와 `icons.close` 폴백을 쓰는 이름 있는 닫기 버튼이 항상 있으며, 선택 action과 닫기는 중첩되지 않은 sibling control이다. `announcement="polite"`가 기본이고 긴급 오류만 `assertive`, 이미 화면에 설명된 변화는 `off`로 선택한다. 응답이 반드시 필요한 결정에는 Toast action 대신 `Dialog`를 사용한다.
 
@@ -1066,7 +1122,7 @@ export function ProfileTabs() {
 > **왜 이 단계를 건너뛸 수 없는가**
 > `EmptyState`의 액션은 `{ label, onPress }` 객체다 — 전신처럼 `actionLabel`만 넘기고 `onAction`을 잊으면 **눌러도 아무 일 없는 죽은 버튼**이 렌더됐다. 이제 그 상태는 컴파일되지 않는다. `ErrorState`의 재시도 버튼도 `onRetry`가 있을 때만 렌더된다.
 
-### Toast (npm v0.3 안정판)
+### Toast — 단일 알림 호환 API
 
 ```tsx
 import { Toast, useToastController } from '@gj-kit/expo-ui';
@@ -1100,7 +1156,7 @@ variant별 아이콘은 `icons.toast`에서, 지속 시간은 `useToastControlle
 
 `dismissDisabled`는 저장·삭제 중 backdrop, Escape/Back, 접근성 escape와 닫기 버튼을 함께 막는다. 접근성 escape callback은 실제 descendant에 연결하지만 iOS VoiceOver 실기기 검증 전에는 보장 범위를 넓히지 않는다. `initialFocusRef`·`finalFocusRef`를 지정했을 때만 플랫폼 기본 포커스 처리에 best-effort override를 적용한다. `presentation="inline"`은 이미 열린 native Modal 안에서 레이어를 합성할 때 쓰며 portal·focus trap·dialog 역할을 제공한다고 가장하지 않고 overlay stack에도 참여하지 않는다. rich adaptive surface는 위의 `Sheet`, 제한된 선택 액션은 `ActionSheet`를 사용한다. drag·snap 제스처는 현재 둘의 계약 밖이며 후속 optional `BottomSheet` adapter 범위다.
 
-v0.4 소스에서 modal Dialog는 `UiProvider` 또는 `OverlayProvider` 범위가 있으면 열릴 때 stack에 한 번 등록되고, 내부 overlay는 현재 Dialog를 parent로 상속한다. backdrop, 웹 Escape, 네이티브 Back, 접근성 escape와 close action은 모두 같은 topmost request 경로를 지나므로 열린 child Popover·Menu·Select가 있으면 parent Dialog가 먼저 닫히지 않는다. `dismissDisabled`인 topmost layer는 아래 layer까지 요청이 새는 것도 막는다. 이 parent ID와 stack hook은 구현 세부이며 public prop이나 barrel export가 아니다. Provider 없는 단일 Dialog는 기존처럼 동작하지만 여러 overlay의 중첩 순서가 필요하면 루트 `UiProvider`를 둔다.
+modal Dialog는 `UiProvider` 또는 `OverlayProvider` 범위가 있으면 열릴 때 stack에 한 번 등록되고, 내부 overlay는 현재 Dialog를 parent로 상속한다. backdrop, 웹 Escape, 네이티브 Back, 접근성 escape와 close action은 모두 같은 topmost request 경로를 지나므로 열린 child Popover·Menu·Select가 있으면 parent Dialog가 먼저 닫히지 않는다. `dismissDisabled`인 topmost layer는 아래 layer까지 요청이 새는 것도 막는다. 이 parent ID와 stack hook은 구현 세부이며 public prop이나 barrel export가 아니다. Provider 없는 단일 Dialog는 기존처럼 동작하지만 여러 overlay의 중첩 순서가 필요하면 루트 `UiProvider`를 둔다.
 
 ## 3. "./insets" — 키보드·safe-area
 
@@ -1156,6 +1212,8 @@ preset 입력도 브랜드 `Theme`이다 — 손조립 토큰으로 preset을 �
 | 손조립 테마 객체를 `UiProvider theme`에 | 컴파일 에러 — `createTheme`/`createThemes` 경유 강제 |
 | `IconButton`에 `accessibilityLabel` 누락 | 컴파일 에러 |
 | `label`도 `children`도 없는 `Button` | 컴파일 에러 |
+| 활성 `Button`/`IconButton`에 `onPress` 누락 | 컴파일 에러 (`disabled`/`loading` 제외) |
+| rich children `Button`에 `accessibilityLabel` 누락 | 컴파일 에러 |
 | `Tabs` `value`에 items에 없는 오타 | 컴파일 에러 (`NoInfer`) |
 | `Tabs`에 `accessibilityLabel` 누락 | 컴파일 에러 — tablist 목적 이름 필수 |
 | `Tabs`에 `panels` 누락 | 컴파일 에러 — tab과 panel을 항상 한 계약으로 소유 |

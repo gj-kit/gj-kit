@@ -42,6 +42,12 @@ export interface UiStrings {
   readonly previousPage: string;
   /** The Pagination next control. */
   readonly nextPage: string;
+  /** The Rating announcement when no value is selected. */
+  readonly ratingNoValue: string;
+  /** The Rating announcement for a selected value. Keep value and maxRating in the user-facing scale. */
+  readonly ratingValue: (value: number, maxRating: number) => string;
+  /** The Rating custom accessibility action that clears a selected value. */
+  readonly clearRating: string;
 }
 
 export const enStrings: UiStrings = {
@@ -62,6 +68,9 @@ export const enStrings: UiStrings = {
   sortUnsorted: "not sorted",
   previousPage: "Previous page",
   nextPage: "Next page",
+  ratingNoValue: "No rating",
+  ratingValue: (value, maxRating) => `${value} out of ${maxRating}`,
+  clearRating: "Clear rating",
 };
 
 export const koStrings: UiStrings = {
@@ -82,4 +91,7 @@ export const koStrings: UiStrings = {
   sortUnsorted: "정렬되지 않음",
   previousPage: "이전 페이지",
   nextPage: "다음 페이지",
+  ratingNoValue: "평점 없음",
+  ratingValue: (value, maxRating) => `${value}점 / ${maxRating}점`,
+  clearRating: "평점 지우기",
 };

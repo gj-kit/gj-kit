@@ -52,6 +52,7 @@
   },
   "scripts": {
     "build": "tsup",
+    "prepack": "npm run build",
     "typecheck": "tsc --noEmit",
     "test": "vitest run --project unit",
     "test:types": "vitest run --project types",

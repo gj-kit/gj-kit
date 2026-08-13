@@ -1,4 +1,4 @@
-// 설계 문서 §5.2 — 타입 있는 에러 14종과 **사본 간 인식**.
+// 설계 문서 §5.2 — 타입 있는 에러 16종과 **사본 간 인식**.
 //
 // ⚠ 이 파일이 지키는 것: `instanceof`가 깨지는 자리에서 `isMediaError`가 살아 있는가.
 //   §2.4의 `splitting:false`로 엔트리마다 코어가 복제되므로 `"./device"`가 던진 에러를
@@ -16,9 +16,11 @@ import {
   isMediaError,
   mediaErrorCode,
   mediaErrorUserMessage,
+  mediaUploadFailureInfo,
 } from '../../src/core/errors';
 
 const MEDIA_ERROR_TAG = Symbol.for('@gj-kit/expo-media#MediaError');
+const MEDIA_UPLOAD_FAILURE_TAG = Symbol.for('@gj-kit/expo-media#MediaUploadFailure');
 
 /** 엔트리 복제로 생긴 **다른 클래스**의 MediaError. 런타임 각인은 전역 심볼이라 동일하다. */
 class OtherCopyMediaError extends Error {
@@ -39,6 +41,8 @@ describe('MEDIA_ERROR_CODES', () => {
       'device-timeout',
       'device-icloud-only',
       'device-not-found',
+      'device-library-failed',
+      'picker-failed',
       'unsupported-file-type',
       'file-too-large',
       'upload-failed',
@@ -96,6 +100,143 @@ describe('isMediaError — 엔트리 복제를 넘어 동작한다', () => {
   it('mediaErrorCode·mediaErrorUserMessage는 비-MediaError에 null', () => {
     expect(mediaErrorCode(new Error('plain'))).toBeNull();
     expect(mediaErrorUserMessage(new Error('plain'))).toBeNull();
+  });
+});
+
+describe('mediaUploadFailureInfo — 실패 복구 정보도 엔트리 복제를 넘어 동작한다', () => {
+  it('다른 엔트리 사본이 남긴 URL 없는 orphan 후보를 읽는다', () => {
+    const fromOtherEntry = new OtherCopyMediaError('upload-failed', 'Upload failed.');
+    Object.defineProperty(fromOtherEntry, MEDIA_UPLOAD_FAILURE_TAG, {
+      value: Object.freeze({
+        stage: 'put',
+        orphanedObjects: Object.freeze([
+          Object.freeze({
+            objectName: 'uploads/42.jpg',
+            contentType: 'image/jpeg',
+            sizeBytes: 42,
+            storageState: 'possibly-uploaded',
+          }),
+        ]),
+      }),
+      enumerable: false,
+    });
+
+    expect(mediaUploadFailureInfo(fromOtherEntry)).toEqual({
+      stage: 'put',
+      orphanedObjects: [
+        {
+          objectName: 'uploads/42.jpg',
+          contentType: 'image/jpeg',
+          sizeBytes: 42,
+          storageState: 'possibly-uploaded',
+        },
+      ],
+    });
+  });
+
+  it('위조되었거나 불완전한 심볼 값은 공개하지 않는다', () => {
+    const malformed = new MediaError('upload-failed', 'Upload failed.');
+    Object.defineProperty(malformed, MEDIA_UPLOAD_FAILURE_TAG, {
+      value: { stage: 'put', orphanedObjects: [{ objectName: 'x' }] },
+      enumerable: false,
+    });
+    expect(mediaUploadFailureInfo(malformed)).toBeNull();
+
+    // This inspector is an intentionally cross-entry seam. Every bypass shape must be rejected
+    // here as well as by the backend intent parser, otherwise a forged global symbol can reveal
+    // credentials despite the normal upload path being safe.
+    for (const objectName of [
+      'https://uploads.example.test/secret?X-Amz-Signature=never-return',
+      'objects/photo.jpg?X-Amz-Signature=never-return',
+      'objects/https%3A%2F%2Fsecret',
+      'objects/https%253A%252F%252Fsecret',
+      ' objects/photo.jpg',
+      'objects//photo.jpg',
+      'objects/../photo.jpg',
+      'objects/photo.jpg#fragment',
+      `objects/photo\u0000.jpg`,
+      'a'.repeat(1025),
+    ]) {
+      const forged = new MediaError('upload-failed', 'Upload failed.');
+      Object.defineProperty(forged, MEDIA_UPLOAD_FAILURE_TAG, {
+        value: {
+          stage: 'put',
+          orphanedObjects: [
+            {
+              objectName,
+              contentType: 'image/jpeg',
+              sizeBytes: 1,
+              storageState: 'possibly-uploaded',
+            },
+          ],
+        },
+        enumerable: false,
+      });
+      expect(mediaUploadFailureInfo(forged), objectName).toBeNull();
+    }
+
+    const wrongContentType = new MediaError('upload-failed', 'Upload failed.');
+    Object.defineProperty(wrongContentType, MEDIA_UPLOAD_FAILURE_TAG, {
+      value: {
+        stage: 'put',
+        orphanedObjects: [
+          {
+            objectName: 'objects/photo.jpg',
+            // MIME-shaped but outside MediaContentType must not be asserted into the public type.
+            contentType: 'application/x-forged',
+            sizeBytes: 1,
+            storageState: 'possibly-uploaded',
+          },
+        ],
+      },
+      enumerable: false,
+    });
+    expect(mediaUploadFailureInfo(wrongContentType)).toBeNull();
+    expect(mediaUploadFailureInfo(new Error('plain'))).toBeNull();
+  });
+
+  it('foreign getter/Proxy가 검증 뒤 URL로 바꿔도 한 번만 snapshot하고 URL을 반환하지 않는다', () => {
+    const rawUrl = 'https://uploads.example.test/secret?X-Amz-Signature=never-return';
+    let objectNameReads = 0;
+    const getterSwappedObject = {
+      get objectName() {
+        objectNameReads += 1;
+        return objectNameReads === 1 ? 'uploads/42.jpg' : rawUrl;
+      },
+      contentType: 'image/jpeg',
+      sizeBytes: 42,
+      storageState: 'possibly-uploaded',
+    };
+    const foreign = new OtherCopyMediaError('upload-failed', 'Upload failed.');
+    Object.defineProperty(foreign, MEDIA_UPLOAD_FAILURE_TAG, {
+      value: {
+        get stage() {
+          return 'put';
+        },
+        get orphanedObjects() {
+          return [getterSwappedObject];
+        },
+      },
+      enumerable: false,
+    });
+
+    const info = mediaUploadFailureInfo(foreign);
+
+    expect(objectNameReads).toBe(1);
+    expect(info).toEqual({
+      stage: 'put',
+      orphanedObjects: [
+        {
+          objectName: 'uploads/42.jpg',
+          contentType: 'image/jpeg',
+          sizeBytes: 42,
+          storageState: 'possibly-uploaded',
+        },
+      ],
+    });
+    expect(JSON.stringify(info)).not.toContain(rawUrl);
+    expect(Object.isFrozen(info)).toBe(true);
+    expect(Object.isFrozen(info?.orphanedObjects)).toBe(true);
   });
 });
 

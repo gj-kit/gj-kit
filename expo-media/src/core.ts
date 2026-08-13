@@ -58,16 +58,21 @@ export type {
   MediaMetadata,
   MediaUploadIntent,
   MediaUploadIntentRequest,
+  MediaUploadObject,
+  MediaOrphanedUpload,
+  MediaUploadFailureStage,
+  MediaUploadFailureInfo,
   UploadedPoster,
   MediaUploadCompletion,
   UploadResult,
+  MediaUploadIntentApi,
   MediaUploadApi,
   MediaUploadLimit,
   MediaUploadLimits,
   MediaDebugOptions,
 } from './core/types';
 
-// ─── §5.2 에러 — 코드 14종 ──────────────────────────────────────────────────
+// ─── §5.2 에러 — 코드 16종 ──────────────────────────────────────────────────
 // ⚠ `isMediaError`가 `instanceof`의 대체다. `splitting:false`(§2.4)로 엔트리마다 코어가
 //   복제되므로 `instanceof`는 **반드시** 깨진다 — `"./device"`가 던진 에러를 `"."`이 검사하면
 //   두 클래스 객체가 서로 다르다.
@@ -78,6 +83,7 @@ export {
   isMediaError,
   mediaErrorCode,
   mediaErrorUserMessage,
+  mediaUploadFailureInfo,
   assertNeverMediaError,
 } from './core/errors';
 
@@ -135,8 +141,19 @@ export { isPhotoKitUri, summarizeUri, sanitizeMediaErrorMessage, createMediaDebu
 // ─── §5.4-① 로컬 파일 업로드 ────────────────────────────────────────────────
 // `POSTER_CONTENT_TYPE`은 공개다(§5.4.1-7) — presign 요청의 contentType과 서버 검증이
 // 맞물리므로 소비자가 읽을 수 있어야 한다.
-export type { MediaUploadConfig, LocalUploadInput, LocalUploads } from './core/upload/uploader';
-export { POSTER_CONTENT_TYPE, createLocalUploads } from './core/upload/uploader';
+export type {
+  MediaUploadConfig,
+  LocalUploadInput,
+  LocalUploads,
+  DeferredLocalUpload,
+  DeferredLocalUploadConfig,
+  DeferredLocalUploads,
+} from './core/upload/uploader';
+export {
+  POSTER_CONTENT_TYPE,
+  createLocalUploads,
+  createDeferredLocalUploads,
+} from './core/upload/uploader';
 
 // ─── §5.4-② 바이너리(웹 Blob) 업로드 ────────────────────────────────────────
 export type { BinaryUploads } from './core/upload/binary';

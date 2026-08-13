@@ -92,11 +92,15 @@ function collectProps(typeName) {
           name: property.getName(),
           type: normalizeType(raw),
           required: !optional,
+          seenOptional: optional,
+          seenRequired: !optional,
           ...(description ? { description } : {}),
         });
         continue;
       }
       // 한 갈래에서만 필수라면 조건부이므로 선택으로 표시한다.
+      existing.seenOptional ||= optional;
+      existing.seenRequired ||= !optional;
       if (optional) existing.required = false;
       // 갈래마다 타입이 다르면(DataTable의 presentation: 'table' | 'list' | 'auto')
       // 첫 갈래 값만 남기지 말고 합집합으로 보여준다. 제네릭·함수 시그니처 안의
@@ -107,10 +111,13 @@ function collectProps(typeName) {
     }
   }
 
-  const props = [...merged.values()].map((prop) => {
+  const props = [...merged.values()].map((entry) => {
+    const { seenOptional, seenRequired, ...prop } = entry;
     // 병합 경로와 무관하게 마지막에 한 번 더 union 멤버를 정규화·중복 제거한다.
     const type = normalizeType([...new Set(splitUnion(prop.type))].join(' | '));
-    return excludedInSomeBranch.has(prop.name) && prop.required
+    const conditional =
+      excludedInSomeBranch.has(prop.name) || (seenOptional && seenRequired);
+    return conditional
       ? { ...prop, type, required: false, conditional: true }
       : { ...prop, type };
   });

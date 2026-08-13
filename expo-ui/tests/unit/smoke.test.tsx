@@ -7,7 +7,7 @@ describe('스모크: vitest + react-native-web 렌더 파이프라인', () => {
   it('Button이 렌더되고 onPress 계약이 성립한다', () => {
     render(
       <UiProvider theme={createTheme('light')}>
-        <Button label="저장" testID="save" />
+        <Button label="저장" onPress={() => {}} testID="save" />
       </UiProvider>,
     );
     expect(screen.getByTestId('save')).toBeTruthy();

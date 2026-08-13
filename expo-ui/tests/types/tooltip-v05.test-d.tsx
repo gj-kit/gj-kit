@@ -23,7 +23,7 @@ describe('Tooltip public type contract', () => {
       placement,
       direction,
       size,
-      variant: 'secondary',
+      variant: 'ghost',
       delayMs: 500,
       closeDelayMs: 100,
       sideOffset: 8,

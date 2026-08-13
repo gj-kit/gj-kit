@@ -55,6 +55,172 @@ export function sanitizeMediaErrorMessage(message: string): string {
   return message.replace(/https?:\/\/[^\s<>"']+/gi, '[URL]').slice(0, 1_000);
 }
 
+// Debug details are an observation boundary, not a serialization API. Keep the snapshot small so
+// a malformed adapter object cannot turn an upload failure into an enormous console payload (or
+// smuggle a URL through a nested getter). The limits deliberately apply per node rather than to
+// the final JSON: logging must work without DOM/Node serialization globals and without invoking
+// host `toJSON` implementations.
+const MAX_DEBUG_DEPTH = 4;
+const MAX_DEBUG_OBJECT_KEYS = 32;
+const MAX_DEBUG_ARRAY_ITEMS = 32;
+const DEBUG_UNREADABLE = '[unreadable]';
+const DEBUG_CIRCULAR = '[circular]';
+const DEBUG_TRUNCATED = '[truncated]';
+
+type SafeDebugRecord = Readonly<Record<string, unknown>>;
+
+function safeDebugString(value: string): string {
+  return sanitizeMediaErrorMessage(value);
+}
+
+function isDebugRecord(value: unknown): value is Record<string, unknown> {
+  try {
+    return typeof value === 'object' && value !== null && !Array.isArray(value);
+  } catch {
+    // `Array.isArray` may throw for a revoked Proxy. Debugging must not add a new failure path.
+    return false;
+  }
+}
+
+/** Define on a null-prototype clone so a hostile `__proto__` key has no side effect. */
+function addSafeDebugField(target: Record<string, unknown>, key: string, value: unknown): void {
+  try {
+    Object.defineProperty(target, safeDebugString(key), {
+      value,
+      enumerable: true,
+      writable: false,
+      configurable: false,
+    });
+  } catch {
+    // A malformed/unusual property key is simply omitted. `key` is normally a primitive string,
+    // but this catch also keeps logging best-effort across unusual host runtimes.
+  }
+}
+
+/**
+ * Clone arbitrary debug data without trusting getters, `toJSON`, prototypes, or recursive graphs.
+ * Every string (including object keys) goes through the URL redactor; everything returned is a
+ * plain frozen graph owned by this module. This is intentionally private: application telemetry
+ * should receive the already-safe MediaError, never this diagnostic representation.
+ */
+function snapshotDebugValue(value: unknown, depth: number, seen: WeakSet<object>): unknown {
+  switch (typeof value) {
+    case 'string':
+      return safeDebugString(value);
+    case 'number':
+      return Number.isFinite(value) ? value : String(value);
+    case 'boolean':
+    case 'undefined':
+      return value;
+    case 'bigint':
+      return `${value.toString()}n`;
+    case 'symbol':
+      // Symbol descriptions are caller-controlled strings, so do not stringify them.
+      return '[symbol]';
+    case 'function':
+      return '[function]';
+    case 'object':
+      break;
+    default:
+      return DEBUG_UNREADABLE;
+  }
+
+  if (value === null) return null;
+  if (depth >= MAX_DEBUG_DEPTH) return DEBUG_TRUNCATED;
+  if (seen.has(value)) return DEBUG_CIRCULAR;
+  seen.add(value);
+
+  try {
+    if (Array.isArray(value)) {
+      const length = value.length;
+      if (!Number.isSafeInteger(length) || length < 0) return DEBUG_UNREADABLE;
+      const items: unknown[] = [];
+      const itemCount = Math.min(length, MAX_DEBUG_ARRAY_ITEMS);
+      for (let index = 0; index < itemCount; index += 1) {
+        try {
+          items.push(snapshotDebugValue(value[index], depth + 1, seen));
+        } catch {
+          items.push(DEBUG_UNREADABLE);
+        }
+      }
+      if (length > itemCount) items.push(DEBUG_TRUNCATED);
+      return Object.freeze(items);
+    }
+
+    const result = Object.create(null) as Record<string, unknown>;
+    const keys = Object.keys(value);
+    const keyCount = Math.min(keys.length, MAX_DEBUG_OBJECT_KEYS);
+    for (let index = 0; index < keyCount; index += 1) {
+      const key = keys[index];
+      // `Object.keys` produces string keys, but an exotic Proxy can still make the indexed read
+      // fail. Omit it rather than exposing the proxy's failure message.
+      if (typeof key !== 'string') continue;
+      let field: unknown;
+      try {
+        field = (value as Record<string, unknown>)[key];
+      } catch {
+        field = DEBUG_UNREADABLE;
+      }
+      addSafeDebugField(result, key, snapshotDebugValue(field, depth + 1, seen));
+    }
+    if (keys.length > keyCount) addSafeDebugField(result, 'truncated', DEBUG_TRUNCATED);
+    return Object.freeze(result);
+  } catch {
+    return DEBUG_UNREADABLE;
+  }
+}
+
+function snapshotDebugDetails(value: unknown): SafeDebugRecord {
+  const snapshot = snapshotDebugValue(value, 0, new WeakSet<object>());
+  return isDebugRecord(snapshot) ? snapshot : Object.freeze(Object.create(null) as Record<string, unknown>);
+}
+
+/** Extract an error summary without calling user-defined `toString`/`toJSON` methods. */
+function snapshotDebugError(error: unknown): {
+  readonly errorName?: string | undefined;
+  readonly errorMessage: string;
+} {
+  try {
+    if (error instanceof Error) {
+      const name = error.name;
+      const message = error.message;
+      return {
+        ...(typeof name === 'string' ? { errorName: safeDebugString(name) } : {}),
+        errorMessage: safeDebugString(typeof message === 'string' ? message : DEBUG_UNREADABLE),
+      };
+    }
+    if (typeof error === 'string') return { errorMessage: safeDebugString(error) };
+    if (typeof error === 'number' || typeof error === 'boolean' || typeof error === 'bigint') {
+      return { errorMessage: safeDebugString(String(error)) };
+    }
+  } catch {
+    // Host Error subclasses can make `name`/`message` getters throw. Do not stringify the thrown
+    // value: it may itself contain a signed URL.
+  }
+  return { errorMessage: DEBUG_UNREADABLE };
+}
+
+function mergeDebugDetails(input: {
+  readonly platform: string;
+  readonly context: unknown;
+  readonly details: unknown;
+  readonly error?: { readonly errorName?: string | undefined; readonly errorMessage: string } | undefined;
+}): SafeDebugRecord {
+  const merged = Object.create(null) as Record<string, unknown>;
+  addSafeDebugField(merged, 'platform', safeDebugString(input.platform));
+  for (const source of [snapshotDebugDetails(input.context), snapshotDebugDetails(input.details)]) {
+    for (const key of Object.keys(source)) {
+      // `source` is our own frozen null-prototype clone, so this read cannot execute host code.
+      addSafeDebugField(merged, key, source[key]);
+    }
+  }
+  if (input.error) {
+    if (input.error.errorName !== undefined) addSafeDebugField(merged, 'errorName', input.error.errorName);
+    addSafeDebugField(merged, 'errorMessage', input.error.errorMessage);
+  }
+  return Object.freeze(merged);
+}
+
 /**
  * 전신 `PhotoDebugLogger`(debug.ts:39-47)를 그대로 계승한다. 초안은 반환 타입만 있고 멤버가 없어
  * 구현자가 임의로 정할 수 있었다 — 그러면 하드닝 8의 새니타이즈 지점이 구현마다 달라진다(G14).
@@ -107,24 +273,47 @@ export function createMediaDebugLogger(input: {
   return {
     log(event, details) {
       if (!enabled) return;
-      consoleSink?.log(tag, event, {
-        platform: platform.os,
-        ...context?.(),
-        ...details,
-      });
+      // Debug context and even console shims are host code. Diagnostics must never turn a safe
+      // upload/device failure into a new public exception.
+      try {
+        let contextDetails: unknown;
+        try {
+          contextDetails = context?.();
+        } catch {
+          contextDetails = { context: DEBUG_UNREADABLE };
+        }
+        consoleSink?.log(
+          safeDebugString(tag),
+          safeDebugString(event),
+          mergeDebugDetails({ platform: platform.os, context: contextDetails, details }),
+        );
+      } catch {
+        // no-op
+      }
     },
     error(event, error, details) {
       if (!enabled) return;
-      consoleSink?.warn(tag, event, {
-        platform: platform.os,
-        ...context?.(),
-        ...details,
-        errorName: error instanceof Error ? error.name : undefined,
-        // 비-Error가 throw되는 경로가 실제로 있다(네이티브 브리지의 문자열 거부).
-        errorMessage: sanitizeMediaErrorMessage(
-          error instanceof Error ? error.message : String(error),
-        ),
-      });
+      try {
+        let contextDetails: unknown;
+        try {
+          contextDetails = context?.();
+        } catch {
+          contextDetails = { context: DEBUG_UNREADABLE };
+        }
+        consoleSink?.warn(
+          safeDebugString(tag),
+          safeDebugString(event),
+          mergeDebugDetails({
+            platform: platform.os,
+            context: contextDetails,
+            details,
+            error: snapshotDebugError(error),
+          }),
+        );
+      } catch {
+        // Error objects, context providers, and console shims can all be hostile. Logging remains
+        // best-effort and must not expose or replace the operational outcome.
+      }
     },
   };
 }

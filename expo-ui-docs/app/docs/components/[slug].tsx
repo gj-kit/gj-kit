@@ -8,7 +8,9 @@ import {
   getComponentSeoEntry,
   getRelatedComponents,
   isReleasedComponent,
+  isSourcePreview,
   publishedPackageVersion,
+  sourcePreviewVersion,
 } from '../../../src/seo-content';
 import {
   SeoHead,
@@ -76,14 +78,16 @@ export default function ComponentDetailPage(): ReactElement {
   const detail = getComponentDetail(entry.slug, locale);
   const path = componentDocsPath(entry.slug);
   const released = isReleasedComponent(entry);
+  const sourcePreview = isSourcePreview(entry);
+  const previewVersion = sourcePreviewVersion(entry);
   const Preview = getComponentPreview(entry.slug);
   const propsEntry = getComponentProps(entry.slug);
-  const title = released
+  const title = !sourcePreview
     ? `${entry.name} — Expo & React Native | GJ Kit Expo UI`
-    : `${entry.name} v${entry.since} preview | GJ Kit Expo UI`;
-  const description = released
+    : `${entry.name} v${previewVersion} preview | GJ Kit Expo UI`;
+  const description = !sourcePreview
     ? text.description
-    : `${text.description} npm latest is v${publishedPackageVersion}; this API ships in v${entry.since}.`;
+    : `${text.description} npm latest is v${publishedPackageVersion}; the source API ships in v${previewVersion}.`;
   const related = getRelatedComponents(entry);
   const { previous, next } = getAdjacentComponents(entry);
 
@@ -95,7 +99,7 @@ export default function ComponentDetailPage(): ReactElement {
         path={path}
         type="article"
         locale={locale}
-        noindex={!released}
+        noindex={sourcePreview}
         imageAlt={`${entry.name} — GJ Kit Expo UI component documentation`}
         schemas={[
           webPageSchema({ path, title, description, locale }),
@@ -128,14 +132,20 @@ export default function ComponentDetailPage(): ReactElement {
           // "Button — …type-safe Button"처럼 제목에서 이름이 두 번 나온다.
           title={detail?.headline ?? entry.name}
           description={text.description}
-          {...(!released ? { preview: `npm v${publishedPackageVersion} · v${entry.since}` } : {})}
+          {...(sourcePreview && previewVersion !== undefined
+            ? {
+                preview: released
+                  ? `npm v${publishedPackageVersion} · source updates v${previewVersion}`
+                  : `npm v${publishedPackageVersion} · v${previewVersion}`,
+              }
+            : {})}
         />
 
-        {!released ? <ReleaseNotice version={entry.since} /> : null}
+        {sourcePreview && previewVersion !== undefined ? <ReleaseNotice version={previewVersion} /> : null}
 
         {Preview ? (
           <SeoSection title={t.sectionPreview(entry.name)}>
-            <PreviewPanel note={t.previewNote}>
+            <PreviewPanel note={t.previewNote} sourcePreview={sourcePreview}>
               <Preview />
             </PreviewPanel>
           </SeoSection>
@@ -149,21 +159,21 @@ export default function ComponentDetailPage(): ReactElement {
         </SeoSection>
 
         <SeoSection
-          title={released ? t.sectionInstall : t.sectionInstallPreview(entry.since)}
+          title={!sourcePreview ? t.sectionInstall : t.sectionInstallPreview(previewVersion ?? entry.since)}
         >
           <SeoParagraph>
-            {released
+            {!sourcePreview
               ? t.installParagraph(entry.name)
-              : t.installParagraphPreview(entry.name, entry.since, publishedPackageVersion)}
+              : t.installParagraphPreview(entry.name, previewVersion ?? entry.since, publishedPackageVersion)}
           </SeoParagraph>
           {/*
             미공개 컴포넌트에 설치 명령을 그대로 두면 "설치하면 쓸 수 있다"는
             잘못된 신호를 준다. 설치 명령은 릴리스된 컴포넌트에만 보인다.
           */}
-          {released ? <CommandBlock command="pnpm add @gj-kit/expo-ui" /> : null}
+          {!sourcePreview ? <CommandBlock command="pnpm add @gj-kit/expo-ui" /> : null}
           <CodePanel
             code={`import { ${entry.name} } from '@gj-kit/expo-ui';\n\n${detail?.snippet ?? ''}`}
-            label={released ? 'TypeScript' : `TypeScript · v${entry.since} · not on npm yet`}
+            label={!sourcePreview ? 'TypeScript' : `TypeScript · v${previewVersion ?? entry.since} · not on npm yet`}
           />
         </SeoSection>
 
@@ -190,7 +200,9 @@ export default function ComponentDetailPage(): ReactElement {
                 href: componentDocsPath(candidate.slug),
                 title: candidate.name,
                 description: componentText(candidate, locale).description,
-                ...(!isReleasedComponent(candidate) ? { badge: `v${candidate.since}` } : {}),
+                ...(isSourcePreview(candidate)
+                  ? { badge: `v${sourcePreviewVersion(candidate) ?? candidate.since}` }
+                  : {}),
               }))}
             />
           </SeoSection>

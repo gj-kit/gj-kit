@@ -10,20 +10,23 @@
 
 import { describe, expect, it } from 'vitest';
 import type {
+  FileSystemAdapter,
   HashAdapter,
   LocalPosterAdapter,
   MediaPlatform,
   PickedAsset,
 } from '../../src/core/adapters';
-import type { MediaUploadLimits } from '../../src/core/types';
-import { mediaErrorCode } from '../../src/core/errors';
+import type { MediaUploadApi, MediaUploadCompletion, MediaUploadLimits } from '../../src/core/types';
+import { mediaErrorCode, mediaUploadFailureInfo } from '../../src/core/errors';
 import { createStagingCache } from '../../src/core/staging';
+import type { StagingCache } from '../../src/core/staging';
 import { createLocalUploads } from '../../src/core/upload/uploader';
 import {
   EXIF_FIXTURE,
   EXIF_GEO_POINT,
   createFakeUploadApi,
   createMemoryFileSystem,
+  createRecordingTelemetry,
   createRecordingTransport,
   exifCapturedAtIso,
   fakeBytes,
@@ -68,6 +71,7 @@ function setup(
     readonly poster?: LocalPosterAdapter;
     readonly failWithStatus?: number;
     readonly staged?: boolean;
+    readonly staging?: StagingCache;
     readonly limits?: MediaUploadLimits | 'server-enforced';
     readonly extraFiles?: Readonly<Record<string, Uint8Array>>;
   },
@@ -92,7 +96,7 @@ function setup(
     transport,
     ...(options?.hasher ? { hasher: options.hasher } : {}),
     ...(options?.poster ? { poster: options.poster } : {}),
-    ...(options?.staged ? { staging } : {}),
+    ...(options?.staging ? { staging: options.staging } : options?.staged ? { staging } : {}),
   });
   return { files, transport, api, staging, uploads };
 }
@@ -154,6 +158,41 @@ describe('uploadLocalFile — presign → PUT → complete', () => {
     expect(transport.puts).toEqual([]);
   });
 
+  it('hostile stat result getter의 raw URL 오류도 안전한 upload-failed로 정규화한다', async () => {
+    const rawUrl = 'https://files.example.test/secret?X-Amz-Signature=never-public';
+    const backing = createMemoryFileSystem({ files: { [IMAGE_URI]: fakeBytes(1234) } });
+    const files: FileSystemAdapter = {
+      cacheDirectory: () => backing.cacheDirectory(),
+      stat: async () =>
+        ({
+          get kind() {
+            throw new Error(`stat failed for ${rawUrl}`);
+          },
+        }) as unknown as Awaited<ReturnType<FileSystemAdapter['stat']>>,
+      copy: (input) => backing.copy(input),
+      remove: (uri) => backing.remove(uri),
+      readBase64: (uri, range) => backing.readBase64(uri, range),
+    };
+    const api = createFakeUploadApi<string>({ asset: (input) => input.objectName });
+    const transport = createRecordingTransport();
+    const uploads = createLocalUploads<string>({
+      api,
+      limits: 'server-enforced',
+      platform: fakePlatform('ios'),
+      files,
+      transport,
+    });
+
+    const error = await uploads
+      .uploadLocalFile({ uri: IMAGE_URI, fileName: 'a.jpg' })
+      .catch((thrown: unknown) => thrown);
+
+    expect(mediaErrorCode(error)).toBe('upload-failed');
+    expect(String((error as Error).message)).not.toContain(rawUrl);
+    expect(api.intents).toEqual([]);
+    expect(transport.puts).toEqual([]);
+  });
+
   it('2xx가 아니면 upload-failed이고 completeUpload를 부르지 않는다', async () => {
     const { api, uploads } = setup({ failWithStatus: 500 });
     const error = await uploads
@@ -164,13 +203,30 @@ describe('uploadLocalFile — presign → PUT → complete', () => {
   });
 
   it('크기 캡을 넘으면 file-too-large — presign 0회', async () => {
+    const { hasher, calls } = countingHasher();
     const { api, transport, uploads } = setup({
       limits: { image: { maxBytes: 1000 } },
+      hasher,
     });
     const error = await uploads
       .uploadLocalFile({ uri: IMAGE_URI, fileName: 'a.jpg' })
       .catch((thrown: unknown) => thrown);
     expect(mediaErrorCode(error)).toBe('file-too-large');
+    // cap은 stat 직후 적용된다. 이 단언이 없으면 대용량 거절 전에 전체 SHA-256을 읽어도
+    // `presign 0회`만으로는 회귀를 발견하지 못한다.
+    expect(calls.local).toEqual([]);
+    expect(api.intents).toEqual([]);
+    expect(transport.puts).toEqual([]);
+  });
+
+  it('web에서는 uploadLocalFile도 stat·presign·PUT 전에 막는다', async () => {
+    const { api, files, transport, uploads } = setup({ os: 'web' });
+    const error = await uploads
+      .uploadLocalFile({ uri: IMAGE_URI, fileName: 'a.jpg' })
+      .catch((thrown: unknown) => thrown);
+
+    expect(mediaErrorCode(error)).toBe('platform-unsupported');
+    expect(files.calls.stat).toEqual([]);
     expect(api.intents).toEqual([]);
     expect(transport.puts).toEqual([]);
   });
@@ -195,6 +251,69 @@ describe('uploadLocalFile — presign → PUT → complete', () => {
       collectionId: 'album-1',
     });
     expect(withValue.api.completions[0]?.collectionId).toBe('album-1');
+  });
+
+  it('등록 API raw 실패는 URL 없이 complete-stage cleanup 후보로 바뀐다', async () => {
+    const files = createMemoryFileSystem({
+      files: {
+        [VIDEO_URI]: fakeBytes(4321),
+        [POSTER_URI]: fakeBytes(64),
+      },
+    });
+    const telemetry = createRecordingTelemetry();
+    const transport = createRecordingTransport();
+    const completions: MediaUploadCompletion[] = [];
+    const rawUrl = 'https://api.example.test/complete?X-Amz-Signature=never-public';
+    const api: MediaUploadApi<string> = {
+      createUploadIntent(input) {
+        return Promise.resolve({
+          uploadUrl: `https://uploads.example.test/${input.fileName}`,
+          method: 'PUT',
+          headers: { 'content-type': input.contentType },
+          objectName: `objects/${input.fileName}`,
+        });
+      },
+      completeUpload(input) {
+        completions.push(input);
+        return Promise.reject(new Error(`registration rejected at ${rawUrl}`));
+      },
+    };
+    const uploads = createLocalUploads<string>({
+      api,
+      limits: 'server-enforced',
+      platform: fakePlatform('ios'),
+      files,
+      transport,
+      telemetry,
+      poster: fixedPoster(POSTER_URI),
+    });
+
+    const error = await uploads
+      .uploadLocalFile({ uri: VIDEO_URI, fileName: 'v.mp4', contentHash: 'cached' })
+      .catch((thrown: unknown) => thrown);
+
+    expect(completions).toHaveLength(1);
+    expect(mediaErrorCode(error)).toBe('upload-failed');
+    expect(String((error as Error).message)).not.toContain(rawUrl);
+    expect(telemetry.spans.find((span) => span.operation === 'media.upload.native')?.error).toBe(error);
+    expect(mediaUploadFailureInfo(error)).toEqual({
+      stage: 'complete',
+      orphanedObjects: [
+        {
+          objectName: 'objects/v-poster.jpg',
+          contentType: 'image/jpeg',
+          sizeBytes: 64,
+          storageState: 'uploaded',
+        },
+        {
+          objectName: 'objects/v.mp4',
+          contentType: 'video/mp4',
+          sizeBytes: 4321,
+          storageState: 'uploaded',
+        },
+      ],
+    });
+    expect(JSON.stringify(mediaUploadFailureInfo(error))).not.toContain('X-Amz-Signature');
   });
 });
 
@@ -328,6 +447,40 @@ describe('uploadPickedAsset', () => {
     expect(String((video as Error).message)).toContain('media');
   });
 
+  it('hostile EXIF getter의 raw 오류는 picker-invalid MediaError로 정규화한다', async () => {
+    const rawUrl = 'https://uploads.example.test/secret?X-Amz-Signature=must-not-leak';
+    const { api, uploads } = setup();
+    const hostile = {
+      uri: IMAGE_URI,
+      fileName: 'hostile.jpg',
+      get exif() {
+        throw new Error(`EXIF failed for ${rawUrl}`);
+      },
+    } as unknown as PickedAsset;
+
+    const error = await uploads.uploadPickedAsset(hostile).catch((thrown: unknown) => thrown);
+
+    expect(mediaErrorCode(error)).toBe('picked-asset-invalid');
+    expect(String((error as Error).message)).not.toContain(rawUrl);
+    expect(api.intents).toEqual([]);
+  });
+
+  it('hostile picker asset getter의 raw URL 오류도 picker-invalid로 정규화한다', async () => {
+    const rawUrl = 'https://picker.example.test/secret?X-Amz-Signature=must-not-leak';
+    const { api, uploads } = setup();
+    const hostile = {
+      get uri() {
+        throw new Error(`asset failed for ${rawUrl}`);
+      },
+    } as unknown as PickedAsset;
+
+    const error = await uploads.uploadPickedAsset(hostile).catch((thrown: unknown) => thrown);
+
+    expect(mediaErrorCode(error)).toBe('picked-asset-invalid');
+    expect(String((error as Error).message)).not.toContain(rawUrl);
+    expect(api.intents).toEqual([]);
+  });
+
   it('web에서는 platform-unsupported — 로컬 파일 스트리밍이 웹에 존재하지 않는다', async () => {
     const { api, transport, uploads } = setup({ os: 'web' });
     const error = await uploads.uploadPickedAsset(picked).catch((thrown: unknown) => thrown);
@@ -351,6 +504,26 @@ describe('스테이징 정리 (§7 하드닝 7)', () => {
 
     expect(files.calls.remove).toEqual([stagedUri]);
     expect(files.list()).not.toContain(stagedUri);
+  });
+
+  it('cleanup adapter가 raw URI 에러를 던져도 이미 성공한 등록 결과를 뒤집지 않는다', async () => {
+    const rawUri = 'file:///cache/gj-media-upload-secret.jpg';
+    const explodingStaging = {
+      prefix: 'gj-media-upload-',
+      owns: () => true,
+      uriFor: () => null,
+      cleanup: () => Promise.reject(new Error(`cannot clean ${rawUri}`)),
+    } as unknown as StagingCache;
+    const { api, uploads } = setup({ staging: explodingStaging });
+
+    const result = await uploads.uploadPickedAsset({
+      uri: IMAGE_URI,
+      assetId: 'A1',
+      fileName: 'a.jpg',
+    });
+
+    expect(result.duplicate).toBe(false);
+    expect(api.completions).toHaveLength(1);
   });
 
   it('업로드 실패에도 지워진다 — finally 보장', async () => {
@@ -411,6 +584,25 @@ describe('동영상 포스터 (§7.1 — 포스터 실패가 업로드를 막지
     const { api, uploads } = setup({ poster: exploding });
     const result = await uploads.uploadLocalFile({ uri: VIDEO_URI, fileName: 'v.mp4' });
     expect(result.duplicate).toBe(false);
+    expect(api.completions[0]).not.toHaveProperty('poster');
+  });
+
+  it('hostile poster frame getter의 raw URL 오류도 optional extraction 실패로만 처리한다', async () => {
+    const rawUrl = 'https://poster.example.test/secret?X-Amz-Signature=must-not-leak';
+    const hostile: LocalPosterAdapter = {
+      posterFromLocalFile: () =>
+        Promise.resolve({
+          get uri() {
+            throw new Error(`poster frame failed for ${rawUrl}`);
+          },
+        } as unknown as { readonly uri: string }),
+    };
+    const { api, uploads } = setup({ poster: hostile });
+
+    const result = await uploads.uploadLocalFile({ uri: VIDEO_URI, fileName: 'v.mp4' });
+
+    expect(result.duplicate).toBe(false);
+    expect(api.intents.map((intent) => intent.fileName)).toEqual(['v.mp4']);
     expect(api.completions[0]).not.toHaveProperty('poster');
   });
 

@@ -5,7 +5,8 @@
   // 코어가 DOM을 써도 된다는 뜻이 아니다. 코어의 무DOM 규율은 lib이 아니라
   // tsconfig.core.json(소스 가드)과 tests/guards의 dist 가드가 강제한다.
   "compilerOptions": {
-    "lib": ["ES2022", "DOM"]
+    "lib": ["ES2022", "DOM"],
+    "ignoreDeprecations": "6.0"
   },
   "include": ["src"]
 }

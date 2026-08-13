@@ -9,6 +9,7 @@
  * Provider 없이 훅·JSX를 타입 수준에서만 검사한다.
  */
 import { describe, expectTypeOf, it } from 'vitest';
+import { View } from 'react-native';
 import {
   Button,
   EmptyState,
@@ -23,6 +24,7 @@ import {
   defaultThemes,
   koStrings,
   lightTheme,
+  resolveTheme,
   useTheme,
   useToastController,
 } from '../../src/index';
@@ -52,6 +54,10 @@ describe('§6 ② IconButton accessibilityLabel 필수', () => {
 
   it('accessibilityLabel이 있으면 통과', () => {
     void (<IconButton accessibilityLabel="설정 열기" icon={gear} onPress={noop} />);
+    void (<IconButton accessibilityLabel="권한 없음" icon={gear} disabled />);
+    void (<IconButton accessibilityLabel="저장 중" icon={gear} loading />);
+    // @ts-expect-error enabled IconButton requires a real action
+    void (<IconButton accessibilityLabel="설정 열기" icon={gear} />);
   });
 });
 
@@ -63,10 +69,22 @@ describe('§6 ③ Button 내용 필수 — label·children 둘 다 없으면 에
 
   it('label만 있는 버튼은 통과', () => {
     void (<Button label="저장" onPress={noop} />);
+    void (<Button label="취소" variant="ghost" onPress={noop} />);
+    void (<Button label="권한 없음" disabled />);
+    void (<Button label="저장 중" loading />);
+    // @ts-expect-error enabled Button requires a real action
+    void (<Button label="저장" />);
   });
 
   it('children만 있는 버튼은 통과', () => {
     void (<Button onPress={noop}>저장</Button>);
+    void (
+      <Button accessibilityLabel="사용자 정보 열기" onPress={noop}>
+        <View />
+      </Button>
+    );
+    // @ts-expect-error rich children have no reliable inferred accessible name
+    void (<Button onPress={noop}><View /></Button>);
   });
 });
 
@@ -130,7 +148,7 @@ describe('§6 ⑦ unstyled 잔재 — 직접 지정·스프레드 경유 모두 
   });
 
   it('unstyled 없는 스프레드는 통과', () => {
-    const cleanProps = { label: 'x' };
+    const cleanProps = { label: 'x', onPress: noop };
     void (<Button {...cleanProps} />);
   });
 });
@@ -180,6 +198,10 @@ describe('§3.3/§3.4/§5.11 공개 타입 표면 (expectTypeOf)', () => {
   it('createTheme/createThemes 반환은 Theme/ThemePair', () => {
     expectTypeOf(createTheme).returns.toEqualTypeOf<Theme>();
     expectTypeOf(createThemes).returns.toEqualTypeOf<ThemePair>();
+  });
+
+  it('resolveTheme always returns a concrete Theme', () => {
+    expectTypeOf(resolveTheme).returns.toEqualTypeOf<Theme>();
   });
 
   it('useToastController는 ToastPayload 확장 제네릭을 유지한다', () => {

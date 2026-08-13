@@ -20,6 +20,8 @@ export type ButtonVariant =
   | 'primary'
   | 'primary-outline'
   | 'secondary'
+  /** A transparent action that uses the ordinary text color. */
+  | 'ghost'
   | 'destructive'
   | 'destructive-outline'
   | 'inverse';
@@ -35,6 +37,13 @@ type ButtonPalette = {
 /** (internal) variant × disabled to resolved colors. Inherited from the predecessor's buttonPalette — all token-derived. */
 export function buttonPalette(variant: ButtonVariant, disabled: boolean, theme: Theme): ButtonPalette {
   if (disabled) {
+    if (variant === 'ghost') {
+      return {
+        // Transparency is structural rather than a design color; the disabled label still comes from a theme token.
+        backgroundColor: 'transparent',
+        textColor: theme.colors.textSubtle,
+      };
+    }
     return {
       backgroundColor:
         variant === 'primary' || variant === 'destructive' || variant === 'inverse'
@@ -57,6 +66,9 @@ export function buttonPalette(variant: ButtonVariant, disabled: boolean, theme: 
         borderColor: theme.colors.line,
         textColor: theme.colors.text,
       };
+    case 'ghost':
+      // Transparency is structural rather than a design color; the label and icon stay token-derived.
+      return { backgroundColor: 'transparent', textColor: theme.colors.text };
     case 'destructive':
       return { backgroundColor: theme.colors.dangerStrong, textColor: theme.colors.onDanger };
     case 'destructive-outline':
@@ -94,36 +106,118 @@ function buttonDimensions(theme: Theme, size: ButtonSize) {
 
 export const PRESSABLE_FEEDBACK_CLASS = 'hover:brightness-90 active:scale-[0.98]';
 
+type ButtonAction = () => void;
+
+/**
+ * An enabled control must have work to do. The inert branches intentionally
+ * allow an omitted callback so loading placeholders and disabled permissions do
+ * not need meaningless no-op handlers.
+ */
+type ButtonInteractionProps =
+  | {
+      onPress: ButtonAction;
+      disabled?: boolean | undefined;
+      loading?: boolean | undefined;
+    }
+  | {
+      onPress?: ButtonAction | undefined;
+      disabled: true;
+      loading?: boolean | undefined;
+    }
+  | {
+      onPress?: ButtonAction | undefined;
+      disabled?: boolean | undefined;
+      loading: true;
+    };
+
 type ButtonOwnProps = {
-  onPress?: (() => void) | undefined;
   variant?: ButtonVariant | undefined;
   size?: ButtonSize | undefined;
-  disabled?: boolean | undefined;
-  loading?: boolean | undefined;
   /** A static node or a render function — unifies the predecessor's icon, renderIcon, and iconColor trio (§5.2). */
   icon?: ReactNode | RenderIcon | undefined;
   /** Defaults to metrics.icon.md. */
   iconSize?: number | undefined;
   /** Prevents label clipping in a fixed-height button. Defaults to metrics.maxFontScale. */
   maxFontSizeMultiplier?: number | undefined;
-  accessibilityLabel?: string | undefined;
   labelStyle?: StyleProp<TextStyle> | undefined;
   labelClassName?: string | undefined;
 } & CommonProps;
 
+type ButtonTextChildren = string | number;
+type ButtonCustomChildren = Exclude<ReactNode, ButtonTextChildren | boolean | null | undefined>;
+
+type ButtonContentProps =
+  | {
+      /** Visible text and the default accessible name. */
+      label: string;
+      children?: ReactNode | undefined;
+      accessibilityLabel?: string | undefined;
+    }
+  | {
+      label?: never;
+      /** Text children supply the default accessible name. */
+      children: ButtonTextChildren;
+      accessibilityLabel?: string | undefined;
+    }
+  | {
+      label?: never;
+      /** Rich children require an explicit name on the owning button. */
+      children: ButtonCustomChildren;
+      accessibilityLabel: string;
+    };
+
 /**
- * Exactly one of label or children is required — a button with no content is a
- * compile error (§6 ③). children is NonNullable, which narrows the
- * `children={maybeUndefined}` workaround that would leave both the content and the
- * a11y name empty (an adversarial-review finding). Runtime blanks such as an empty
- * string are beyond what types can catch (§6 ③, boundary). For an icon alone, use
- * IconButton.
+ * A Button always has both visible content and a non-empty accessible name. Text
+ * labels and text children name themselves; arbitrary rich children require an
+ * explicit accessibilityLabel. Enabled controls also require onPress. For an
+ * icon-only action, use IconButton.
  */
-export type ButtonProps = ButtonOwnProps &
-  (
-    | { label: string; children?: ReactNode | undefined }
-    | { label?: never; children: NonNullable<ReactNode> }
-  );
+export type ButtonProps = ButtonOwnProps & ButtonContentProps & ButtonInteractionProps;
+
+function assertNonBlankString(value: unknown, name: string): asserts value is string {
+  if (typeof value !== 'string' || value.trim().length === 0) {
+    throw new Error(`${name} must be a non-empty string.`);
+  }
+}
+
+function assertActionContract({
+  componentName,
+  disabled,
+  loading,
+  onPress,
+}: {
+  readonly componentName: string;
+  readonly disabled: boolean;
+  readonly loading: boolean;
+  readonly onPress: unknown;
+}): void {
+  if (!disabled && !loading && typeof onPress !== 'function') {
+    throw new Error(`${componentName} requires onPress unless disabled or loading.`);
+  }
+}
+
+function resolveButtonAccessibilityLabel({
+  label,
+  children,
+  accessibilityLabel,
+}: {
+  readonly label: string | undefined;
+  readonly children: ReactNode | undefined;
+  readonly accessibilityLabel: string | undefined;
+}): string {
+  const inferred =
+    label ??
+    (typeof children === 'string' || typeof children === 'number' ? String(children) : undefined);
+  // An explicit accessible name must not turn an empty visible text branch into
+  // an invisible button. Rich children are separately allowed because their
+  // visible content is owned by the child; text branches must contain text.
+  if (inferred !== undefined) {
+    assertNonBlankString(inferred, 'Button label or text children');
+  }
+  const resolved = accessibilityLabel ?? inferred;
+  assertNonBlankString(resolved, 'Button accessibilityLabel');
+  return resolved;
+}
 
 const getStyles = themedStyles((theme: Theme) => ({
   button: {
@@ -164,11 +258,22 @@ export function Button(props: ButtonProps): ReactElement {
   const palette = buttonPalette(variant, inert, theme);
   const dimensions = buttonDimensions(theme, size);
   const content = label ?? children;
+  const resolvedAccessibilityLabel = resolveButtonAccessibilityLabel({
+    label,
+    children,
+    accessibilityLabel,
+  });
+  assertActionContract({
+    componentName: 'Button',
+    disabled,
+    loading,
+    onPress,
+  });
 
   return (
     <Pressable
       accessibilityRole="button"
-      accessibilityLabel={accessibilityLabel ?? label}
+      accessibilityLabel={resolvedAccessibilityLabel}
       // 전신의 unstyled 분기별 busy 비일관 제거 — 단일 계약(§5.2).
       // aria-* 병기 — RNW는 accessibilityState 객체를 DOM aria로 매핑하지 않는다(테스트 실측).
       accessibilityState={{ disabled: Boolean(disabled || loading), busy: loading }}
@@ -228,21 +333,21 @@ export function Button(props: ButtonProps): ReactElement {
   );
 }
 
-export interface IconButtonProps {
+type IconButtonBaseProps = {
   /** Required — prevents a screen reader blank on an icon-only button (§6 ②). */
   accessibilityLabel: string;
   icon: ReactNode | RenderIcon;
-  onPress?: (() => void) | undefined;
   variant?: ButtonVariant | undefined;
   /** The diameter. Defaults to 40 — the mark size is derived automatically (size × 0.48). */
   size?: number | undefined;
-  disabled?: boolean | undefined;
-  loading?: boolean | undefined;
   style?: StyleProp<ViewStyle> | undefined;
   className?: string | undefined;
   testID?: string | undefined;
   unstyled?: never;
-}
+};
+
+/** An icon action needs a non-empty name and onPress unless it is inert. */
+export type IconButtonProps = IconButtonBaseProps & ButtonInteractionProps;
 
 const getIconButtonStyles = themedStyles((theme: Theme) => ({
   circle: {
@@ -267,6 +372,13 @@ export function IconButton({
   className,
   testID,
 }: IconButtonProps): ReactElement {
+  assertNonBlankString(accessibilityLabel, 'IconButton accessibilityLabel');
+  assertActionContract({
+    componentName: 'IconButton',
+    disabled,
+    loading,
+    onPress,
+  });
   const theme = useTheme();
   const styles = getIconButtonStyles(theme);
   const palette = buttonPalette(variant, disabled && !loading, theme);

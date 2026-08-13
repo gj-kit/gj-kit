@@ -170,4 +170,52 @@ describe('createMediaDebugLogger — 게이트 platform.isDev && os !== "web"', 
     expect(details['errorName']).toBeUndefined();
     expect(details['errorMessage']).toBe('rejected [URL]');
   });
+
+  it('details·nested getters·context 속 서명 URL도 새 스냅샷에서 모두 지운다', () => {
+    const log = vi.spyOn(console, 'log').mockImplementation(() => {});
+    const rawUrl = SIGNED_UPLOAD_URL;
+    const hostile = {
+      fileName: `looks-like-a-name-${rawUrl}`,
+      nested: {
+        value: rawUrl,
+        get unreadable() {
+          throw new Error(`getter leaked ${rawUrl}`);
+        },
+      },
+    };
+    createMediaDebugLogger({
+      platform: { os: 'ios', isDev: true },
+      options: {
+        enabled: true,
+        tag: `[host ${rawUrl}]`,
+        context: () => ({ account: rawUrl }),
+      },
+    }).log(`event ${rawUrl}`, hostile);
+
+    const [tag, event, details] = log.mock.calls[0] ?? [];
+    const serialized = JSON.stringify([tag, event, details]);
+    expect(serialized).not.toContain('https://');
+    expect(serialized).not.toContain('X-Amz-Signature');
+    expect(serialized).toContain('[URL]');
+    expect((details as Record<string, unknown>)['nested']).toMatchObject({ unreadable: '[unreadable]' });
+  });
+
+  it('순환·과대 details는 bounded plain snapshot으로 남기고 로그를 실패시키지 않는다', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const circular: Record<string, unknown> = { text: 'safe' };
+    circular['self'] = circular;
+    const manyKeys = Object.fromEntries(
+      Array.from({ length: 40 }, (_unused, index) => [`key-${index}`, index]),
+    );
+    createMediaDebugLogger({ platform: { os: 'ios', isDev: true } }).error(
+      'upload.failed',
+      new Error('ordinary failure'),
+      { circular, manyKeys },
+    );
+
+    const details = warn.mock.calls[0]?.[2] as Record<string, unknown>;
+    expect((details['circular'] as Record<string, unknown>)['self']).toBe('[circular]');
+    expect((details['manyKeys'] as Record<string, unknown>)['truncated']).toBe('[truncated]');
+    expect(Object.isFrozen(details)).toBe(true);
+  });
 });

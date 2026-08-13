@@ -15,7 +15,7 @@ import type {
   HashAdapter,
   NamedBinarySource,
 } from '../../src/core/adapters';
-import { mediaErrorCode } from '../../src/core/errors';
+import { mediaErrorCode, mediaUploadFailureInfo } from '../../src/core/errors';
 import { sha256Hex } from '../../src/core/sha256';
 import { createBinaryUploads } from '../../src/core/upload/binary';
 import {
@@ -69,6 +69,53 @@ describe('uploadBinary — 이미지', () => {
     expect(transport.puts[0]?.sizeBytes).toBe(512);
     expect(transport.puts[0]?.url).toBe(api.issued[0]?.uploadUrl);
     expect(api.completions[0]?.sizeBytes).toBe(512);
+  });
+
+  it('loader BinarySource header는 한 번 snapshot하고 이후 getter URL 오류를 노출하지 않는다', async () => {
+    const rawUrl = 'https://loader.example.test/secret?X-Amz-Signature=must-not-leak';
+    const base = png('safe.png', 32);
+    let sizeReads = 0;
+    const source = {
+      get size() {
+        sizeReads += 1;
+        if (sizeReads === 1) return 32;
+        throw new Error(`second size read exposed ${rawUrl}`);
+      },
+      get type() {
+        return 'image/png';
+      },
+      get name() {
+        return 'safe.png';
+      },
+      arrayBuffer: () => base.arrayBuffer(),
+    } as unknown as NamedBinarySource;
+    const { api, uploads } = setup();
+
+    const result = await uploads.uploadBinary({ source });
+
+    expect(result.duplicate).toBe(false);
+    expect(sizeReads).toBe(1);
+    expect(api.intents).toEqual([{ fileName: 'safe.png', contentType: 'image/png', sizeBytes: 32 }]);
+  });
+
+  it('hostile BinarySource getter raw URL 오류는 telemetry 전에 safe upload-failed로 바뀐다', async () => {
+    const rawUrl = 'https://loader.example.test/secret?X-Amz-Signature=must-not-leak';
+    const { api, transport, uploads } = setup();
+    const source = {
+      get size() {
+        throw new Error(`loader failed for ${rawUrl}`);
+      },
+      name: 'hostile.png',
+      type: 'image/png',
+      arrayBuffer: () => Promise.resolve(new ArrayBuffer(0)),
+    } as unknown as NamedBinarySource;
+
+    const error = await uploads.uploadBinary({ source }).catch((thrown: unknown) => thrown);
+
+    expect(mediaErrorCode(error)).toBe('upload-failed');
+    expect(String((error as Error).message)).not.toContain(rawUrl);
+    expect(api.intents).toEqual([]);
+    expect(transport.puts).toEqual([]);
   });
 
   it('contentHash는 바이트의 SHA-256이다', async () => {
@@ -248,6 +295,27 @@ describe('uploadBinary — 동영상 포스터 3상태', () => {
     expect(api.completions[0]).not.toHaveProperty('poster');
   });
 
+  it('hostile poster adapter result getter의 raw URL 오류도 optional extraction 실패로만 처리한다', async () => {
+    const rawUrl = 'https://poster.example.test/secret?X-Amz-Signature=must-not-leak';
+    const hostile: BinaryPosterAdapter = {
+      posterFromBinary: () =>
+        Promise.resolve({
+          get size() {
+            throw new Error(`poster source failed for ${rawUrl}`);
+          },
+          type: 'image/jpeg',
+          arrayBuffer: () => Promise.resolve(new ArrayBuffer(0)),
+        } as unknown as BinarySource),
+    };
+    const { api, uploads } = setup({ poster: hostile });
+
+    const result = await uploads.uploadBinary({ source: mp4() });
+
+    expect(result.duplicate).toBe(false);
+    expect(api.intents.map((intent) => intent.fileName)).toEqual(['v.mp4']);
+    expect(api.completions[0]).not.toHaveProperty('poster');
+  });
+
   it('빈 포스터(0바이트)는 presign하지 않는다', async () => {
     const { adapter } = countingPoster(
       createBinarySource(new Uint8Array(0), { name: 'p.jpg', type: 'image/jpeg' }),
@@ -256,6 +324,41 @@ describe('uploadBinary — 동영상 포스터 3상태', () => {
     await uploads.uploadBinary({ source: mp4() });
     expect(api.intents).toHaveLength(1);
     expect(api.completions[0]).not.toHaveProperty('poster');
+  });
+
+  it('poster PUT의 모호한 실패는 본체를 계속 올리지 않고 cleanup 후보를 남긴다', async () => {
+    const rawUrl = 'https://uploads.example.test/poster?X-Amz-Signature=never-public';
+    const transport = createRecordingTransport({
+      onPut: () => Promise.reject(new Error(`poster PUT failed: ${rawUrl}`)),
+    });
+    const api = createFakeUploadApi<string>({ asset: (input) => input.objectName });
+    const uploads = createBinaryUploads<string>({
+      api,
+      limits: 'server-enforced',
+      platform: fakePlatform('web'),
+      transport,
+    });
+
+    const error = await uploads
+      .uploadBinary({ source: mp4(), poster: posterSource() })
+      .catch((thrown: unknown) => thrown);
+
+    expect(mediaErrorCode(error)).toBe('upload-failed');
+    expect(String((error as Error).message)).not.toContain(rawUrl);
+    expect(api.intents).toEqual([
+      { fileName: 'v-poster.jpg', contentType: 'image/jpeg', sizeBytes: 24 },
+    ]);
+    expect(mediaUploadFailureInfo(error)).toEqual({
+      stage: 'put',
+      orphanedObjects: [
+        {
+          objectName: 'objects/0-v-poster.jpg',
+          contentType: 'image/jpeg',
+          sizeBytes: 24,
+          storageState: 'possibly-uploaded',
+        },
+      ],
+    });
   });
 });
 

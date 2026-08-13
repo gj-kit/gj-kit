@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { Text } from 'react-native';
 import { UiProvider } from '../../src/components/provider';
 import { Tooltip } from '../../src/components/tooltip.native';
-import { lightTheme } from '../../src/theme/createTheme';
+import { createTheme, lightTheme } from '../../src/theme/createTheme';
 
 const nativeCapture = vi.hoisted(() => ({
   pressableProps: null as Record<string, unknown> | null,
@@ -75,6 +75,25 @@ describe('Tooltip native — accessibilityHint-only policy', () => {
     expect(trigger.style.width).toBe(`${lightTheme.metrics.control.lg}px`);
     fireEvent.click(trigger);
     expect(onPress).toHaveBeenCalledTimes(1);
+  });
+
+  it('accepts the shared ghost ButtonVariant with a transparent, text-token trigger', () => {
+    const renderIcon = vi.fn(() => <Text aria-hidden>?</Text>);
+    const theme = createTheme('light', { colors: { text: '#123456' } });
+    render(
+      <UiProvider theme={theme}>
+        <Tooltip
+          triggerLabel="Dismiss"
+          triggerIcon={renderIcon}
+          content="Dismisses this panel"
+          variant="ghost"
+          onPress={() => {}}
+        />
+      </UiProvider>,
+    );
+
+    expect(screen.getByRole('button', { name: 'Dismiss' }).style.backgroundColor).toBe('rgba(0, 0, 0, 0)');
+    expect(renderIcon).toHaveBeenCalledWith({ color: '#123456', size: lightTheme.metrics.icon.md });
   });
 
   it('validates description and placement without installing tooltip timers', () => {

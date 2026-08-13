@@ -17,6 +17,8 @@ export type ComponentSeoEntry = {
   readonly slug: string;
   readonly name: string;
   readonly since: string;
+  /** A later source-only API addition to an already published component. */
+  readonly sourceUpdatesSince?: string | undefined;
   readonly related: readonly string[];
   readonly ko: ComponentSeoText;
   readonly en: ComponentSeoText;
@@ -88,8 +90,12 @@ function versionParts(version: string): readonly number[] {
 }
 
 export function isReleasedComponent(entry: ComponentSeoEntry): boolean {
+  return isVersionPublished(entry.since);
+}
+
+function isVersionPublished(version: string): boolean {
   const published = versionParts(publishedPackageVersion);
-  const introduced = versionParts(entry.since);
+  const introduced = versionParts(version);
   const length = Math.max(published.length, introduced.length);
   for (let index = 0; index < length; index += 1) {
     const publishedPart = published[index] ?? 0;
@@ -98,6 +104,21 @@ export function isReleasedComponent(entry: ComponentSeoEntry): boolean {
     if (publishedPart < introducedPart) return false;
   }
   return true;
+}
+
+/** True when a published component page documents source APIs that npm does not yet contain. */
+export function hasUnreleasedSourceUpdates(entry: ComponentSeoEntry): boolean {
+  return entry.sourceUpdatesSince !== undefined && !isVersionPublished(entry.sourceUpdatesSince);
+}
+
+/** A page must stay out of search until both the component and its documented source updates ship. */
+export function isSourcePreview(entry: ComponentSeoEntry): boolean {
+  return !isReleasedComponent(entry) || hasUnreleasedSourceUpdates(entry);
+}
+
+export function sourcePreviewVersion(entry: ComponentSeoEntry): string | undefined {
+  if (!isReleasedComponent(entry)) return entry.since;
+  return hasUnreleasedSourceUpdates(entry) ? entry.sourceUpdatesSince : undefined;
 }
 
 /**

@@ -6,7 +6,8 @@
   "extends": "../tsconfig.base.json",
   "compilerOptions": {
     "lib": ["ES2022"],
-    "noEmit": true
+    "noEmit": true,
+    "ignoreDeprecations": "6.0"
   },
   "include": ["src"],
   "exclude": ["src/web", "src/web.ts", "src/save/web.ts", "src/save.web.ts"]

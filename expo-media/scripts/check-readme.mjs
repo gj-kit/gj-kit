@@ -188,6 +188,9 @@ writeFileSync(
         module: 'ESNext',
         moduleResolution: 'Bundler',
         skipLibCheck: true,
+        // Expo SDK 56's supported TypeScript 6 emits a deprecation diagnostic
+        // for the path-mapping fixture's deliberate baseUrl setting.
+        ignoreDeprecations: '6.0',
         noEmit: true,
         // DOM은 여기서 주지 않는다 — `dist/web.d.ts`의 각인으로만 들어온다(파일 헤더 참고).
         lib: ['ES2022'],

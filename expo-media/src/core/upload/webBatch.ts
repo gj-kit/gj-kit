@@ -58,7 +58,7 @@ export async function uploadDroppedFiles<TAsset, TCollectionId extends string = 
   const maxFiles = input.options?.maxFiles ?? DEFAULT_MAX_DROPPED_FILES;
   const mediaFiles = input.files.slice(0, maxFiles);
   if (!mediaFiles.length) {
-    // 전신은 bare `Error`였다(uploader.ts:625) — code로 분류할 방법이 없었다(§5.2 신설 6종).
+    // 전신은 bare `Error`였다(uploader.ts:625) — code로 분류할 방법이 없었다(§5.2 typed-error 계약).
     throw new MediaError('no-media-selected', input.strings.noMediaFiles);
   }
   assertAllSupportedMedia(mediaFiles, input.strings);

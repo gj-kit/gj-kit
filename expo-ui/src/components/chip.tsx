@@ -1,10 +1,11 @@
 /**
- * Chip — short actions, toggle filters, and removable values in one visual language.
+ * Chip — short actions, toggle filters, static selections, and removable values in one visual language.
  *
  * A chip has no single ARIA pattern of its own, so kind pins the semantics and
  * the callback together: action is a button, filter is a toggle button whose name
- * does not change, and removable is a static value plus a separate remove button.
- * The removable Pressable is never nested inside the container.
+ * does not change, static is plain text with an optional visual selected state, and
+ * removable is a static value plus a separate remove button. The removable Pressable
+ * is never nested inside the container.
  */
 import type { ReactElement, ReactNode } from 'react';
 import { Platform, Pressable, StyleSheet, Text as RNText, View } from 'react-native';
@@ -18,7 +19,7 @@ import { PRESSABLE_FEEDBACK_CLASS } from './button';
 import { useIcons, useTheme } from './provider';
 import { roleTextStyle } from './text';
 
-export type ChipKind = 'action' | 'filter' | 'removable';
+export type ChipKind = 'action' | 'filter' | 'static' | 'removable';
 export type ChipVariant = 'filled' | 'outlined';
 export type ChipSize = 'sm' | 'md';
 
@@ -55,6 +56,18 @@ export type FilterChipProps = ChipBaseProps & {
   removeAccessibilityLabel?: never;
 };
 
+/** A read-only value or selected tag. `selected` changes appearance only; this branch has no widget role or selection ARIA state. */
+export type StaticChipProps = Omit<ChipBaseProps, 'disabled'> & {
+  kind: 'static';
+  /** Defaults to false. This is visual state only; use a filter chip when the user can change it. */
+  selected?: boolean | undefined;
+  disabled?: never;
+  onPress?: never;
+  onSelectedChange?: never;
+  onRemove?: never;
+  removeAccessibilityLabel?: never;
+};
+
 export type RemovableChipProps = ChipBaseProps & {
   kind: 'removable';
   onRemove: () => void;
@@ -65,7 +78,7 @@ export type RemovableChipProps = ChipBaseProps & {
   onSelectedChange?: never;
 };
 
-export type ChipProps = ActionChipProps | FilterChipProps | RemovableChipProps;
+export type ChipProps = ActionChipProps | FilterChipProps | StaticChipProps | RemovableChipProps;
 
 type ChipPalette = {
   backgroundColor: string;
@@ -237,7 +250,8 @@ export function Chip(props: ChipProps): ReactElement {
   const theme = useTheme();
   const icons = useIcons();
   const styles = getStyles(theme);
-  const selected = props.kind === 'filter' ? props.selected : false;
+  const selected =
+    props.kind === 'filter' || props.kind === 'static' ? Boolean(props.selected) : false;
   const palette = chipPalette(theme, variant, selected, disabled);
   const dimensions = chipDimensions(theme, size);
   const checkIcon: RenderIcon =
@@ -311,6 +325,20 @@ export function Chip(props: ChipProps): ReactElement {
             size={dimensions.iconSize}
           />
         </Pressable>
+      </View>
+    );
+  }
+
+  if (props.kind === 'static') {
+    // A static chip is ordinary text, not a disabled button or a selection widget.
+    // Its selected prop changes color only, so it emits neither button nor ARIA selection state.
+    return (
+      <View
+        testID={testID}
+        {...nativeWindProps(className)}
+        style={rootStyle}
+      >
+        {sharedContent}
       </View>
     );
   }

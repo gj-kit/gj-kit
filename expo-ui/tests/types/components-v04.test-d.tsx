@@ -11,14 +11,17 @@ import {
   Link,
   Tabs,
 } from '../../src/index';
-import type { FormFieldControlProps } from '../../src/index';
+import type { FormFieldControlProps, StaticChipProps } from '../../src/index';
 
 const noop = (): void => undefined;
 
-describe('v0.4 Chip — action/filter/removable 의미 분리', () => {
+describe('v0.4 Chip — action/filter/static/removable 의미 분리', () => {
   it('각 branch는 필요한 handler만 허용한다', () => {
     void (<Chip kind="action" label="실행" onPress={noop} />);
     void (<Chip kind="filter" label="완료" selected onSelectedChange={noop} />);
+    void (<Chip kind="static" label="읽기 전용 선택" selected />);
+    const staticChip: StaticChipProps = { kind: 'static', label: '읽기 전용 선택', selected: true };
+    void staticChip;
     void (
       <Chip
         kind="removable"
@@ -34,6 +37,12 @@ describe('v0.4 Chip — action/filter/removable 의미 분리', () => {
     void (<Chip kind="removable" label="React" onRemove={noop} />);
     // @ts-expect-error filter는 controlled selected 값이 필요하다
     void (<Chip kind="filter" label="완료" onSelectedChange={noop} />);
+    // @ts-expect-error static은 사용자 상호작용을 가질 수 없다
+    void (<Chip kind="static" label="읽기 전용 선택" onPress={noop} />);
+    // @ts-expect-error static은 disabled widget이 아니다
+    void (<Chip kind="static" label="읽기 전용 선택" disabled />);
+    // @ts-expect-error static의 visual selected state에는 변경 callback이 없다
+    void (<Chip kind="static" label="읽기 전용 선택" selected onSelectedChange={noop} />);
   });
 });
 

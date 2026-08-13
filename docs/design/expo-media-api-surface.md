@@ -145,9 +145,9 @@ expo-media/                        # @gj-kit/expo-media
    │  ├─ brand.ts                  # (비공개) **타입 전용** phantom property — 런타임 심볼 없음(§5.3). 재export 금지
    │  ├─ adapters.ts               # 어댑터 계약 전부 (§3)
    │  ├─ types.ts                  # api 계약, 결과 타입, telemetry
-   │  ├─ errors.ts                 # MediaError(Symbol.for 태그) + 14 코드
+   │  ├─ errors.ts                 # MediaError(Symbol.for 태그) + 16 코드
    │  ├─ telemetry.ts              # MediaTelemetry/MediaActivity 스팬 계약 + MEDIA_OPERATIONS 6종
-   │  ├─ strings.ts                # MediaStrings(20키) + enMediaStrings/koMediaStrings
+   │  ├─ strings.ts                # MediaStrings(22키) + enMediaStrings/koMediaStrings
    │  ├─ mediaTypes.ts             # 확장자↔MIME 단일 테이블 (전신 168줄 그대로)
    │  ├─ metadata.ts               # EXIF dict + JPEG APP1 파서 (전신 290줄 그대로)
    │  ├─ sha256.ts                 # 순수 TS 증분 SHA-256 (§9)
@@ -170,7 +170,7 @@ expo-media/                        # @gj-kit/expo-media
 
 | 엔트리 | 내용 | 이 엔트리가 정적 import하는 peer | 대표 소비자 |
 |---|---|---|---|
-| `"./core"` | 어댑터 계약 전부, 팩토리 7종(§5), `MediaError`(14코드), `MediaStrings`(20키)+en/ko, mediaTypes 테이블, EXIF 파서, 순수 TS SHA-256, `computeChunkRanges`, `StagingCache`, `summarizeUri`/`sanitizeMediaErrorMessage`, 기기 자산 해석 정책, 크기·duration 정규화 | **없음** (react-native조차 없음. DOM lib도 없음) | bare RN, web-only, Node 스크립트, gj-kit vitest, 커스텀 어댑터 구현자 |
+| `"./core"` | 어댑터 계약 전부, 팩토리 8종(§5), `MediaError`(16코드), `MediaStrings`(22키)+en/ko, mediaTypes 테이블, EXIF 파서, 순수 TS SHA-256, `computeChunkRanges`, `StagingCache`, `summarizeUri`/`sanitizeMediaErrorMessage`, 기기 자산 해석 정책, 크기·duration 정규화 | **없음** (react-native조차 없음. DOM lib도 없음) | bare RN, web-only, Node 스크립트, gj-kit vitest, 커스텀 어댑터 구현자 |
 | `"."` | `"./core"` 전체 재export + `createMediaKit` + expo 기본 어댑터(platform·fs·localTransport·binaryTransport·hasher) | `react-native`, `expo-file-system`(+`/legacy`) | **골든패스.** 로컬 URI 업로드(동기화 엔진), 웹 Blob 업로드 |
 | `"./picker"` | `expoPicker` — OS 피커/카메라, 권한, iOS 원본 fast path | `expo-image-picker`, `react-native` | 피커·카메라 업로드를 하는 앱 |
 | `"./device"` | `expoDeviceLibrary` — 권한(granular)·페이지네이션·앨범·자산정보. **비네이티브 포크**(`node`+`browser` 조건) → 열거는 빈 결과, resolve는 `platform-unsupported` | `expo-media-library/legacy`, `react-native` | 인앱 기기 사진 그리드, 자동 동기화 스캐너 |
@@ -768,7 +768,7 @@ export type SaveTarget =
 
 ## 4. 문구 주입 (`MediaStrings`)
 
-전신의 한국어 하드코딩은 **리터럴 24개**(V6 실측: uploader 17 · devicePhotoLibrary 4 · saveImages 2 · hashFile 1). 그중 크기 초과 문구만 값이 섞이므로 함수, 나머지는 상수 — 18키. 여기에 `platformUnsupported` 1키를 신설해 **20키**다(구현 시 확정 — 아래). expo-ui `UiStrings + enStrings/koStrings` 패턴을 그대로 계승한다.
+전신의 한국어 하드코딩은 **리터럴 24개**(V6 실측: uploader 17 · devicePhotoLibrary 4 · saveImages 2 · hashFile 1). 그중 크기 초과 문구만 값이 섞이므로 함수, 나머지는 상수 — 18키였다. `platformUnsupported`·`deviceLibraryFailed`·`pickerFailed`를 전용 분류 문구로 추가해 현재 공개 계약은 **22키**다. expo-ui `UiStrings + enStrings/koStrings` 패턴을 그대로 계승한다.
 
 ```ts
 // "./core" — src/core/strings.ts
@@ -778,6 +778,8 @@ export interface MediaStrings {
   readonly iCloudDownloadTimeout: string;      // iCloud 원본 다운로드 타임아웃(60s)
   readonly iCloudOnly: string;                 // 원본이 iCloud에만 있음
   readonly fileNotFound: string;               // 로컬 파일 없음/판독 불가 (hashFile 1 공유)
+  readonly deviceLibraryFailed: string;        // 기기 라이브러리 adapter/OS 실패, 원문 비공개
+  readonly pickerFailed: string;               // 피커·웹 loader 실패, 원문 비공개
   // 업로드 검증 (uploader.ts)
   readonly unsupportedFileType: string;
   readonly noMediaFiles: string;               // uploader.ts:625
@@ -970,7 +972,7 @@ export const mediaTelemetry: MediaTelemetry = {
 
 `MediaOperation`은 문자열 리터럴 유니언이므로 `ClientActivityLogInput.operation: string`에 그대로 대입된다(가변성 문제 없음).
 
-### 5.2 에러 — 코드 14종
+### 5.2 에러 — 코드 16종
 
 ```ts
 // "./core" — src/core/errors.ts
@@ -978,6 +980,8 @@ export const MEDIA_ERROR_CODES = [
   'device-timeout',          // 자산 정보 조회 데드라인 초과
   'device-icloud-only',      // 원본이 iCloud에만 있음
   'device-not-found',        // 로컬 파일 없음/판독 불가
+  'device-library-failed',   // 기기 adapter/OS 실패 — 원문은 공개하지 않음
+  'picker-failed',           // 피커·웹 loader 실패 — 원문은 공개하지 않음
   'unsupported-file-type',
   'file-too-large',
   'upload-failed',
@@ -1016,7 +1020,7 @@ export function mediaErrorUserMessage(error: unknown): string | null;
 export function assertNeverMediaError(code: never): never;
 ```
 
-**코드 14종은 총망라가 아니다** — 신설 6종 중 5종은 V6에서 실측한 bare Error 9사이트에 1:1 대응하고, `platform-unsupported`만 §8.5의 비네이티브 포크 계약에서 온다. 전신 `errors.ts` 주석이 요구한 "callers classify by `code`"를 코드 전체가 처음으로 만족한다.
+**코드 16종은 운영 파이프라인의 공개 실패를 분류한다.** 기존 신설 6종 중 5종은 V6에서 실측한 bare Error 9사이트에 대응하고, `platform-unsupported`는 §8.5 비네이티브 포크 계약에서 왔다. 여기에 `device-library-failed`·`picker-failed`를 더해 외부 adapter/loader가 던진 원본 오류(위조한 전역-brand `MediaError` 포함)도 안전한 문구와 code로 재구성한다. 개발자 단언과 직접 호출한 저수준 어댑터는 이 실행 파이프라인 계약 밖이다.
 
 ### 5.3 mediaTypes · metadata · hash · staging · debug (순수 모듈)
 
@@ -1767,7 +1771,7 @@ export function fakePlatform(os: MediaPlatform): PlatformAdapter;
 
 | 심볼 | 실소비 | 판정 | 새 이름 · 주소 | 이관 흡수 |
 |---|---|---|---|---|
-| `PhotoErrorCode` | **1파일** (`useRecordUploadPanel.ts:16`의 `ACTIONABLE_ERROR_CODES` 집합) | 보존(개명) | `MediaErrorCode` — 8→14코드(§5.2) | 유니언이 넓어질 뿐이므로 `Set<MediaErrorCode>` 리터럴은 그대로 컴파일된다 |
+| `PhotoErrorCode` | **1파일** (`useRecordUploadPanel.ts:16`의 `ACTIONABLE_ERROR_CODES` 집합) | 보존(개명) | `MediaErrorCode` — 8→16코드(§5.2) | 유니언이 넓어질 뿐이므로 `Set<MediaErrorCode>` 리터럴은 그대로 컴파일된다 |
 | `PhotoUploadError` | **3파일** (`sync/uploadAsset.ts:35` 생성 · `sync/syncStateMachine.ts:36` **instanceof** · `DeviceRecordUploadSheet.test.tsx` 생성) | 보존(개명) | `MediaError` — `"./core"` | ⚠ **신규 발견**: `syncStateMachine.ts:36`의 `error instanceof PhotoUploadError`는 §5.2가 경고한 `splitting:false` 사본 문제에 정면으로 걸린다. **`isMediaError(error)`로 교체 필수**(§11.3에 행 신설) |
 | `photoErrorCode` | **5파일** | 보존(개명) | `mediaErrorCode` | sed |
 | `photoErrorUserMessage` | **5파일** | 보존(개명) | `mediaErrorUserMessage` | sed |
@@ -2080,7 +2084,7 @@ expectTypeOf(media.withDeviceLibrary(adapter).uploadDeviceAssets).toBeFunction()
 createMediaKit({ api });
 
 // ④ strings 부분 객체 불가
-// @ts-expect-error 20키 중 일부만
+// @ts-expect-error 22키 중 일부만
 createMediaKit({ api, limits, strings: { fileNotFound: '없음' } });
 
 // ⑤ poster 쌍 객체 — 한쪽만 불가
@@ -2174,7 +2178,7 @@ const page: DeviceAssetPage = { assets: [], hasNextPage: false, totalCount: 0 };
 | dedup 해시 실패가 업로드를 막지 않는다(해시는 최적화일 뿐) | `src/core/upload/uploader.ts` `hashSafely()` | unit: hasher가 throw해도 업로드 성공 |
 | **[신설] 호출자 제공 `contentHash` 우선 — 있으면 hasher를 호출하지 않는다** (`uploader.ts:57-69,440` · 소비자 `src/sync/uploadAsset.ts:47`) | `src/core/upload/uploader.ts` | unit: `contentHash` 주입 시 hasher 호출 **0회** + completion의 `contentHash`가 주입값과 동일 / 미주입 시 hasher 1회. ⚠ 바로 윗 행과 **나란히** 읽어야 한다 — 한쪽만 보면 정반대 구현이 나온다 |
 | 포스터 실패가 동영상 업로드를 막지 않는다 | `src/core/upload/uploader.ts` — poster try/catch → null | unit: poster가 null·throw 둘 다 완료됨 + `poster` 필드 부재 |
-| **[개정] 정보 조회 실패 2조건**: ① **`MediaError`는 폴백 후보 유무와 무관하게 항상 재throw** ② 그 외(어댑터 raw 예외)는 후보가 있으면 생존, 없으면 원 에러 표면화 (`devicePhotoLibrary.ts:289` `if (error instanceof PhotoUploadError \|\| !extraCandidates.length) throw error`) | `src/core/device/resolveSource.ts` | unit **3케이스**: raw 예외+후보 있음 → 생존해 업로드 성공 / raw 예외+후보 없음 → 그 예외 그대로 표면화 / **`device-timeout`+후보 있음 → `device-timeout` 재throw**(신규). ⚠ ①이 없으면 유일하게 타입화되는 정보-조회 실패(15초 타임아웃, devicePhotoLibrary.ts:76)가 후보에 삼켜져 **하드닝 6이 조용히 무력화**되고 사용자는 "재시도하면 되는 실패"를 영영 알 수 없다 |
+| **[개정] 정보 조회 실패 2조건**: ① **core가 만든 `device-timeout`만** 폴백 후보 유무와 무관하게 재throw ② host adapter의 raw/위조-brand 오류와 성공 응답의 getter 실패는 후보가 있으면 생존, 없으면 URL 없는 `device-library-failed`로 정규화 | `src/core/device/resolveSource.ts` | unit: adapter 오류+후보 있음 → 생존해 업로드 성공 / 후보 없음 → `device-library-failed` / core deadline+후보 있음 → `device-timeout` 재throw / 성공 응답 getter·EXIF getter가 원본 오류를 공개하지 않음. ⚠ ①이 없으면 유일하게 타입화되는 정보-조회 실패(15초 타임아웃)가 후보에 삼켜져 하드닝 6이 조용히 무력화된다. EXIF는 선택 메타데이터이므로 안전하게 snapshot할 수 없으면 버리되 URI 해석은 계속한다. |
 | **[신설] `mediaMetadataFromJpeg` 4규칙**: 비-JPEG 스킵 → fallback / **필드 단위** 병합 / 예외 시 fallback / 유효값 없으면 undefined (`photoMetadata.ts:265-290`) | `src/core/metadata.ts` (§5.3) | unit 4케이스: 비-JPEG contentType → 파서 미호출 + fallback 그대로 / 파싱 성공 + fallback 있음 → `capturedAt`은 파싱값·`geoPoint`는 fallback값(**필드 단위 병합의 직접 증거**) / 손상 JPEG → 예외 없이 fallback / 양쪽 다 빈 값 → `undefined` |
 | **[신설] 권한 합성 게이트**: 조회 → `!granted && canAskAgain`일 때만 요청 + `accessPrivileges==='limited'` 매핑 (`mediaPermission.ts:22-38`) | `src/core/device/index.ts` `ensurePermission()` — **core 소관**, 어댑터는 순수 위임(§5.4-④(c)) | unit 4케이스: `granted:true` → 요청 0회 / `granted:false, canAskAgain:true` → 요청 1회 + 요청 결과 반환 / **`granted:false, canAskAgain:false` → 요청 0회**(핵심 — iOS UI 데드록 차단) / 어댑터 `limited:true` → 그대로 통과. 전신 `mediaPermission.test.ts`(60줄 2케이스)를 이 4종으로 흡수 이식 |
 | **[신설] `listAssets` creationTime 내림차순 계약 / `listAlbums`는 core가 `count>0` 필터 + count 내림차순 재수행** (`devicePhotoLibrary.ts:220,243-250`) | `DeviceLibraryAdapter` TSDoc(§3.3) + `src/core/device/index.ts` | `hardening-guard` ⑦: `src/device/expo.ts`의 `listAssets` 구현부에 `SortBy.creationTime` + `false` 리터럴 필수(정적 스캔). unit 2케이스: 페이크 어댑터가 count 0 앨범과 뒤섞인 순서를 줘도 `fetchAlbums()`는 count>0만 내림차순 / `fetchPage()`는 어댑터 순서를 **변형 없이** 통과(재정렬 부재의 직접 증거) |

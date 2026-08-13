@@ -33,6 +33,7 @@ type Strings = {
 
   readonly livePreview: string;
   readonly livePreviewHint: string;
+  readonly sourcePreviewHint: string;
   readonly previewNote: string;
   readonly readMore: string;
   readonly copy: string;
@@ -158,7 +159,8 @@ const en: Strings = {
   tagline: 'Type-safe primitives for Expo and React Native.',
 
   livePreview: 'LIVE PREVIEW',
-  livePreviewHint: 'Rendered from the published package, not a mockup.',
+  livePreviewHint: 'Rendered from the installed package, not a mockup.',
+  sourcePreviewHint: 'Rendered from workspace source; this API is not in npm latest yet.',
   previewNote: 'These controls really work. Press them and change the state.',
   readMore: 'Read more',
   copy: 'COPY',
@@ -187,7 +189,7 @@ const en: Strings = {
 
   releaseTitle: (version) => `v${version} preview — not installable yet`,
   releaseBody:
-    'This component exists only in source for the next release. The version currently published to npm does not export it, so importing it today will fail. The preview below renders from the workspace source, and this page stays out of the search index until release.',
+    'This page includes source API planned for the next release. npm latest may export the component name but not these documented additions, so use the preview after this version ships. The preview below renders from workspace source, and this page stays out of the search index until release.',
 
   sectionPreview: (name) => `${name} preview`,
   sectionWhen: (name) => `When to reach for ${name}`,
@@ -300,7 +302,8 @@ const ko: Strings = {
   tagline: 'Expo와 React Native를 위한 타입 안전 프리미티브.',
 
   livePreview: 'LIVE PREVIEW',
-  livePreviewHint: '문서용 목업이 아니라 설치되는 패키지의 실제 컴포넌트입니다.',
+  livePreviewHint: '문서용 목업이 아니라 설치된 패키지의 실제 컴포넌트입니다.',
+  sourcePreviewHint: '워크스페이스 소스로 렌더한 미리보기이며 이 API는 아직 npm 최신판에 없습니다.',
   previewNote: '위 컨트롤은 실제로 동작합니다. 눌러 보고 상태를 바꿔 보세요.',
   readMore: '자세히 보기',
   copy: 'COPY',
@@ -329,7 +332,7 @@ const ko: Strings = {
 
   releaseTitle: (version) => `v${version} 공개 예정 · 지금은 설치할 수 없습니다`,
   releaseBody:
-    '이 컴포넌트는 소스에만 있는 다음 릴리스 미리보기입니다. 현재 npm에 공개된 버전에는 이 export가 없어 지금 설치하면 import가 실패합니다. 아래 미리보기는 워크스페이스 소스로 렌더한 것이며, 이 페이지는 공개 전까지 검색 색인에서 제외됩니다.',
+    '이 페이지에는 다음 릴리스를 위해 소스에 추가된 API가 포함되어 있습니다. npm 최신판에 컴포넌트 이름이 있더라도 여기의 추가 API는 아직 없을 수 있으므로 해당 버전이 공개된 뒤 사용하세요. 아래 미리보기는 워크스페이스 소스로 렌더한 것이며, 이 페이지는 공개 전까지 검색 색인에서 제외됩니다.',
 
   sectionPreview: (name) => `${name} 미리보기`,
   sectionWhen: (name) => `${name} 사용 시점과 역할`,

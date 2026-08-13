@@ -1,5 +1,11 @@
 # @gj-kit/expo-media
 
+## 0.1.1
+
+### Patch Changes
+
+- 5f67c95: Add npm metadata that links each package to its source directory and issue tracker on GitHub.
+
 ## 0.1.0
 
 ### Minor Changes

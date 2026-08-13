@@ -1,6 +1,6 @@
 {
   "name": "@gj-kit/toss-payments-nestjs",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "@gj-kit/toss-payments의 NestJS 통합 — DI 토큰·DynamicModule·rawBody 웹훅 헬퍼 (설계 §4)",
   "homepage": "https://github.com/gj-kit/gj-kit/tree/main/toss-payments-nestjs",
   "repository": {

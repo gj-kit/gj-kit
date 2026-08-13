@@ -2,6 +2,15 @@
   "name": "@gj-kit/toss-payments",
   "version": "0.3.0",
   "description": "토스페이먼츠 결제위젯·API v2 연동 라이브러리 — 검증(금액 대조·상태 확인·서명 검증)을 타입으로 강제한다",
+  "homepage": "https://github.com/gj-kit/gj-kit/tree/main/toss-payments",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/gj-kit/gj-kit.git",
+    "directory": "toss-payments"
+  },
+  "bugs": {
+    "url": "https://github.com/gj-kit/gj-kit/issues"
+  },
   "license": "MIT",
   "type": "module",
   "sideEffects": false,

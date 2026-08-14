@@ -193,7 +193,7 @@ try {
 건너뛰지만, presign/PUT이 시작된 뒤 실패하면 possibly-uploaded poster를 숨기지 않고 이 recovery 경로로
 전파한다.
 
-## 2. 서브패스 8개와 peer
+## 2. 서브패스 9개와 peer
 
 | 엔트리 | 내용 | 정적 import하는 peer |
 |---|---|---|
@@ -205,6 +205,7 @@ try {
 | `./video` | `expoVideoPoster` — 로컬 URI → 포스터 프레임 | `expo-video-thumbnails` |
 | `./web` | `webCanvasVideoPoster` · `createFetchBinaryTransport` · `createBrowserSaveTarget` · `createFetchBinarySourceLoader` | **없음** (브라우저 DOM 필요) |
 | `./testing` | 인메모리 파일시스템, 기록형 transport·telemetry, 페이크 피커·기기 라이브러리·업로드 API, EXIF·서명 URL 픽스처 | **없음** |
+| `./storage` | `createExpoDocumentFileStore` — 앱 소유 지속 파일의 검증 복사·안전한 정리 | `expo-file-system` |
 
 소비자별로 실제 설치가 필요한 것:
 
@@ -215,10 +216,31 @@ try {
 | 웹 드롭존 / 웹 관리자 도구 | `./core` + `./web` | expo-* 전부, react-native |
 | OS 피커 업로드(이미지 전용) | `.` + `./picker` | media-library, video-thumbnails |
 | bare RN 커스텀 어댑터 | `./core` | 전부 |
+| 로컬 활동 사진처럼 앱 DB에 URI를 저장할 첨부 파일 | `./storage` | image-picker, media-library, video-thumbnails, react-native |
 
 **`.`은 `./picker`·`./device`·`./save`·`./video`·`./web`을 import하지 않는다** — 단방향이고, 조합은 소비자가 한다. 이 규율이 optional peer 격리의 **정적 근거**다: `.`의 모듈 그래프에는 `expo-media-library`가 문자열로도 없으므로 Metro가 해석을 시도조차 하지 않는다. `dist-peer-graph` 가드가 위 표와 산출물을 조건 3세트(`browser`/`node`/네이티브) × 모듈 2형식(ESM·CJS)으로 대조한다 — "optional peer로 강등했다"가 문서 주장이 아니라 CI 단언이다.
 
 `./device`·`./save`는 **비네이티브 포크**를 갖는다(exports의 `node`·`browser` 조건). 웹·SSR에서는 열거가 빈 결과를 주고 resolve/저장은 `MediaError('platform-unsupported')`를 던진다 — `expo-media-library`를 import하지 않는 별개 산출물이다.
+
+### 앱 소유 지속 파일
+
+기록 사진처럼 앱의 DB에 오래 보관할 URI는 업로드 스테이징 캐시가 아니라 `./storage`에 복사한다.
+경로를 URI 문자열로 직접 조립하지 않고, 검증된 세그먼트로 만든 앱 소유 root만 정리하므로 실패한
+복사나 DB 트랜잭션 롤백이 다른 파일을 삭제할 수 없다.
+
+```ts
+import { createExpoDocumentFileStore } from '@gj-kit/expo-media/storage';
+
+const photos = createExpoDocumentFileStore({ root: 'photos' });
+const copied = await photos.copy({
+  sourceUri: assetUri,
+  directory: ['activity-42'],
+  fileName: 'photo-1.jpg',
+});
+
+// `copied.uri`와 `copied.sizeBytes`를 앱의 도메인 트랜잭션에 함께 저장한다.
+await photos.remove(copied.uri); // 이 store가 만든 경로만 정리한다.
+```
 
 ### 능력 부착 — `with*`
 

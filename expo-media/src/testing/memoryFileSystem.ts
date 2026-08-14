@@ -12,7 +12,13 @@
 //
 // ⚠ peer 0 · DOM 0 — `src/testing/bytes.ts` 머리말 참조.
 
-import type { ChunkRange, FileDownloadAdapter, FileStat, FileSystemAdapter } from '../core/adapters';
+import type {
+  ChunkRange,
+  DurableFileStoreAdapter,
+  FileDownloadAdapter,
+  FileStat,
+  FileSystemAdapter,
+} from '../core/adapters';
 import { bytesToBase64, fakeBytes } from './bytes';
 
 /**
@@ -26,6 +32,7 @@ export type FakeCallLog = {
   readonly stat: readonly string[];
   readonly copy: readonly { readonly from: string; readonly to: string }[];
   readonly remove: readonly string[];
+  readonly ensureDirectory: readonly string[];
   readonly readBase64: readonly { readonly uri: string; readonly range: ChunkRange }[];
   readonly download: readonly { readonly url: string; readonly to: string }[];
 };
@@ -34,6 +41,7 @@ type MutableCallLog = {
   readonly stat: string[];
   readonly copy: { readonly from: string; readonly to: string }[];
   readonly remove: string[];
+  readonly ensureDirectory: string[];
   readonly readBase64: { readonly uri: string; readonly range: ChunkRange }[];
   readonly download: { readonly url: string; readonly to: string }[];
 };
@@ -48,6 +56,8 @@ export type MemoryFileSystemOptions = {
    *   던지는 경로(§5.4-⑥)는 이 값이 없어야만 도달한다.
    */
   readonly cacheDirectory?: string | null | undefined;
+  /** App-owned durable root. Default `'file:///documents/'`; null exercises unavailable storage. */
+  readonly rootDirectory?: string | null | undefined;
   /** 디렉토리로 취급할 uri. 끝이 '/'인 uri는 지정하지 않아도 디렉토리다. */
   readonly directories?: readonly string[] | undefined;
   /**
@@ -63,7 +73,10 @@ export type MemoryFileSystemOptions = {
     | undefined;
 };
 
-export interface MemoryFileSystem extends FileSystemAdapter, FileDownloadAdapter {
+export interface MemoryFileSystem
+  extends FileSystemAdapter,
+    FileDownloadAdapter,
+    DurableFileStoreAdapter {
   readonly calls: FakeCallLog;
   /** 현재 존재하는 파일 uri 전량(정렬됨). 스테이징 누수 검증의 직접 증거다(§7 하드닝 7). */
   list(): readonly string[];
@@ -74,6 +87,7 @@ export interface MemoryFileSystem extends FileSystemAdapter, FileDownloadAdapter
 }
 
 const DEFAULT_CACHE_DIRECTORY = 'file:///cache/';
+const DEFAULT_ROOT_DIRECTORY = 'file:///documents/';
 const DEFAULT_DOWNLOAD_BYTES = 8;
 
 function own(bytes: Uint8Array): Uint8Array {
@@ -91,8 +105,12 @@ export function createMemoryFileSystem(options?: MemoryFileSystemOptions | undef
   // `undefined`(미지정)와 `null`(디렉토리 없음)을 구분해야 한다 — 후자가 실제 분기다.
   const cacheDirectory =
     options?.cacheDirectory === undefined ? DEFAULT_CACHE_DIRECTORY : options.cacheDirectory;
+  const rootDirectory =
+    options?.rootDirectory === undefined ? DEFAULT_ROOT_DIRECTORY : options.rootDirectory;
 
-  const calls: MutableCallLog = { stat: [], copy: [], remove: [], readBase64: [], download: [] };
+  const calls: MutableCallLog = {
+    stat: [], copy: [], remove: [], ensureDirectory: [], readBase64: [], download: [],
+  };
 
   const isDirectory = (uri: string): boolean => directories.has(uri) || uri.endsWith('/');
 
@@ -114,6 +132,16 @@ export function createMemoryFileSystem(options?: MemoryFileSystemOptions | undef
 
     cacheDirectory() {
       return cacheDirectory;
+    },
+
+    rootDirectory() {
+      return rootDirectory;
+    },
+
+    ensureDirectory(uri) {
+      calls.ensureDirectory.push(uri);
+      directories.add(uri);
+      return Promise.resolve();
     },
 
     stat(uri): Promise<FileStat> {

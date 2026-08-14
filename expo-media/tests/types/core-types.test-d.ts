@@ -32,6 +32,9 @@ import type {
   MediaOrphanedUpload,
   MediaUploadFailureInfo,
   MediaUploadLimits,
+  DurableFile,
+  DurableFileStore,
+  DurableFileStoreAdapter,
   VideoContentType,
 } from '../../src/core';
 
@@ -215,5 +218,16 @@ describe('업로드 실패 복구 정보 — URL 없는 cross-entry inspection A
     expectTypeOf<MediaOrphanedUpload['storageState']>().toEqualTypeOf<
       'uploaded' | 'possibly-uploaded'
     >();
+  });
+});
+
+describe('durable local-file store contract', () => {
+  it('only accepts a constrained copy input and reports a verified persistent file', () => {
+    expectTypeOf<DurableFile>().toEqualTypeOf<{
+      readonly uri: string;
+      readonly sizeBytes: number;
+    }>();
+    expectTypeOf<DurableFileStore>().toHaveProperty('copy');
+    expectTypeOf<DurableFileStoreAdapter>().toHaveProperty('ensureDirectory');
   });
 });

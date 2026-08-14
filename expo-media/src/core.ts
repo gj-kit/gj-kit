@@ -29,6 +29,7 @@ export type {
   PlatformAdapter,
   FileStat,
   FileSystemAdapter,
+  DurableFileStoreAdapter,
   FileDownloadAdapter,
   PutRequest,
   LocalFileTransport,
@@ -133,6 +134,10 @@ export {
 // ─── §5.3 · §7 하드닝 7 스테이징 캐시 ───────────────────────────────────────
 export type { StagingCache } from './core/staging';
 export { createStagingCache } from './core/staging';
+
+// ─── App-owned durable attachment storage ──────────────────────────────────
+export type { DurableFile, DurableFileStore, DurableFileStoreCopyInput } from './core/durableFileStore';
+export { createDurableFileStore } from './core/durableFileStore';
 
 // ─── §5.3 · §7 하드닝 8 디버그 — 서명 URL 유출 차단 ─────────────────────────
 export type { MediaDebugLogger } from './core/debug';

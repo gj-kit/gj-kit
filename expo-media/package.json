@@ -144,6 +144,16 @@
         "default": "./dist/testing.cjs"
       }
     },
+    "./storage": {
+      "import": {
+        "types": "./dist/storage.d.ts",
+        "default": "./dist/storage.js"
+      },
+      "require": {
+        "types": "./dist/storage.d.cts",
+        "default": "./dist/storage.cjs"
+      }
+    },
     "./package.json": "./package.json"
   },
   "scripts": {

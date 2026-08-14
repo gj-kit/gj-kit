@@ -222,6 +222,10 @@ try {
 
 `./device`·`./save`는 **비네이티브 포크**를 갖는다(exports의 `node`·`browser` 조건). 웹·SSR에서는 열거가 빈 결과를 주고 resolve/저장은 `MediaError('platform-unsupported')`를 던진다 — `expo-media-library`를 import하지 않는 별개 산출물이다.
 
+`createExpoDocumentFileStore`의 네이티브 정본 import는 `./storage`다. `./core`와 `.`에는 커스텀
+어댑터용 `createDurableFileStore`와 오류 계약만 둔다. 기존 root import는 호환성을 위해 유지하지만, 새
+지속 파일 코드는 `./storage`를 사용해 native peer 경계를 읽는 코드만으로도 분명하게 한다.
+
 ### 앱 소유 지속 파일
 
 기록 사진처럼 앱의 DB에 오래 보관할 URI는 업로드 스테이징 캐시가 아니라 `./storage`에 복사한다.
@@ -237,6 +241,7 @@ import {
 import type { PickedAsset } from '@gj-kit/expo-media/core';
 
 declare const pickedAsset: PickedAsset;
+declare function persistActivityPhoto(file: unknown): Promise<void>;
 
 const photos = createExpoDocumentFileStore({ root: 'photos' });
 const copied = await photos.copyPickedAsset({
@@ -250,13 +255,31 @@ const copied = await photos.copyPickedAsset({
   }
   throw error;
 });
-// `copied.uri`·`copied.sizeBytes`·`copied.contentType`을 앱의 도메인 트랜잭션에 함께 저장한다.
-await photos.remove(copied.uri); // 이 store가 만든 경로만 정리한다.
+try {
+  // `copied.uri`·`copied.sizeBytes`·`copied.contentType`을 앱의 도메인 트랜잭션에 함께 저장한다.
+  await persistActivityPhoto(copied);
+} catch (error) {
+  // DB 트랜잭션이 실패했을 때만 이 store가 만든 경로를 보상 정리한다.
+  await photos.remove(copied.uri);
+  throw error;
+}
 ```
 
 카메라/피커 결과가 아니라 기존 `file://` URI만 있는 레거시 경로는 `copy({ sourceUri, fileName })`를
 계속 쓸 수 있다. 새 코드에서는 `copyPickedAsset`을 우선해 **호환 표현 선호가 JPEG 보장을 뜻하지
 않는** 플랫폼 차이를 파일명까지 보존하는 것이 안전하다.
+
+활동 삭제·보존 기간 만료처럼 DB row가 사라지는 정책도 호스트 도메인의 책임이다. 해당 row가 가리키는
+URI만 `remove()`에 넘기면 store는 자기 root 밖을 no-op으로 처리한다. 반대로 DB에 성공적으로 저장된
+`copied.uri`를 즉시 지우면 안 된다.
+
+### 배포 artifact 정책
+
+`dist/**/*.map`은 의도적으로 npm tarball에 포함한다. React Native/Metro의 production symbolication과
+소비자 앱의 디버그 재현에 필요한 공개 artifact이기 때문이다. 크기 최적화가 필요해지는 릴리스에서만
+source map을 별도 artifact로 옮기며, 그때는 `npm pack` 결과와 Metro consumer smoke를 함께 바꾼다.
+현재 `check:pack`은 export map과 실제 packed 파일을, `check:expo-media-consumer`는 새 Expo SDK 56
+소비자의 web/iOS/Android export를 검증한다.
 
 ### 역사적 활동의 EXIF 시간
 

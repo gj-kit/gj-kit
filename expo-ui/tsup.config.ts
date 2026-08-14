@@ -70,8 +70,8 @@ const common = {
 const nativeConfig = {
   ...common,
   name: 'native',
-  // 기존 공개 엔트리 4개. 루트는 React Native 및 조건 미지원 번들러의 기본값이다.
-  entry: ['src/index.ts', 'src/theme.ts', 'src/insets.ts', 'src/tailwind.ts'],
+  // 공개 엔트리 5개. 루트는 React Native 및 조건 미지원 번들러의 기본값이다.
+  entry: ['src/index.ts', 'src/theme.ts', 'src/insets.ts', 'src/insets/pure.ts', 'src/tailwind.ts'],
   dts: true,
   clean: true,
   banner: { js: '/* @gj-kit/expo-ui build: native */' },

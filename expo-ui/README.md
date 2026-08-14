@@ -1229,9 +1229,6 @@ import {
   useBottomInset,          // 하단 safe-area inset (web 0)
   useBottomSheetPadding,   // 디자인 여백 + 실측 inset — 하단 앵커 서피스의 paddingBottom
   useModalKeyboardOverlap, // <Modal> 안 하단 시트가 키보드에 가려지는 높이
-  nativeBottomInset,       // 순수 함수 버전 (peer 불필요)
-  nativeBottomPadding,
-  computeKeyboardRevealOffset, // 포커스 입력을 키보드 위로 드러내는 목표 스크롤 오프셋
 } from '@gj-kit/expo-ui/insets';
 import { StickyActionBar, Button } from '@gj-kit/expo-ui';
 import { View } from 'react-native';
@@ -1253,6 +1250,30 @@ function BottomAnchoredSurface({ children }: { children: ReactNode }) {
 ```
 
 훅 3종은 `react-native-safe-area-context`(optional peer)가 필요하다 — 이 서브패스를 import하지 않으면 설치할 필요 없고, 설치 없이 import하면 번들 시점에 바로 실패한다(런타임 마법 없음). `useModalKeyboardOverlap`은 Android 엣지투엣지 Modal 윈도우에서 KeyboardAvoidingView가 동작하지 않는 실측 문제의 우회이며, 근거는 소스 TSDoc에 있다.
+
+React Native, React, safe-area peer가 없는 공유 코드·빌드 도구·서버 계산에는 dependency-free `./insets/pure`를 쓴다. 이 경로는 `Platform.OS`를 읽을 수 없으므로 플랫폼을 명시적으로 넘긴다.
+
+```ts
+import {
+  nativeBottomInset,
+  nativeBottomPadding,
+  computeKeyboardRevealOffset,
+} from '@gj-kit/expo-ui/insets/pure';
+
+const bottomInset = nativeBottomInset(34, 'ios');
+const bottomPadding = nativeBottomPadding(24, bottomInset, 'ios');
+const revealOffset = computeKeyboardRevealOffset({
+  currentOffset: 0,
+  inputHeight: 44,
+  inputTop: 640,
+  keyboardInset: 300,
+  reservedBottomHeight: 56,
+  viewportHeight: 844,
+});
+
+void bottomPadding;
+void revealOffset;
+```
 
 ## 4. "./tailwind" — 테마 파생 preset
 

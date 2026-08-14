@@ -111,6 +111,16 @@
         "default": "./dist/insets.cjs"
       }
     },
+    "./insets/pure": {
+      "import": {
+        "types": "./dist/insets/pure.d.ts",
+        "default": "./dist/insets/pure.js"
+      },
+      "require": {
+        "types": "./dist/insets/pure.d.cts",
+        "default": "./dist/insets/pure.cjs"
+      }
+    },
     "./tailwind": {
       "import": {
         "types": "./dist/tailwind.d.ts",

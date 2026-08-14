@@ -169,6 +169,7 @@ const paths = {
   '@gj-kit/expo-ui': [join(distDir, 'index.d.ts')],
   '@gj-kit/expo-ui/theme': [join(distDir, 'theme.d.ts')],
   '@gj-kit/expo-ui/insets': [join(distDir, 'insets.d.ts')],
+  '@gj-kit/expo-ui/insets/pure': [join(distDir, 'insets/pure.d.ts')],
   '@gj-kit/expo-ui/tailwind': [join(distDir, 'tailwind.d.ts')],
 };
 

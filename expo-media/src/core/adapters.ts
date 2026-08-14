@@ -77,6 +77,26 @@ export interface FileSystemAdapter {
   readBase64(uri: string, range: ChunkRange): Promise<string>;
 }
 
+/**
+ * App-owned persistent-file storage seam.
+ *
+ * This is deliberately separate from `FileSystemAdapter`: upload code needs a
+ * cache directory plus base64 reads, whereas an application attachment store
+ * needs a durable root plus directory creation. Keeping the contracts apart
+ * avoids making every upload-only adapter pretend it can persist user files.
+ */
+export interface DurableFileStoreAdapter {
+  /** App-owned durable root URI. It must identify a directory, or return null when unavailable. */
+  rootDirectory(): string | null;
+  /** Creates a directory and all missing parents. Repeating the call must be safe. */
+  ensureDirectory(uri: string): Promise<void>;
+  /** Same discriminated stat contract as the upload file-system seam. */
+  stat(uri: string): Promise<FileStat>;
+  copy(input: { readonly from: string; readonly to: string }): Promise<void>;
+  /** Idempotent best-effort removal. */
+  remove(uri: string): Promise<void>;
+}
+
 /** 저장 플로우 전용 — 업로드만 하는 소비자는 구현할 필요가 없다. */
 export interface FileDownloadAdapter {
   download(input: { readonly url: string; readonly to: string }): Promise<{

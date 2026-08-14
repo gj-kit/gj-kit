@@ -1,7 +1,7 @@
 import { defineConfig } from 'tsup';
 
 export default defineConfig({
-  // 엔트리 10 = 공개 서브패스 8 + 비네이티브 조건 포크 2 (설계 문서 §2.1 개수 정본).
+  // 엔트리 11 = 공개 서브패스 9 + 비네이티브 조건 포크 2.
   // 포크(.web)는 서브패스가 아니다 — package.json exports의 node/browser 조건이
   // 같은 서브패스를 두 파일로 라우팅한다(§8).
   entry: [
@@ -15,6 +15,7 @@ export default defineConfig({
     'src/video.ts',
     'src/web.ts',
     'src/testing.ts',
+    'src/storage.ts',
   ],
   format: ['esm', 'cjs'],
   dts: true,

@@ -1,0 +1,18 @@
+{
+  "name": "@gj-kit/expo-media-release-consumer",
+  "version": "0.0.0",
+  "private": true,
+  "main": "expo/AppEntry",
+  "dependencies": {
+    "@gj-kit/expo-media": "file:__GJ_KIT_EXPO_MEDIA_TARBALL__",
+    "expo": "~56.0.0",
+    "expo-file-system": "~56.0.8",
+    "expo-image-picker": "~56.0.21",
+    "expo-media-library": "~56.0.9",
+    "expo-video-thumbnails": "~56.0.3",
+    "react": "19.2.3",
+    "react-dom": "19.2.3",
+    "react-native": "0.85.3",
+    "react-native-web": "~0.21.2"
+  }
+}

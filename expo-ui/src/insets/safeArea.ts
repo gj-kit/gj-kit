@@ -1,6 +1,5 @@
 /**
- * The pure bottom safe-area function — design doc §7. Name preserved from
- * memorylog2 (a sed-level port).
+ * React Native adapter for bottom safe-area arithmetic — design doc §7.
  *
  * A bottom-anchored surface follows one rule: design padding plus the real bottom
  * inset. Android reports an inset matching how far the window actually extends
@@ -10,16 +9,24 @@
  * dropped the inset entirely (a rule confirmed by measurement in memorylog2).
  */
 import { Platform } from 'react-native';
+import {
+  nativeBottomInset as computeNativeBottomInset,
+  nativeBottomPadding as computeNativeBottomPadding,
+} from './pure';
 
+/**
+ * Resolves the real bottom inset using the current React Native platform.
+ * Import `./insets/pure` when no React Native dependency is acceptable.
+ */
 export function nativeBottomInset(bottomInset: number, platformOS: string = Platform.OS): number {
-  if (platformOS === 'web') return 0;
-  return Math.max(0, bottomInset);
+  return computeNativeBottomInset(bottomInset, platformOS);
 }
 
+/** Adds design padding to the real bottom inset using the current platform by default. */
 export function nativeBottomPadding(
   basePadding: number,
   bottomInset: number,
   platformOS: string = Platform.OS,
 ): number {
-  return basePadding + nativeBottomInset(bottomInset, platformOS);
+  return computeNativeBottomPadding(basePadding, bottomInset, platformOS);
 }

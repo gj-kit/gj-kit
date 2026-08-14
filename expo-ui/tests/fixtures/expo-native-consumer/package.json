@@ -1,0 +1,13 @@
+{
+  "name": "@gj-kit/expo-ui-native-release-consumer",
+  "version": "0.0.0",
+  "private": true,
+  "main": "expo/AppEntry",
+  "dependencies": {
+    "@gj-kit/expo-ui": "file:__GJ_KIT_EXPO_UI_TARBALL__",
+    "expo": "~56.0.0",
+    "react": "19.2.3",
+    "react-native": "0.85.3",
+    "react-native-safe-area-context": "~5.7.0"
+  }
+}

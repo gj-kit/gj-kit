@@ -1,7 +1,19 @@
 {
   "name": "@gj-kit/expo-media",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "Expo/React Native 사진·동영상 파이프라인 — 프리사인 업로드, EXIF, 기기 라이브러리(iCloud·PhotoKit 하드닝), 스트리밍 SHA-256, 동영상 포스터, 기기 저장. 어댑터 seam으로 expo 없이도 동작하며 런타임 의존성 0",
+  "keywords": [
+    "expo",
+    "react-native",
+    "media",
+    "image-picker",
+    "media-library",
+    "exif",
+    "file-storage",
+    "file-upload",
+    "video",
+    "typescript"
+  ],
   "homepage": "https://github.com/gj-kit/gj-kit/tree/main/expo-media",
   "repository": {
     "type": "git",
@@ -20,6 +32,9 @@
   "files": [
     "dist"
   ],
+  "publishConfig": {
+    "access": "public"
+  },
   "main": "./dist/index.cjs",
   "module": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -144,11 +159,21 @@
         "default": "./dist/testing.cjs"
       }
     },
+    "./storage": {
+      "import": {
+        "types": "./dist/storage.d.ts",
+        "default": "./dist/storage.js"
+      },
+      "require": {
+        "types": "./dist/storage.d.cts",
+        "default": "./dist/storage.cjs"
+      }
+    },
     "./package.json": "./package.json"
   },
   "scripts": {
-    "build": "tsup && node scripts/stamp-dom-reference.mjs",
-    "prepack": "npm run build",
+    "build": "tsup && node scripts/stamp-dom-reference.mjs && node scripts/stamp-provenance.mjs",
+    "prepack": "npm run build && node scripts/check-provenance.mjs --require-clean",
     "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.core.json && tsc --noEmit -p tsconfig.tests.json",
     "test": "vitest run --project unit --project web",
     "test:types": "vitest run --project types",
@@ -157,6 +182,7 @@
     "test:all": "pnpm run test && pnpm run test:types"
   },
   "peerDependencies": {
+    "expo": ">=56.0.0 <57.0.0",
     "expo-file-system": ">=56.0.0",
     "expo-image-picker": ">=16.0.0",
     "expo-media-library": ">=56.0.5",
@@ -164,6 +190,9 @@
     "react-native": ">=0.71.0"
   },
   "peerDependenciesMeta": {
+    "expo": {
+      "optional": true
+    },
     "expo-file-system": {
       "optional": true
     },

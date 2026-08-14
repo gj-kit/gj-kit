@@ -7,7 +7,7 @@
  */
 import { act, cleanup, fireEvent, render, renderHook, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { View } from 'react-native';
+import { AccessibilityInfo, Animated, View } from 'react-native';
 import {
   EmptyState,
   ErrorState,
@@ -22,7 +22,10 @@ import {
 import type { IconRenderProps } from '../../src/index';
 
 // vitest globals 미사용 환경 — RTL 자동 cleanup이 등록되지 않으므로 명시 등록.
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  vi.restoreAllMocks();
+});
 
 /** #RRGGBB → jsdom 인라인 스타일 정규화 형태(rgb(r, g, b)). */
 function hexToRgb(hex: string): string {
@@ -35,6 +38,13 @@ function hexToRgb(hex: string): string {
 // ─── §5.9 Skeleton ─────────────────────────────────────────────────────────
 
 describe('§5.9 Skeleton', () => {
+  beforeEach(() => {
+    vi.spyOn(AccessibilityInfo, 'isReduceMotionEnabled').mockReturnValue(
+      new Promise<boolean>(() => {}),
+    );
+    vi.spyOn(AccessibilityInfo, 'addEventListener').mockReturnValue({ remove: vi.fn() } as never);
+  });
+
   it('accessibilityLabel 기본은 strings.loading — 기본 Provider는 영어', () => {
     render(
       <UiProvider>
@@ -60,6 +70,28 @@ describe('§5.9 Skeleton', () => {
       </UiProvider>,
     );
     expect(screen.getByTestId('sk').getAttribute('aria-label')).toBe('사진 로딩');
+  });
+
+  it('시스템의 모션 감소 설정을 확인할 때까지 펄스를 시작하지 않고, true면 정적으로 유지한다', async () => {
+    const remove = vi.fn();
+    const loop = vi.spyOn(Animated, 'loop');
+    vi.spyOn(AccessibilityInfo, 'isReduceMotionEnabled').mockResolvedValue(true);
+    vi.spyOn(AccessibilityInfo, 'addEventListener').mockReturnValue({ remove } as never);
+
+    const rendered = render(
+      <UiProvider>
+        <Skeleton testID="sk" />
+      </UiProvider>,
+    );
+
+    expect(loop).not.toHaveBeenCalled();
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(AccessibilityInfo.isReduceMotionEnabled).toHaveBeenCalledTimes(1);
+    expect(loop).not.toHaveBeenCalled();
+    rendered.unmount();
+    expect(remove).toHaveBeenCalledTimes(1);
   });
 });
 

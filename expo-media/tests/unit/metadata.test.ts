@@ -11,7 +11,12 @@
 
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { BinarySource } from '../../src/core/adapters';
-import { mediaMetadataFromExif, mediaMetadataFromJpeg } from '../../src/core/metadata';
+import {
+  capturedAtFromExif,
+  mediaMetadataFromExif,
+  mediaMetadataFromJpeg,
+  parseExifWallClock,
+} from '../../src/core/metadata';
 import {
   EXIF_CAPTURED_AT,
   EXIF_FIXTURE,
@@ -76,6 +81,60 @@ describe('mediaMetadataFromExif — 촬영 시각의 로컬 벽시계 해석(하
     expect(mediaMetadataFromExif({ DateTimeOriginal: '   ' })).toBeUndefined();
     expect(mediaMetadataFromExif({ DateTimeOriginal: 12345 })).toBeUndefined();
     expect(mediaMetadataFromExif({ DateTimeOriginal: 'not a date' })).toBeUndefined();
+  });
+});
+
+describe('capturedAtFromExif — 명시적 역사적 offset', () => {
+  it('기기의 현재 TZ가 아니라 저장된 이벤트 offset으로 EXIF 벽시계를 UTC로 바꾼다', () => {
+    const result = withTimeZone('America/Los_Angeles', () => capturedAtFromExif(
+      { DateTimeOriginal: EXIF_CAPTURED_AT },
+      { timeZoneOffsetMinutes: 540 },
+    ));
+    expect(result).toBe('2024-01-01T18:04:05.000Z');
+  });
+
+  it('소문자 Expo alias와 fractional second도 보존한다', () => {
+    expect(capturedAtFromExif(
+      { dateTimeOriginal: '2024:01:02 03:04:05.67' },
+      { timeZoneOffsetMinutes: 0 },
+    )).toBe('2024-01-02T03:04:05.670Z');
+  });
+
+  it('시간대가 이미 있는 ISO는 제공된 offset으로 재해석하지 않는다', () => {
+    expect(capturedAtFromExif(
+      { DateTimeOriginal: '2024-01-02T03:04:05.000+09:00' },
+      { timeZoneOffsetMinutes: 0 },
+    )).toBe('2024-01-01T18:04:05.000Z');
+  });
+
+  it('범위를 벗어난 offset과 잘못된 날짜를 조용히 거부한다', () => {
+    expect(capturedAtFromExif(
+      { DateTimeOriginal: EXIF_CAPTURED_AT },
+      { timeZoneOffsetMinutes: 14 * 60 + 1 },
+    )).toBeUndefined();
+    expect(capturedAtFromExif(
+      { DateTimeOriginal: '2024:02:30 03:04:05' },
+      { timeZoneOffsetMinutes: 0 },
+    )).toBeUndefined();
+  });
+});
+
+describe('parseExifWallClock', () => {
+  it('정상 EXIF 날짜를 timezone-free 값으로 반환한다', () => {
+    expect(parseExifWallClock('2024:02:29 03:04:05.0067')).toEqual({
+      year: 2024,
+      month: 2,
+      day: 29,
+      hour: 3,
+      minute: 4,
+      second: 5,
+      millisecond: 6,
+    });
+  });
+
+  it('ISO instant나 정규화되는 잘못된 날짜를 wall clock으로 받지 않는다', () => {
+    expect(parseExifWallClock('2024-02-29T03:04:05.000Z')).toBeUndefined();
+    expect(parseExifWallClock('2024:02:30 03:04:05')).toBeUndefined();
   });
 });
 

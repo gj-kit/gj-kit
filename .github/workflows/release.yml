@@ -32,6 +32,8 @@ jobs:
           cache: pnpm
           registry-url: https://registry.npmjs.org
       - run: pnpm install --frozen-lockfile
+      # Includes a fresh Expo SDK 56 consumer installed from `npm pack`, so an
+      # export-map or optional-peer regression cannot reach npm.
       - run: pnpm run verify:release
       - uses: changesets/action@v1
         with:

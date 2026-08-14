@@ -21,6 +21,8 @@ interface PackageJson {
   readonly exports: Readonly<Record<string, ExportValue>>;
   readonly peerDependencies?: Readonly<Record<string, string>>;
   readonly peerDependenciesMeta?: Readonly<Record<string, { readonly optional?: boolean }>>;
+  readonly publishConfig?: { readonly access?: string };
+  readonly scripts?: Readonly<Record<string, string>>;
 }
 
 const packageRoot = process.cwd();
@@ -131,13 +133,18 @@ describe('root build guard — 소스·exports 계약', () => {
     expect(existsSync(resolve(srcRoot, 'build/platform-resolution.web.ts'))).toBe(true);
   });
 
-  it('기존 공개 엔트리 4개를 그대로 유지한다', () => {
+  it('공개 엔트리 5개를 정확히 유지한다', () => {
     expect(Object.keys(pkg.exports).filter((key) => key !== './package.json').sort()).toEqual([
       '.',
       './insets',
+      './insets/pure',
       './tailwind',
       './theme',
     ]);
+  });
+
+  it('순수 inset 엔트리는 React·React Native·safe-area peer를 참조하지 않는다', () => {
+    expect(externalModuleSpecifiers(resolve(srcRoot, 'insets', 'pure.ts'))).toEqual([]);
   });
 
   it('browser·node는 web, react-native·fallback은 native ESM/CJS를 고른다', () => {
@@ -166,6 +173,14 @@ describe('root build guard — 소스·exports 계약', () => {
     expect(pkg.peerDependencies?.['react-native-web']).toBe('>=0.21');
     expect(pkg.peerDependencies?.['react-dom']).toBeUndefined();
     expect(pkg.peerDependenciesMeta?.['react-native-web']?.optional).toBe(true);
+  });
+
+  it('공개 배포는 clean provenance stamp를 포함하고 public access를 선언한다', () => {
+    expect(pkg.publishConfig?.access).toBe('public');
+    expect(pkg.scripts?.build).toContain('scripts/stamp-provenance.mjs');
+    expect(pkg.scripts?.prepack).toContain('scripts/check-provenance.mjs --require-clean');
+    expect(existsSync(resolve(packageRoot, 'scripts', 'stamp-provenance.mjs'))).toBe(true);
+    expect(existsSync(resolve(packageRoot, 'scripts', 'check-provenance.mjs'))).toBe(true);
   });
 });
 
@@ -220,6 +235,11 @@ describe('root build guard — dist 산출물', () => {
         expect(readFileSync(file, 'utf8')).not.toMatch(/\b(?:document|window)\b/);
       }
     }
+  });
+
+  it.skipIf(!existsSync(resolve(distRoot, 'insets', 'pure.js')))('순수 inset 산출물은 peer를 참조하지 않는다', () => {
+    const refs = externalModuleSpecifiers(resolve(distRoot, 'insets', 'pure.js'));
+    expect(refs).toEqual([]);
   });
 
   it.skipIf(!hasBuiltDist)('Node 조건의 ESM·CJS self import는 주입 없이 DOM-free로 성공한다', () => {

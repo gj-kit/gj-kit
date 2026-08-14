@@ -29,6 +29,7 @@ export type {
   PlatformAdapter,
   FileStat,
   FileSystemAdapter,
+  DurableFileStoreAdapter,
   FileDownloadAdapter,
   PutRequest,
   LocalFileTransport,
@@ -118,7 +119,13 @@ export {
 } from './core/mediaTypes';
 
 // ─── §5.3 metadata — EXIF dict + JPEG APP1 파서 ─────────────────────────────
-export { mediaMetadataFromExif, mediaMetadataFromJpeg } from './core/metadata';
+export type { ExifCapturedAtOptions, ExifWallClock } from './core/metadata';
+export {
+  capturedAtFromExif,
+  mediaMetadataFromExif,
+  mediaMetadataFromJpeg,
+  parseExifWallClock,
+} from './core/metadata';
 
 // ─── §5.3 · §9 해시 — 순수 TS 증분 SHA-256 (런타임 의존성 0) ────────────────
 export type { Sha256Hasher } from './core/hashFile';
@@ -133,6 +140,22 @@ export {
 // ─── §5.3 · §7 하드닝 7 스테이징 캐시 ───────────────────────────────────────
 export type { StagingCache } from './core/staging';
 export { createStagingCache } from './core/staging';
+
+// ─── App-owned durable attachment storage ──────────────────────────────────
+export type {
+  DurableFile,
+  DurableFileErrorCode,
+  DurableFileStore,
+  DurableFileStoreCopyInput,
+  DurablePickedAssetCopyInput,
+  DurablePickedAssetFile,
+} from './core/durableFileStore';
+export {
+  DURABLE_FILE_ERROR_CODES,
+  DurableFileError,
+  createDurableFileStore,
+  isDurableFileError,
+} from './core/durableFileStore';
 
 // ─── §5.3 · §7 하드닝 8 디버그 — 서명 URL 유출 차단 ─────────────────────────
 export type { MediaDebugLogger } from './core/debug';
@@ -178,6 +201,17 @@ export { createDeviceUploads } from './core/upload/deviceUploads';
 export type { SaveableMedia, SaveResult, MediaSaver } from './core/save/saver';
 export { createMediaSaver } from './core/save/saver';
 export { mediaDownloadFileName } from './core/save/fileName';
+
+// ─── §5.4-⑥-b app-owned local file → device library ───────────────────────
+export type {
+  LocalMediaSaveFailureCode,
+  LocalMediaSaveFileAdapter,
+  LocalMediaSaveItemResult,
+  LocalMediaSaveResult,
+  LocalMediaSaver,
+  LocalSaveableMedia,
+} from './core/save/localSaver';
+export { createLocalMediaSaver } from './core/save/localSaver';
 
 // ─── §5.3 · §7 하드닝 3·4 순수 정규화 ───────────────────────────────────────
 export type { UploadSizeSource } from './core/upload/resolveSize';

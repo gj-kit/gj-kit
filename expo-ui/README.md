@@ -17,6 +17,22 @@
 pnpm add @gj-kit/expo-ui
 ```
 
+## 릴리스 artifact 정책
+
+`dist/gj-kit-provenance.json`은 package 이름·버전과 **빌드한 Git의 full source commit**만(시간값 없이)
+기록한다. 이 파일은 `dist/`와 함께 npm tarball에 들어가며, 루트 `check:pack`은 실제
+`npm pack --ignore-scripts` tarball에서 그 값을 현재 clean Git `HEAD`와 대조한다. 앱의 vendor manifest는
+tarball SHA-256을 추가로 기록할 수 있지만, 이 패키지 내부 stamp를 대신할 수 없다.
+
+일반 `npm pack`도 `prepack`에서 clean checkout을 요구한다. 따라서 source 변경과 version commit을 먼저
+commit한 뒤 `pnpm run verify:release`를 실행한다. provenance는 공개 런타임 API가 아닌 artifact metadata이므로,
+이 보호 장치만 추가하는 경우에는 API 버전을 임의로 올리지 않는다.
+
+`check:expo-ui-consumer`는 실제 packed artifact를 새 Expo SDK 56 소비자 두 곳에 설치한다. iOS/Android
+fixture는 `react-native-web` 없이 native Metro 조건을 검증하고, web fixture는 `react-native-web`을 명시적으로
+설치한 뒤 web export 및 DOM 전역 없는 Node ESM/CJS SSR import를 검증한다. 즉 `react-native-web`은 bare native
+앱에 강제되지 않으며, web/SSR 소비자는 그 optional peer를 직접 설치해야 한다는 계약이 release gate가 된다.
+
 ## 1. 테마 — createTheme이 유일한 문
 
 토큰 타입과 테마 생성기는 `@gj-kit/expo-ui/theme`에 있다. 이 엔트리는 react·react-native를 import하지 않으므로 **tailwind.config 같은 Node 컨텍스트에서도 안전하게 로드된다.**
@@ -130,15 +146,15 @@ import {
   Button, IconButton, Text, TextField, SearchField, Tabs,
   Surface, ContentFrame, Section, StickyActionBar,
   Skeleton, EmptyState, ErrorState, Toast, useToastController,
-  Dialog, DialogPanel, ConfirmActionRow,
+  Dialog, DialogPanel, ConfirmActionRow, ConfirmDialog,
   SelectionIndicator, SelectableRow, SelectAllRow,
   Badge, Alert, Avatar, Divider, ListItem,
   Spinner, ProgressBar,
-  Checkbox, Switch, RadioGroup, Accordion,
+  Checkbox, Switch, RadioGroup, SegmentedControl, Accordion,
 } from '@gj-kit/expo-ui';
 ```
 
-이 문서의 API는 상태(Badge/Alert), identity·구조(Avatar/Divider/ListItem), 진행률(Spinner/ProgressBar), 폼 제어(Checkbox/Switch/RadioGroup), disclosure(Accordion)와 interaction·data·overlay foundation을 같은 토큰·접근성 계약으로 제공한다. 설치 전에는 위 릴리스 안내에 따라 해당 버전의 공개 표면을 확인한다.
+이 문서의 API는 상태(Badge/Alert), identity·구조(Avatar/Divider/ListItem), 진행률(Spinner/ProgressBar), 폼 제어(Checkbox/Switch/RadioGroup/SegmentedControl), disclosure(Accordion)와 interaction·data·overlay foundation을 같은 토큰·접근성 계약으로 제공한다. 설치 전에는 위 릴리스 안내에 따라 해당 버전의 공개 표면을 확인한다.
 
 다음은 interaction·data·overlay foundation API다.
 
@@ -349,6 +365,35 @@ export function Preferences() {
 ```
 
 세 컴포넌트는 모두 상태를 앱이 소유한다. `Checkbox`는 select-all용 `'mixed'`도 표현하지만 사용자 입력 콜백은 항상 `boolean`을 돌려준다. `Checkbox`와 `Switch`는 보이는 `label` 또는 `accessibilityLabel` 중 하나가 반드시 필요하고, `RadioGroup`은 그룹 라벨이 필수다. 웹 Checkbox는 Space로 토글하고, RadioGroup은 Space·방향키·Home·End와 disabled 항목 건너뛰기·순환 이동을 구현한다. Switch는 플랫폼의 네이티브 Switch 동작을 보존한다.
+
+### SegmentedControl — compact required choice
+
+```tsx
+import { useState } from 'react';
+import { SegmentedControl } from '@gj-kit/expo-ui';
+
+const rangeItems = [
+  { label: '일', value: 'day' },
+  { label: '주', value: 'week' },
+  { label: '월', value: 'month' },
+] as const;
+
+export function RangeControl() {
+  const [range, setRange] = useState<'day' | 'week' | 'month'>('week');
+  return (
+    <SegmentedControl
+      accessibilityLabel="통계 기간"
+      items={rangeItems}
+      value={range}
+      onValueChange={setRange}
+      size="sm"
+      fit="content"
+    />
+  );
+}
+```
+
+`SegmentedControl<T>`은 **정확히 하나가 선택된 compact radio group**이다. `value`와 `onValueChange`는 앱이 소유하며 빈 선택·복수 선택은 제공하지 않는다. `accessibilityLabel`은 필수이고 웹에서는 radio 역할, 선택된 항목 하나의 roving tab stop, Space·방향키·Home·End, disabled 항목 건너뛰기를 제공한다. 화면과 panel 관계가 필요하면 `Tabs`, 토글 가능한 단일/복수 상태가 필요하면 `ToggleGroup`을 쓴다. 기본 `fit="equal"`은 컨테이너 폭을 균등 분할하고 `fit="content"`는 각 항목의 intrinsic width를 유지한다.
 
 ### Accordion — 단일/복수 controlled disclosure
 
@@ -1158,6 +1203,25 @@ variant별 아이콘은 `icons.toast`에서, 지속 시간은 `useToastControlle
 
 modal Dialog는 `UiProvider` 또는 `OverlayProvider` 범위가 있으면 열릴 때 stack에 한 번 등록되고, 내부 overlay는 현재 Dialog를 parent로 상속한다. backdrop, 웹 Escape, 네이티브 Back, 접근성 escape와 close action은 모두 같은 topmost request 경로를 지나므로 열린 child Popover·Menu·Select가 있으면 parent Dialog가 먼저 닫히지 않는다. `dismissDisabled`인 topmost layer는 아래 layer까지 요청이 새는 것도 막는다. 이 parent ID와 stack hook은 구현 세부이며 public prop이나 barrel export가 아니다. Provider 없는 단일 Dialog는 기존처럼 동작하지만 여러 overlay의 중첩 순서가 필요하면 루트 `UiProvider`를 둔다.
 
+#### ConfirmDialog — 제한된 controlled confirm/cancel
+
+```tsx
+import { ConfirmDialog } from '@gj-kit/expo-ui';
+
+<ConfirmDialog
+  visible={confirmVisible}
+  title="기록을 삭제할까요?"
+  description="삭제한 기록은 복구할 수 없습니다."
+  confirmLabel="삭제"
+  confirmVariant="destructive"
+  loading={deleting}
+  onConfirm={confirmDelete}
+  onDismiss={close}
+/>
+```
+
+확인/취소 두 action만 필요한 경우에는 `ConfirmDialog`를 쓴다. `visible`·`loading`·실제 삭제 후 닫기는 앱이 소유하고, `onConfirm`은 스스로 modal을 닫지 않는다. `onDismiss`는 명시적 취소의 `cancel-action`과 Dialog의 `backdrop-press | escape-key | hardware-back | accessibility-escape`를 같은 typed callback으로 전달한다. 일반 상태에서는 안전한 Cancel에 initial focus를 두며, `loading` 중에는 Cancel·Confirm·backdrop·Escape/Back·접근성 escape를 모두 막는다. custom body/footer나 닫기 X가 필요하면 `Dialog`와 `DialogPanel`을 직접 조합한다.
+
 ## 3. "./insets" — 키보드·safe-area
 
 ```tsx
@@ -1165,9 +1229,6 @@ import {
   useBottomInset,          // 하단 safe-area inset (web 0)
   useBottomSheetPadding,   // 디자인 여백 + 실측 inset — 하단 앵커 서피스의 paddingBottom
   useModalKeyboardOverlap, // <Modal> 안 하단 시트가 키보드에 가려지는 높이
-  nativeBottomInset,       // 순수 함수 버전 (peer 불필요)
-  nativeBottomPadding,
-  computeKeyboardRevealOffset, // 포커스 입력을 키보드 위로 드러내는 목표 스크롤 오프셋
 } from '@gj-kit/expo-ui/insets';
 import { StickyActionBar, Button } from '@gj-kit/expo-ui';
 import { View } from 'react-native';
@@ -1189,6 +1250,30 @@ function BottomAnchoredSurface({ children }: { children: ReactNode }) {
 ```
 
 훅 3종은 `react-native-safe-area-context`(optional peer)가 필요하다 — 이 서브패스를 import하지 않으면 설치할 필요 없고, 설치 없이 import하면 번들 시점에 바로 실패한다(런타임 마법 없음). `useModalKeyboardOverlap`은 Android 엣지투엣지 Modal 윈도우에서 KeyboardAvoidingView가 동작하지 않는 실측 문제의 우회이며, 근거는 소스 TSDoc에 있다.
+
+React Native, React, safe-area peer가 없는 공유 코드·빌드 도구·서버 계산에는 dependency-free `./insets/pure`를 쓴다. 이 경로는 `Platform.OS`를 읽을 수 없으므로 플랫폼을 명시적으로 넘긴다.
+
+```ts
+import {
+  nativeBottomInset,
+  nativeBottomPadding,
+  computeKeyboardRevealOffset,
+} from '@gj-kit/expo-ui/insets/pure';
+
+const bottomInset = nativeBottomInset(34, 'ios');
+const bottomPadding = nativeBottomPadding(24, bottomInset, 'ios');
+const revealOffset = computeKeyboardRevealOffset({
+  currentOffset: 0,
+  inputHeight: 44,
+  inputTop: 640,
+  keyboardInset: 300,
+  reservedBottomHeight: 56,
+  viewportHeight: 844,
+});
+
+void bottomPadding;
+void revealOffset;
+```
 
 ## 4. "./tailwind" — 테마 파생 preset
 
@@ -1229,6 +1314,9 @@ preset 입력도 브랜드 `Theme`이다 — 손조립 토큰으로 preset을 �
 | `ProgressBar`에 `accessibilityLabel` 누락 | 컴파일 에러 |
 | indeterminate `ProgressBar value={null}`에 `max` 지정 | 컴파일 에러 — 서로 배타적인 모드 |
 | `RadioGroup value`에 items에 없는 오타 | 컴파일 에러 (`NoInfer`) |
+| `SegmentedControl value`에 items에 없는 오타 또는 `null` | 컴파일 에러 (`NoInfer`, required radio choice) |
+| `SegmentedControl`에 `accessibilityLabel` 누락 | 컴파일 에러 — named radio group 필수 |
+| `ConfirmDialog`에 `visible`·`onConfirm`·`onDismiss` 중 하나 누락 | 컴파일 에러 — 앱이 상태와 모든 close request를 소유 |
 | multiple `Accordion`에 `collapsible` 지정 | 컴파일 에러 — single 전용 prop |
 | `Chip` kind와 다른 handler·state 조합 | 컴파일 에러 — action/filter/removable 판별 유니언 |
 | removable `Chip`에 `removeAccessibilityLabel` 누락 | 컴파일 에러 |

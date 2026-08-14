@@ -51,6 +51,7 @@ const TABLE: Record<string, Partial<Record<ConditionSet, readonly string[]>> & {
   './video': { default: ['expo-video-thumbnails'] },
   './web': { default: [] },
   './testing': { default: [] },
+  './storage': { default: ['expo-file-system'] },
 };
 
 /**
@@ -85,7 +86,7 @@ describe('dist-peer-graph — §2.2 표 × 조건 3세트 × 형식 2', () => {
     expect(existsSync(`${PACKAGE_ROOT}/dist/index.js`), '먼저 `pnpm build`가 필요하다').toBe(true);
   });
 
-  it('exports 맵의 공개 서브패스가 §2.2의 8개다', () => {
+  it('exports 맵의 공개 서브패스가 §2.2 표와 일치한다', () => {
     const subpaths = Object.keys(pkg.exports).filter((key) => key !== './package.json');
     expect(subpaths.sort()).toEqual(Object.keys(TABLE).sort());
   });

@@ -1,5 +1,5 @@
 {
-  "publishedVersion": "0.4.2",
+  "publishedVersion": "0.6.0",
   "components": [
     {
       "slug": "text",
@@ -172,7 +172,8 @@
       "related": [
         "Section",
         "ContentFrame",
-        "Accordion"
+        "Accordion",
+        "SegmentedControl"
       ],
       "en": {
         "category": "Navigation",
@@ -316,7 +317,8 @@
       "related": [
         "Checkbox",
         "Switch",
-        "Tabs"
+        "Tabs",
+        "SegmentedControl"
       ],
       "en": {
         "category": "Inputs",
@@ -325,6 +327,24 @@
       "ko": {
         "category": "입력",
         "description": "단일 선택 값을 타입으로 제한하고 방향키·Home·End 키보드 탐색을 제공하는 Expo·React Native RadioGroup입니다."
+      }
+    },
+    {
+      "slug": "segmented-control",
+      "name": "SegmentedControl",
+      "since": "0.6.0",
+      "related": [
+        "RadioGroup",
+        "ToggleGroup",
+        "Tabs"
+      ],
+      "en": {
+        "category": "Selection",
+        "description": "A compact controlled Expo and React Native radio group for one required choice, with literal value types and equal or content-width segments."
+      },
+      "ko": {
+        "category": "선택",
+        "description": "문자열 리터럴 값과 equal·content 폭 segment를 지원하는, 하나의 필수 선택을 위한 controlled Expo·React Native radio group입니다."
       }
     },
     {
@@ -352,7 +372,8 @@
       "related": [
         "Tabs",
         "RadioGroup",
-        "Slider"
+        "Slider",
+        "SegmentedControl"
       ],
       "en": {
         "category": "Selection",
@@ -766,7 +787,8 @@
       "related": [
         "DialogPanel",
         "ConfirmActionRow",
-        "Alert"
+        "Alert",
+        "ConfirmDialog"
       ],
       "en": {
         "category": "Overlay",
@@ -778,13 +800,33 @@
       }
     },
     {
+      "slug": "confirm-dialog",
+      "name": "ConfirmDialog",
+      "since": "0.6.0",
+      "related": [
+        "Dialog",
+        "DialogPanel",
+        "ConfirmActionRow",
+        "Button"
+      ],
+      "en": {
+        "category": "Overlay",
+        "description": "A controlled Expo and React Native confirmation modal with one safe cancel action, a semantic affirmative action, and explicit dismissal reasons."
+      },
+      "ko": {
+        "category": "오버레이",
+        "description": "하나의 안전한 취소 액션, 의미 있는 확인 액션, 명시적인 dismiss reason을 제공하는 controlled Expo·React Native 확인 모달입니다."
+      }
+    },
+    {
       "slug": "dialog-panel",
       "name": "DialogPanel",
       "since": "0.1.0",
       "related": [
         "Dialog",
         "ConfirmActionRow",
-        "Surface"
+        "Surface",
+        "ConfirmDialog"
       ],
       "en": {
         "category": "Overlay",
@@ -892,7 +934,8 @@
       "related": [
         "Dialog",
         "DialogPanel",
-        "Button"
+        "Button",
+        "ConfirmDialog"
       ],
       "en": {
         "category": "Actions",

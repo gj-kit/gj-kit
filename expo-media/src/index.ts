@@ -50,6 +50,7 @@ import { createPickerFlows } from './core/upload/pickerFlows';
 import type { LocalUploads, MediaUploadConfig } from './core/upload/uploader';
 import { createLocalUploads } from './core/upload/uploader';
 import { createExpoFileSystem } from './expo/fileSystem';
+import { createExpoDocumentFileStore } from './expo/durableFileStore';
 import { createExpoHasher } from './expo/hasher';
 import { createExpoLocalFileTransport } from './expo/localTransport';
 import { expoPlatform } from './expo/platform';
@@ -57,6 +58,7 @@ import { expoPlatform } from './expo/platform';
 // ─── expo 기본 어댑터 (§5.5) ────────────────────────────────────────────────
 export { expoPlatform } from './expo/platform';
 export { createExpoFileSystem } from './expo/fileSystem';
+export { createExpoDocumentFileStore } from './expo/durableFileStore';
 export { createExpoLocalFileTransport } from './expo/localTransport';
 export { createExpoHasher } from './expo/hasher';
 

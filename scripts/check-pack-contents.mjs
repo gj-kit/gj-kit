@@ -3,20 +3,21 @@
  * Published tarball contract guard.
  *
  * `dist/` is intentionally gitignored, so a fresh checkout can otherwise pack a
- * manifest whose exports all point at files that do not exist. This check runs
- * `npm pack --ignore-scripts` after the repository build: ignoring lifecycle
- * scripts is deliberate, because it proves the release workflow itself created
- * the artifacts rather than letting `prepack` hide a missing build.
+ * manifest whose exports all point at files that do not exist. Check export
+ * targets on disk *before* packing, then inspect `npm pack --ignore-scripts`.
+ * npm versions may still run some package lifecycle hooks for `pack`; the
+ * pre-pack assertion keeps this release check independent of that behavior.
  */
 import { execFileSync } from 'node:child_process';
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const packages = [
-  { directory: 'expo-ui', requirePrepack: true },
-  { directory: 'expo-media', requirePrepack: true },
+  { directory: 'expo-ui', requirePrepack: true, requireProvenance: true },
+  { directory: 'expo-media', requirePrepack: true, requireProvenance: true },
   { directory: 'toss-payments', requirePrepack: true },
   { directory: 'toss-payments-nestjs', requirePrepack: true },
 ];
@@ -49,17 +50,65 @@ function packedFiles(directory) {
     // is constrained, which would otherwise make every CI pack check noisy.
     { cwd: directory, encoding: 'utf8', env: { ...process.env, npm_config_loglevel: 'error' } },
   );
-  const result = JSON.parse(output);
+  // npm 11 can still print a package lifecycle banner before its `--json`
+  // payload even with `--ignore-scripts`. Parse the final JSON array rather
+  // than treating that harmless banner as a release-check failure.
+  const json = output.match(/(\[\s*\{[\s\S]*\])\s*$/)?.[1];
+  if (json === undefined) {
+    throw new Error(`${directory}: npm pack did not emit a JSON file manifest.`);
+  }
+  const result = JSON.parse(json);
   if (!Array.isArray(result) || result.length !== 1 || !Array.isArray(result[0]?.files)) {
     throw new Error(`${directory}: npm pack did not return one file manifest.`);
   }
   return new Set(result[0].files.map((file) => file.path));
 }
 
+function parsePackResult(output, directory) {
+  const json = output.match(/(\[\s*\{[\s\S]*\])\s*$/)?.[1];
+  if (json === undefined) {
+    throw new Error(`${directory}: npm pack did not emit a JSON file manifest.`);
+  }
+  const result = JSON.parse(json);
+  if (!Array.isArray(result) || result.length !== 1 || typeof result[0]?.filename !== 'string') {
+    throw new Error(`${directory}: npm pack did not return one tarball.`);
+  }
+  return result[0];
+}
+
+function verifyPackageProvenance(directory) {
+  const manifest = JSON.parse(readFileSync(resolve(directory, 'package.json'), 'utf8'));
+  const outputDirectory = mkdtempSync(
+    resolve(tmpdir(), `${String(manifest.name).replace(/[^a-z0-9]+/giu, '-')}-pack-`),
+  );
+  try {
+    const output = execFileSync(
+      'npm',
+      ['pack', '--json', '--ignore-scripts', '--pack-destination', outputDirectory],
+      { cwd: directory, encoding: 'utf8', env: { ...process.env, npm_config_loglevel: 'error' } },
+    );
+    parsePackResult(output, directory);
+    // `npm pack --json` reports scoped filenames differently from the
+    // filesystem-safe tarball written by --pack-destination. Discover the one
+    // output rather than guessing npm's scope escaping convention.
+    const tarballs = readdirSync(outputDirectory).filter((file) => file.endsWith('.tgz'));
+    if (tarballs.length !== 1) {
+      throw new Error(`${directory}: npm pack should create one tarball, found ${tarballs.join(', ') || 'none'}.`);
+    }
+    const tarball = resolve(outputDirectory, tarballs[0]);
+    execFileSync(
+      process.execPath,
+      [resolve(directory, 'scripts', 'check-provenance.mjs'), '--tarball', tarball, '--require-clean'],
+      { cwd: directory, encoding: 'utf8', stdio: 'inherit' },
+    );
+  } finally {
+    rmSync(outputDirectory, { recursive: true, force: true });
+  }
+}
+
 for (const packageConfig of packages) {
   const directory = resolve(root, packageConfig.directory);
   const manifest = JSON.parse(readFileSync(resolve(directory, 'package.json'), 'utf8'));
-  const files = packedFiles(directory);
 
   if (!Array.isArray(manifest.files) || !manifest.files.includes('dist')) {
     throw new Error(`${manifest.name}: package.json must explicitly publish dist/.`);
@@ -74,6 +123,8 @@ for (const packageConfig of packages) {
     throw new Error(`${manifest.name}: build artifacts missing: ${missingOnDisk.join(', ')}`);
   }
 
+  const files = packedFiles(directory);
+
   const missingFromTarball = targets.filter((target) => !files.has(target.replace(/^\.\//, '')));
   if (missingFromTarball.length > 0) {
     throw new Error(`${manifest.name}: packed tarball is missing: ${missingFromTarball.join(', ')}`);
@@ -82,4 +133,6 @@ for (const packageConfig of packages) {
   const distCount = [...files].filter((file) => file.startsWith('dist/')).length;
   if (distCount === 0) throw new Error(`${manifest.name}: packed tarball has no dist/ files.`);
   console.log(`${manifest.name}: ${targets.length} declared targets, ${distCount} dist files packed.`);
+
+  if (packageConfig.requireProvenance) verifyPackageProvenance(directory);
 }

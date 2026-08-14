@@ -174,6 +174,41 @@ describe('§5.5 SearchField', () => {
     expect(onChangeText).toHaveBeenCalledWith('바다');
   });
 
+  it('접근성 이름·힌트·관계와 nativeID를 입력 요소에 전달한다', () => {
+    render(
+      <UiProvider>
+        <SearchField
+          accessibilityHint="최근 활동만 검색합니다"
+          accessibilityLabel="활동 검색"
+          accessibilityLabelledBy="search-label"
+          aria-describedby="search-help"
+          nativeID="activity-search"
+          testID="search"
+        />
+      </UiProvider>,
+    );
+    const input = screen.getByTestId('search') as HTMLElement;
+    expect(input.id).toBe('activity-search');
+    expect(input.getAttribute('aria-label')).toBe('활동 검색');
+    expect(input.getAttribute('aria-labelledby')).toBe('search-label');
+    expect(input.getAttribute('aria-describedby')).toBe('search-help');
+  });
+
+  it('placeholder를 기본 접근성 이름으로 쓰고 disabled 상태는 편집도 막는다', () => {
+    render(
+      <UiProvider>
+        <SearchField
+          accessibilityState={{ disabled: true }}
+          placeholder="앨범 검색"
+          testID="search"
+        />
+      </UiProvider>,
+    );
+    const input = screen.getByTestId('search') as HTMLElement;
+    expect(input.getAttribute('aria-label')).toBe('앨범 검색');
+    expect(input.getAttribute('aria-disabled')).toBe('true');
+  });
+
   it('leading 기본 — Provider icons.search 주입 시 렌더되고 색·크기 계약을 받는다', () => {
     const renderIcon = vi.fn((_props: IconRenderProps) => <View testID="provider-search-icon" />);
     render(

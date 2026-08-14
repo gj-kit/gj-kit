@@ -488,6 +488,12 @@
     "typeName": "SearchFieldProps",
     "props": [
       {
+        "name": "aria-describedby",
+        "type": "string",
+        "required": false,
+        "description": "RN Web-only supplementary description id(s)."
+      },
+      {
         "name": "className",
         "type": "string",
         "required": false
@@ -1365,6 +1371,73 @@
         "name": "orientation",
         "type": "'vertical' | 'horizontal'",
         "required": false
+      },
+      {
+        "name": "style",
+        "type": "StyleProp<ViewStyle>",
+        "required": false
+      },
+      {
+        "name": "testID",
+        "type": "string",
+        "required": false
+      }
+    ]
+  },
+  "segmented-control": {
+    "typeName": "SegmentedControlProps",
+    "props": [
+      {
+        "name": "accessibilityLabel",
+        "type": "string",
+        "required": true,
+        "description": "A stable accessible name for the radio group."
+      },
+      {
+        "name": "items",
+        "type": "readonly SegmentedControlItem<T>[]",
+        "required": true,
+        "description": "The values are the source of truth for the literal value union."
+      },
+      {
+        "name": "onValueChange",
+        "type": "(value: T) => void",
+        "required": true
+      },
+      {
+        "name": "value",
+        "type": "NoInfer<T>",
+        "required": true,
+        "description": "Exactly one item is selected; empty selection belongs to ToggleGroup."
+      },
+      {
+        "name": "className",
+        "type": "string",
+        "required": false,
+        "description": "Passed to the native element without interpretation — NativeWind is a host concern (§5)."
+      },
+      {
+        "name": "fit",
+        "type": "SegmentedControlFit",
+        "required": false,
+        "description": "Equal segments fill their container; content segments retain their intrinsic width. Defaults to equal."
+      },
+      {
+        "name": "itemClassName",
+        "type": "string",
+        "required": false
+      },
+      {
+        "name": "itemStyle",
+        "type": "StyleProp<ViewStyle>",
+        "required": false,
+        "description": "Applies to every segment without changing its semantic state."
+      },
+      {
+        "name": "size",
+        "type": "SegmentedControlSize",
+        "required": false,
+        "description": "Defaults to md."
       },
       {
         "name": "style",
@@ -3149,6 +3222,103 @@
         "type": "DialogPresentation | 'modal' | 'inline'",
         "required": false,
         "conditional": true
+      },
+      {
+        "name": "testID",
+        "type": "string",
+        "required": false
+      }
+    ]
+  },
+  "confirm-dialog": {
+    "typeName": "ConfirmDialogProps",
+    "props": [
+      {
+        "name": "onConfirm",
+        "type": "() => void",
+        "required": true,
+        "description": "Runs the affirmative action. It never closes the dialog automatically."
+      },
+      {
+        "name": "onDismiss",
+        "type": "(details: ConfirmDialogDismissDetails) => void",
+        "required": true,
+        "description": "Receives every user-initiated close request, including the cancel action."
+      },
+      {
+        "name": "title",
+        "type": "string",
+        "required": true,
+        "description": "The visible title also names the underlying modal."
+      },
+      {
+        "name": "visible",
+        "type": "boolean",
+        "required": true,
+        "description": "The caller owns visibility; this component only requests dismissal."
+      },
+      {
+        "name": "cancelLabel",
+        "type": "string",
+        "required": false,
+        "description": "Defaults to strings.cancel."
+      },
+      {
+        "name": "className",
+        "type": "string",
+        "required": false,
+        "description": "Passed to the native element without interpretation — NativeWind is a host concern (§5)."
+      },
+      {
+        "name": "confirmDisabled",
+        "type": "boolean",
+        "required": false,
+        "description": "Disables only the affirmative action; cancel and ordinary dismissal stay available."
+      },
+      {
+        "name": "confirmLabel",
+        "type": "string",
+        "required": false,
+        "description": "Defaults to strings.confirm."
+      },
+      {
+        "name": "confirmVariant",
+        "type": "'primary' | 'destructive'",
+        "required": false,
+        "description": "Defaults to primary. The narrow set keeps the affirmative action semantic."
+      },
+      {
+        "name": "description",
+        "type": "string",
+        "required": false
+      },
+      {
+        "name": "dismissOnBackdrop",
+        "type": "boolean",
+        "required": false,
+        "description": "Defaults to true. It affects only backdrop presses, like Dialog."
+      },
+      {
+        "name": "finalFocusRef",
+        "type": "DialogFocusRef",
+        "required": false,
+        "description": "Best-effort focus restoration after the modal exits."
+      },
+      {
+        "name": "loading",
+        "type": "boolean",
+        "required": false,
+        "description": "Blocks every action and dismissal while the caller's confirmation work is pending."
+      },
+      {
+        "name": "overlayId",
+        "type": "string",
+        "required": false
+      },
+      {
+        "name": "style",
+        "type": "StyleProp<ViewStyle>",
+        "required": false
       },
       {
         "name": "testID",

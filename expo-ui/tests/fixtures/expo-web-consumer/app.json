@@ -1,0 +1,12 @@
+{
+  "expo": {
+    "name": "gj-kit expo-ui web release smoke",
+    "slug": "gj-kit-expo-ui-web-release-smoke",
+    "version": "1.0.0",
+    "platforms": ["web"],
+    "web": {
+      "bundler": "metro",
+      "output": "single"
+    }
+  }
+}

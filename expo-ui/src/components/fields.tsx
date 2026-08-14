@@ -235,10 +235,24 @@ export function TextField({
 export interface SearchFieldProps
   extends Pick<
     TextInputProps,
-    'value' | 'onChangeText' | 'onSubmitEditing' | 'autoFocus' | 'returnKeyType'
+    | 'value'
+    | 'onChangeText'
+    | 'onSubmitEditing'
+    | 'autoFocus'
+    | 'returnKeyType'
+    | 'nativeID'
+    | 'accessibilityLabel'
+    | 'accessibilityLabelledBy'
+    | 'accessibilityHint'
+    | 'accessibilityState'
+    | 'editable'
+    | 'aria-labelledby'
+    | 'aria-disabled'
   > {
   /** Defaults to strings.searchPlaceholder (§4.1). */
   placeholder?: string | undefined;
+  /** RN Web-only supplementary description id(s). */
+  'aria-describedby'?: string | undefined;
   /** Renders icons.search by default (§4.2). */
   leading?: ReactNode | undefined;
   inputStyle?: StyleProp<TextStyle> | undefined;
@@ -275,12 +289,33 @@ export function SearchField({
   inputClassName,
   style,
   className,
+  nativeID,
+  accessibilityLabel,
+  accessibilityLabelledBy,
+  accessibilityHint,
+  accessibilityState,
+  editable,
+  'aria-labelledby': ariaLabelledBy,
+  'aria-describedby': ariaDescribedBy,
+  'aria-disabled': ariaDisabled,
   testID,
 }: SearchFieldProps): ReactElement {
   const theme = useTheme();
   const strings = useStrings();
   const icons = useIcons();
   const styles = getSearchStyles(theme);
+  const resolvedPlaceholder = placeholder ?? strings.searchPlaceholder;
+  const disabled =
+    editable === false || ariaDisabled === true || accessibilityState?.disabled === true;
+  const resolvedAriaLabelledBy =
+    ariaLabelledBy ??
+    (Array.isArray(accessibilityLabelledBy)
+      ? accessibilityLabelledBy.join(' ')
+      : accessibilityLabelledBy);
+  const resolvedAccessibilityState: TextInputProps['accessibilityState'] = {
+    ...accessibilityState,
+    ...(disabled ? { disabled: true } : {}),
+  };
   const resolvedLeading =
     leading ??
     renderIconSlot(icons.search, {
@@ -299,12 +334,25 @@ export function SearchField({
     >
       {resolvedLeading}
       <TextInput
+        {...webProps({
+          ...(resolvedAriaLabelledBy !== undefined
+            ? { 'aria-labelledby': resolvedAriaLabelledBy }
+            : {}),
+          ...(ariaDescribedBy !== undefined ? { 'aria-describedby': ariaDescribedBy } : {}),
+          'aria-disabled': disabled,
+        })}
         value={value}
         onChangeText={onChangeText}
         onSubmitEditing={onSubmitEditing}
         autoFocus={autoFocus}
         returnKeyType={returnKeyType}
-        placeholder={placeholder ?? strings.searchPlaceholder}
+        nativeID={nativeID}
+        accessibilityLabel={accessibilityLabel ?? resolvedPlaceholder}
+        accessibilityLabelledBy={accessibilityLabelledBy}
+        accessibilityHint={accessibilityHint}
+        accessibilityState={resolvedAccessibilityState}
+        editable={!disabled && (editable ?? true)}
+        placeholder={resolvedPlaceholder}
         placeholderTextColor={theme.colors.textSubtle}
         testID={testID}
         {...nativeWindProps(inputClassName)}

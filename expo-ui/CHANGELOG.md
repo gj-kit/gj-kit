@@ -1,5 +1,16 @@
 # @gj-kit/expo-ui
 
+## 0.6.0
+
+### Minor Changes
+
+- 525e736: Add the dependency-free `@gj-kit/expo-ui/insets/pure` entry for explicit safe-area and keyboard arithmetic. SearchField now forwards its focused input's accessibility relationships and disabled state, while Skeleton respects the platform reduced-motion preference.
+- 2a8ce0f: Add controlled `ConfirmDialog` for accessible confirm/cancel decisions and generic `SegmentedControl<T>` for compact, required radio choices.
+
+### Patch Changes
+
+- 26dfa3d: 패키지 내부 Git provenance stamp와 clean-check를 추가하고, 실제 packed tarball을 사용하는 Expo SDK 56 native/web/Node 소비자 검증을 릴리스 gate에 포함합니다. native 소비자는 `react-native-web` 없이도 동작하는 optional-peer 경계를, web/SSR 소비자는 해당 peer가 있을 때의 ESM/CJS 조건 해석을 검증합니다.
+
 ## 0.5.0
 
 ### Minor Changes

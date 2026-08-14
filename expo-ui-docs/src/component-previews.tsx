@@ -14,6 +14,7 @@ import {
   Chip,
   Collapsible,
   ConfirmActionRow,
+  ConfirmDialog,
   ContentFrame,
   DataTable,
   Dialog,
@@ -33,6 +34,7 @@ import {
   RadioGroup,
   Rating,
   SearchField,
+  SegmentedControl,
   Section,
   Select,
   SelectAllRow,
@@ -303,6 +305,25 @@ function RadioGroupPreview(): ReactElement {
       value={channel}
       onValueChange={setChannel}
     />
+  );
+}
+
+function SegmentedControlPreview(): ReactElement {
+  const [range, setRange] = useState<'day' | 'week' | 'month'>('week');
+  return (
+    <Stack>
+      <SegmentedControl
+        accessibilityLabel="Time range"
+        items={[
+          { label: 'Day', value: 'day' },
+          { label: 'Week', value: 'week' },
+          { label: 'Month', value: 'month' },
+        ] as const}
+        value={range}
+        onValueChange={setRange}
+      />
+      <Text role="caption" color="textMuted">Selected: {range}</Text>
+    </Stack>
   );
 }
 
@@ -858,6 +879,38 @@ function DialogPreview(): ReactElement {
   );
 }
 
+function ConfirmDialogPreview(): ReactElement {
+  const [visible, setVisible] = useState(false);
+  const [result, setResult] = useState<string | null>(null);
+  return (
+    <Stack>
+      <Button label="Delete project" variant="destructive-outline" onPress={() => setVisible(true)} />
+      <ConfirmDialog
+        visible={visible}
+        title="Delete this project?"
+        description="This cannot be undone."
+        confirmLabel="Delete"
+        confirmVariant="destructive"
+        onConfirm={() => {
+          setVisible(false);
+          setResult('Project deleted by the caller.');
+        }}
+        onDismiss={(details) => {
+          setVisible(false);
+          setResult(
+            details.reason === 'cancel-action'
+              ? 'Deletion cancelled.'
+              : `Dialog dismissed: ${details.reason}.`,
+          );
+        }}
+      />
+      <Text role="caption" color="textMuted">
+        {result ?? 'The caller owns both confirmation and dismissal.'}
+      </Text>
+    </Stack>
+  );
+}
+
 function DialogPanelPreview(): ReactElement {
   return (
     <Stack>
@@ -988,6 +1041,7 @@ const previews: Readonly<Record<string, ComponentType>> = {
   chip: ChipPreview,
   collapsible: CollapsiblePreview,
   'confirm-action-row': ConfirmActionRowPreview,
+  'confirm-dialog': ConfirmDialogPreview,
   'content-frame': ContentFramePreview,
   'data-table': DataTablePreview,
   dialog: DialogPreview,
@@ -1007,6 +1061,7 @@ const previews: Readonly<Record<string, ComponentType>> = {
   'radio-group': RadioGroupPreview,
   rating: RatingPreview,
   'search-field': SearchFieldPreview,
+  'segmented-control': SegmentedControlPreview,
   section: SectionPreview,
   select: SelectPreview,
   'select-all-row': SelectAllRowPreview,

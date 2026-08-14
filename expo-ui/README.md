@@ -17,6 +17,22 @@
 pnpm add @gj-kit/expo-ui
 ```
 
+## 릴리스 artifact 정책
+
+`dist/gj-kit-provenance.json`은 package 이름·버전과 **빌드한 Git의 full source commit**만(시간값 없이)
+기록한다. 이 파일은 `dist/`와 함께 npm tarball에 들어가며, 루트 `check:pack`은 실제
+`npm pack --ignore-scripts` tarball에서 그 값을 현재 clean Git `HEAD`와 대조한다. 앱의 vendor manifest는
+tarball SHA-256을 추가로 기록할 수 있지만, 이 패키지 내부 stamp를 대신할 수 없다.
+
+일반 `npm pack`도 `prepack`에서 clean checkout을 요구한다. 따라서 source 변경과 version commit을 먼저
+commit한 뒤 `pnpm run verify:release`를 실행한다. provenance는 공개 런타임 API가 아닌 artifact metadata이므로,
+이 보호 장치만 추가하는 경우에는 API 버전을 임의로 올리지 않는다.
+
+`check:expo-ui-consumer`는 실제 packed artifact를 새 Expo SDK 56 소비자 두 곳에 설치한다. iOS/Android
+fixture는 `react-native-web` 없이 native Metro 조건을 검증하고, web fixture는 `react-native-web`을 명시적으로
+설치한 뒤 web export 및 DOM 전역 없는 Node ESM/CJS SSR import를 검증한다. 즉 `react-native-web`은 bare native
+앱에 강제되지 않으며, web/SSR 소비자는 그 optional peer를 직접 설치해야 한다는 계약이 release gate가 된다.
+
 ## 1. 테마 — createTheme이 유일한 문
 
 토큰 타입과 테마 생성기는 `@gj-kit/expo-ui/theme`에 있다. 이 엔트리는 react·react-native를 import하지 않으므로 **tailwind.config 같은 Node 컨텍스트에서도 안전하게 로드된다.**

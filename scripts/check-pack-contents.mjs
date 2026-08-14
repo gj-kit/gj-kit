@@ -16,8 +16,8 @@ import { fileURLToPath } from 'node:url';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const packages = [
-  { directory: 'expo-ui', requirePrepack: true },
-  { directory: 'expo-media', requirePrepack: true },
+  { directory: 'expo-ui', requirePrepack: true, requireProvenance: true },
+  { directory: 'expo-media', requirePrepack: true, requireProvenance: true },
   { directory: 'toss-payments', requirePrepack: true },
   { directory: 'toss-payments-nestjs', requirePrepack: true },
 ];
@@ -76,19 +76,21 @@ function parsePackResult(output, directory) {
   return result[0];
 }
 
-function verifyExpoMediaProvenance(directory) {
-  const outputDirectory = mkdtempSync(resolve(tmpdir(), 'gj-kit-expo-media-pack-'));
+function verifyPackageProvenance(directory) {
+  const manifest = JSON.parse(readFileSync(resolve(directory, 'package.json'), 'utf8'));
+  const outputDirectory = mkdtempSync(
+    resolve(tmpdir(), `${String(manifest.name).replace(/[^a-z0-9]+/giu, '-')}-pack-`),
+  );
   try {
     const output = execFileSync(
       'npm',
       ['pack', '--json', '--ignore-scripts', '--pack-destination', outputDirectory],
       { cwd: directory, encoding: 'utf8', env: { ...process.env, npm_config_loglevel: 'error' } },
     );
-    const result = parsePackResult(output, directory);
-    // `npm pack --json` reports a scoped filename such as
-    // `@gj-kit/expo-media-0.4.0.tgz`, but --pack-destination writes the
-    // filesystem-safe `gj-kit-expo-media-0.4.0.tgz`. Discover the one output
-    // rather than guessing npm's scope escaping convention.
+    parsePackResult(output, directory);
+    // `npm pack --json` reports scoped filenames differently from the
+    // filesystem-safe tarball written by --pack-destination. Discover the one
+    // output rather than guessing npm's scope escaping convention.
     const tarballs = readdirSync(outputDirectory).filter((file) => file.endsWith('.tgz'));
     if (tarballs.length !== 1) {
       throw new Error(`${directory}: npm pack should create one tarball, found ${tarballs.join(', ') || 'none'}.`);
@@ -132,5 +134,5 @@ for (const packageConfig of packages) {
   if (distCount === 0) throw new Error(`${manifest.name}: packed tarball has no dist/ files.`);
   console.log(`${manifest.name}: ${targets.length} declared targets, ${distCount} dist files packed.`);
 
-  if (manifest.name === '@gj-kit/expo-media') verifyExpoMediaProvenance(directory);
+  if (packageConfig.requireProvenance) verifyPackageProvenance(directory);
 }

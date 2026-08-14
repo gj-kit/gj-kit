@@ -21,6 +21,8 @@ interface PackageJson {
   readonly exports: Readonly<Record<string, ExportValue>>;
   readonly peerDependencies?: Readonly<Record<string, string>>;
   readonly peerDependenciesMeta?: Readonly<Record<string, { readonly optional?: boolean }>>;
+  readonly publishConfig?: { readonly access?: string };
+  readonly scripts?: Readonly<Record<string, string>>;
 }
 
 const packageRoot = process.cwd();
@@ -166,6 +168,14 @@ describe('root build guard — 소스·exports 계약', () => {
     expect(pkg.peerDependencies?.['react-native-web']).toBe('>=0.21');
     expect(pkg.peerDependencies?.['react-dom']).toBeUndefined();
     expect(pkg.peerDependenciesMeta?.['react-native-web']?.optional).toBe(true);
+  });
+
+  it('공개 배포는 clean provenance stamp를 포함하고 public access를 선언한다', () => {
+    expect(pkg.publishConfig?.access).toBe('public');
+    expect(pkg.scripts?.build).toContain('scripts/stamp-provenance.mjs');
+    expect(pkg.scripts?.prepack).toContain('scripts/check-provenance.mjs --require-clean');
+    expect(existsSync(resolve(packageRoot, 'scripts', 'stamp-provenance.mjs'))).toBe(true);
+    expect(existsSync(resolve(packageRoot, 'scripts', 'check-provenance.mjs'))).toBe(true);
   });
 });
 

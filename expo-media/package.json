@@ -172,8 +172,8 @@
     "./package.json": "./package.json"
   },
   "scripts": {
-    "build": "tsup && node scripts/stamp-dom-reference.mjs",
-    "prepack": "npm run build",
+    "build": "tsup && node scripts/stamp-dom-reference.mjs && node scripts/stamp-provenance.mjs",
+    "prepack": "npm run build && node scripts/check-provenance.mjs --require-clean",
     "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.core.json && tsc --noEmit -p tsconfig.tests.json",
     "test": "vitest run --project unit --project web",
     "test:types": "vitest run --project types",

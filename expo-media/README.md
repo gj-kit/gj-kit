@@ -278,8 +278,17 @@ URI만 `remove()`에 넘기면 store는 자기 root 밖을 no-op으로 처리한
 `dist/**/*.map`은 의도적으로 npm tarball에 포함한다. React Native/Metro의 production symbolication과
 소비자 앱의 디버그 재현에 필요한 공개 artifact이기 때문이다. 크기 최적화가 필요해지는 릴리스에서만
 source map을 별도 artifact로 옮기며, 그때는 `npm pack` 결과와 Metro consumer smoke를 함께 바꾼다.
-현재 `check:pack`은 export map과 실제 packed 파일을, `check:expo-media-consumer`는 새 Expo SDK 56
-소비자의 web/iOS/Android export를 검증한다.
+`dist/gj-kit-provenance.json`에는 package 이름·버전과 **빌드한 Git의 full source commit**만(시간값 없이)
+기록된다. 이 파일은 `dist/`와 함께 tarball 안에 들어가며, `check:pack`은 실제
+`npm pack --ignore-scripts` tarball에서 그 값을 현재 clean Git `HEAD`와 대조한다. 앱의 vendor manifest는
+tarball SHA-256을 추가로 기록할 수 있지만, 이 패키지 내부 stamp를 대신할 수 없다.
+
+따라서 배포할 때는 source 변경과 version commit을 먼저 commit한 clean checkout에서 `pnpm run verify:release`를
+실행한다. 일반 `npm pack`도 `prepack`에서 같은 clean-check를 수행한다. stamp는 공개 런타임 API가 아닌
+artifact metadata이므로 이 보호 장치만 추가하는 경우에는 패키지 버전을 임의로 올리지 않는다.
+
+현재 `check:pack`은 export map·실제 packed 파일·내부 provenance stamp를, `check:expo-media-consumer`는 새
+Expo SDK 56 소비자의 web/iOS/Android export를 검증한다.
 
 ### 역사적 활동의 EXIF 시간
 

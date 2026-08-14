@@ -156,6 +156,12 @@ export type {
   DialogPanelElement,
 } from "./components/dialog";
 
+export { ConfirmDialog } from "./components/confirm-dialog";
+export type {
+  ConfirmDialogProps,
+  ConfirmDialogDismissDetails,
+} from "./components/confirm-dialog";
+
 export { ActionSheet } from "./components/action-sheet";
 export type {
   ActionSheetProps,
@@ -298,6 +304,14 @@ export type {
 
 export { RadioGroup } from "./components/radio";
 export type { RadioGroupProps, RadioItem } from "./components/radio";
+
+export { SegmentedControl } from "./components/segmented-control";
+export type {
+  SegmentedControlProps,
+  SegmentedControlItem,
+  SegmentedControlSize,
+  SegmentedControlFit,
+} from "./components/segmented-control";
 
 export { Accordion } from "./components/accordion";
 export type {

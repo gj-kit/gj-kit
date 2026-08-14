@@ -5,7 +5,8 @@
  * and corners from radius — no design literal in the stylesheet (enforced by
  * token-guard, §1 invariant 1).
  */
-import type { ReactElement, ReactNode } from 'react';
+import { forwardRef } from 'react';
+import type { ComponentRef, ReactElement, ReactNode } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text as RNText } from 'react-native';
 import type { StyleProp, TextStyle, ViewStyle } from 'react-native';
 import type { Theme } from '../theme/tokens';
@@ -233,7 +234,10 @@ const getStyles = themedStyles((theme: Theme) => ({
   },
 }));
 
-export function Button(props: ButtonProps): ReactElement {
+export const Button = forwardRef<ComponentRef<typeof Pressable>, ButtonProps>(function Button(
+  props,
+  ref,
+): ReactElement {
   const {
     label,
     children,
@@ -272,6 +276,7 @@ export function Button(props: ButtonProps): ReactElement {
 
   return (
     <Pressable
+      ref={ref}
       accessibilityRole="button"
       accessibilityLabel={resolvedAccessibilityLabel}
       // 전신의 unstyled 분기별 busy 비일관 제거 — 단일 계약(§5.2).
@@ -331,7 +336,7 @@ export function Button(props: ButtonProps): ReactElement {
       )}
     </Pressable>
   );
-}
+});
 
 type IconButtonBaseProps = {
   /** Required — prevents a screen reader blank on an icon-only button (§6 ②). */

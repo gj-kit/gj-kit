@@ -146,15 +146,15 @@ import {
   Button, IconButton, Text, TextField, SearchField, Tabs,
   Surface, ContentFrame, Section, StickyActionBar,
   Skeleton, EmptyState, ErrorState, Toast, useToastController,
-  Dialog, DialogPanel, ConfirmActionRow,
+  Dialog, DialogPanel, ConfirmActionRow, ConfirmDialog,
   SelectionIndicator, SelectableRow, SelectAllRow,
   Badge, Alert, Avatar, Divider, ListItem,
   Spinner, ProgressBar,
-  Checkbox, Switch, RadioGroup, Accordion,
+  Checkbox, Switch, RadioGroup, SegmentedControl, Accordion,
 } from '@gj-kit/expo-ui';
 ```
 
-이 문서의 API는 상태(Badge/Alert), identity·구조(Avatar/Divider/ListItem), 진행률(Spinner/ProgressBar), 폼 제어(Checkbox/Switch/RadioGroup), disclosure(Accordion)와 interaction·data·overlay foundation을 같은 토큰·접근성 계약으로 제공한다. 설치 전에는 위 릴리스 안내에 따라 해당 버전의 공개 표면을 확인한다.
+이 문서의 API는 상태(Badge/Alert), identity·구조(Avatar/Divider/ListItem), 진행률(Spinner/ProgressBar), 폼 제어(Checkbox/Switch/RadioGroup/SegmentedControl), disclosure(Accordion)와 interaction·data·overlay foundation을 같은 토큰·접근성 계약으로 제공한다. 설치 전에는 위 릴리스 안내에 따라 해당 버전의 공개 표면을 확인한다.
 
 다음은 interaction·data·overlay foundation API다.
 
@@ -365,6 +365,35 @@ export function Preferences() {
 ```
 
 세 컴포넌트는 모두 상태를 앱이 소유한다. `Checkbox`는 select-all용 `'mixed'`도 표현하지만 사용자 입력 콜백은 항상 `boolean`을 돌려준다. `Checkbox`와 `Switch`는 보이는 `label` 또는 `accessibilityLabel` 중 하나가 반드시 필요하고, `RadioGroup`은 그룹 라벨이 필수다. 웹 Checkbox는 Space로 토글하고, RadioGroup은 Space·방향키·Home·End와 disabled 항목 건너뛰기·순환 이동을 구현한다. Switch는 플랫폼의 네이티브 Switch 동작을 보존한다.
+
+### SegmentedControl — compact required choice
+
+```tsx
+import { useState } from 'react';
+import { SegmentedControl } from '@gj-kit/expo-ui';
+
+const rangeItems = [
+  { label: '일', value: 'day' },
+  { label: '주', value: 'week' },
+  { label: '월', value: 'month' },
+] as const;
+
+export function RangeControl() {
+  const [range, setRange] = useState<'day' | 'week' | 'month'>('week');
+  return (
+    <SegmentedControl
+      accessibilityLabel="통계 기간"
+      items={rangeItems}
+      value={range}
+      onValueChange={setRange}
+      size="sm"
+      fit="content"
+    />
+  );
+}
+```
+
+`SegmentedControl<T>`은 **정확히 하나가 선택된 compact radio group**이다. `value`와 `onValueChange`는 앱이 소유하며 빈 선택·복수 선택은 제공하지 않는다. `accessibilityLabel`은 필수이고 웹에서는 radio 역할, 선택된 항목 하나의 roving tab stop, Space·방향키·Home·End, disabled 항목 건너뛰기를 제공한다. 화면과 panel 관계가 필요하면 `Tabs`, 토글 가능한 단일/복수 상태가 필요하면 `ToggleGroup`을 쓴다. 기본 `fit="equal"`은 컨테이너 폭을 균등 분할하고 `fit="content"`는 각 항목의 intrinsic width를 유지한다.
 
 ### Accordion — 단일/복수 controlled disclosure
 
@@ -1174,6 +1203,25 @@ variant별 아이콘은 `icons.toast`에서, 지속 시간은 `useToastControlle
 
 modal Dialog는 `UiProvider` 또는 `OverlayProvider` 범위가 있으면 열릴 때 stack에 한 번 등록되고, 내부 overlay는 현재 Dialog를 parent로 상속한다. backdrop, 웹 Escape, 네이티브 Back, 접근성 escape와 close action은 모두 같은 topmost request 경로를 지나므로 열린 child Popover·Menu·Select가 있으면 parent Dialog가 먼저 닫히지 않는다. `dismissDisabled`인 topmost layer는 아래 layer까지 요청이 새는 것도 막는다. 이 parent ID와 stack hook은 구현 세부이며 public prop이나 barrel export가 아니다. Provider 없는 단일 Dialog는 기존처럼 동작하지만 여러 overlay의 중첩 순서가 필요하면 루트 `UiProvider`를 둔다.
 
+#### ConfirmDialog — 제한된 controlled confirm/cancel
+
+```tsx
+import { ConfirmDialog } from '@gj-kit/expo-ui';
+
+<ConfirmDialog
+  visible={confirmVisible}
+  title="기록을 삭제할까요?"
+  description="삭제한 기록은 복구할 수 없습니다."
+  confirmLabel="삭제"
+  confirmVariant="destructive"
+  loading={deleting}
+  onConfirm={confirmDelete}
+  onDismiss={close}
+/>
+```
+
+확인/취소 두 action만 필요한 경우에는 `ConfirmDialog`를 쓴다. `visible`·`loading`·실제 삭제 후 닫기는 앱이 소유하고, `onConfirm`은 스스로 modal을 닫지 않는다. `onDismiss`는 명시적 취소의 `cancel-action`과 Dialog의 `backdrop-press | escape-key | hardware-back | accessibility-escape`를 같은 typed callback으로 전달한다. 일반 상태에서는 안전한 Cancel에 initial focus를 두며, `loading` 중에는 Cancel·Confirm·backdrop·Escape/Back·접근성 escape를 모두 막는다. custom body/footer나 닫기 X가 필요하면 `Dialog`와 `DialogPanel`을 직접 조합한다.
+
 ## 3. "./insets" — 키보드·safe-area
 
 ```tsx
@@ -1245,6 +1293,9 @@ preset 입력도 브랜드 `Theme`이다 — 손조립 토큰으로 preset을 �
 | `ProgressBar`에 `accessibilityLabel` 누락 | 컴파일 에러 |
 | indeterminate `ProgressBar value={null}`에 `max` 지정 | 컴파일 에러 — 서로 배타적인 모드 |
 | `RadioGroup value`에 items에 없는 오타 | 컴파일 에러 (`NoInfer`) |
+| `SegmentedControl value`에 items에 없는 오타 또는 `null` | 컴파일 에러 (`NoInfer`, required radio choice) |
+| `SegmentedControl`에 `accessibilityLabel` 누락 | 컴파일 에러 — named radio group 필수 |
+| `ConfirmDialog`에 `visible`·`onConfirm`·`onDismiss` 중 하나 누락 | 컴파일 에러 — 앱이 상태와 모든 close request를 소유 |
 | multiple `Accordion`에 `collapsible` 지정 | 컴파일 에러 — single 전용 prop |
 | `Chip` kind와 다른 handler·state 조합 | 컴파일 에러 — action/filter/removable 판별 유니언 |
 | removable `Chip`에 `removeAccessibilityLabel` 누락 | 컴파일 에러 |

@@ -10,7 +10,9 @@
   <url><loc>https://gj-kit-expo-ui.expo.app/docs/insets-keyboard</loc></url>
   <url><loc>https://gj-kit-expo-ui.expo.app/docs/type-safety</loc></url>
   <url><loc>https://gj-kit-expo-ui.expo.app/docs/components/text</loc></url>
+  <url><loc>https://gj-kit-expo-ui.expo.app/docs/components/button</loc></url>
   <url><loc>https://gj-kit-expo-ui.expo.app/docs/components/icon-button</loc></url>
+  <url><loc>https://gj-kit-expo-ui.expo.app/docs/components/chip</loc></url>
   <url><loc>https://gj-kit-expo-ui.expo.app/docs/components/floating-action-button</loc></url>
   <url><loc>https://gj-kit-expo-ui.expo.app/docs/components/text-field</loc></url>
   <url><loc>https://gj-kit-expo-ui.expo.app/docs/components/search-field</loc></url>
@@ -25,8 +27,10 @@
   <url><loc>https://gj-kit-expo-ui.expo.app/docs/components/checkbox</loc></url>
   <url><loc>https://gj-kit-expo-ui.expo.app/docs/components/switch</loc></url>
   <url><loc>https://gj-kit-expo-ui.expo.app/docs/components/radio-group</loc></url>
+  <url><loc>https://gj-kit-expo-ui.expo.app/docs/components/segmented-control</loc></url>
   <url><loc>https://gj-kit-expo-ui.expo.app/docs/components/slider</loc></url>
   <url><loc>https://gj-kit-expo-ui.expo.app/docs/components/toggle-group</loc></url>
+  <url><loc>https://gj-kit-expo-ui.expo.app/docs/components/rating</loc></url>
   <url><loc>https://gj-kit-expo-ui.expo.app/docs/components/surface</loc></url>
   <url><loc>https://gj-kit-expo-ui.expo.app/docs/components/card</loc></url>
   <url><loc>https://gj-kit-expo-ui.expo.app/docs/components/aspect-ratio</loc></url>
@@ -49,6 +53,7 @@
   <url><loc>https://gj-kit-expo-ui.expo.app/docs/components/pagination</loc></url>
   <url><loc>https://gj-kit-expo-ui.expo.app/docs/components/accordion</loc></url>
   <url><loc>https://gj-kit-expo-ui.expo.app/docs/components/dialog</loc></url>
+  <url><loc>https://gj-kit-expo-ui.expo.app/docs/components/confirm-dialog</loc></url>
   <url><loc>https://gj-kit-expo-ui.expo.app/docs/components/dialog-panel</loc></url>
   <url><loc>https://gj-kit-expo-ui.expo.app/docs/components/action-sheet</loc></url>
   <url><loc>https://gj-kit-expo-ui.expo.app/docs/components/sheet</loc></url>

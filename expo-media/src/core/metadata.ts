@@ -26,7 +26,17 @@ const GPS_LATITUDE_KEYS = ['GPSLatitude', 'gpsLatitude', 'latitude'];
 const GPS_LONGITUDE_KEYS = ['GPSLongitude', 'gpsLongitude', 'longitude'];
 const GPS_LATITUDE_REF_KEYS = ['GPSLatitudeRef', 'gpsLatitudeRef', 'LatitudeRef'];
 const GPS_LONGITUDE_REF_KEYS = ['GPSLongitudeRef', 'gpsLongitudeRef', 'LongitudeRef'];
-const CAPTURED_AT_KEYS = ['DateTimeOriginal', 'DateTimeDigitized', 'DateTime'];
+// Expo/ImagePicker and PhotoKit bridges do not agree on the casing of these
+// fields. Keep the precedence stable while accepting the documented aliases so
+// every consumer does not need to recreate this list at its domain boundary.
+const CAPTURED_AT_KEYS = [
+  'DateTimeOriginal',
+  'dateTimeOriginal',
+  'DateTimeDigitized',
+  'dateTimeDigitized',
+  'DateTime',
+  'dateTime',
+];
 
 function firstValue(exif: ReadonlyExifRecord, keys: readonly string[]): unknown {
   return keys.map((key) => exif[key]).find((value) => value !== undefined);
@@ -117,7 +127,7 @@ function validGeoPoint(latitude: number | null, longitude: number | null): GeoPo
  * ⚠ `new Date(y, m, d, …)`(로컬 해석)를 `new Date(isoString)`(UTC 해석)으로 바꾸면 이 하드닝이
  * 조용히 사라진다. 그 회귀는 `TZ=Asia/Seoul`과 `TZ=UTC` 두 실행을 비교하는 유닛만이 잡는다(§7).
  */
-function capturedAtFromExif(value: unknown): string | null {
+function capturedAtFromExifInCurrentTimeZone(value: unknown): string | null {
   if (typeof value !== 'string') return null;
   const trimmed = value.trim();
   if (!trimmed) return null;
@@ -133,6 +143,118 @@ function capturedAtFromExif(value: unknown): string | null {
       )
     : new Date(trimmed);
   return Number.isNaN(date.getTime()) ? null : date.toISOString();
+}
+
+/**
+ * A timezone-less EXIF wall clock. EXIF itself carries no offset, so this is
+ * deliberately not a `Date`: callers must choose the policy for mapping it to
+ * an instant.
+ */
+export type ExifWallClock = {
+  readonly year: number;
+  readonly month: number;
+  readonly day: number;
+  readonly hour: number;
+  readonly minute: number;
+  readonly second: number;
+  readonly millisecond: number;
+};
+
+const EXIF_WALL_CLOCK = /^(\d{4}):(\d{2}):(\d{2})[ T](\d{2}):(\d{2}):(\d{2})(?:\.(\d+))?$/;
+const MAX_TIME_ZONE_OFFSET_MINUTES = 14 * 60;
+
+/**
+ * Strictly parses the EXIF datetime representation as a wall clock.
+ *
+ * `Date.UTC` normally normalises invalid values (for example February 30), so
+ * all fields are compared after construction before the value is exposed. This
+ * helper has no device-time-zone dependency and is therefore safe for a
+ * historical activity or trip whose offset was persisted at record time.
+ */
+export function parseExifWallClock(value: unknown): ExifWallClock | undefined {
+  if (typeof value !== 'string') return undefined;
+  const match = value.trim().match(EXIF_WALL_CLOCK);
+  if (!match) return undefined;
+
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const hour = Number(match[4]);
+  const minute = Number(match[5]);
+  const second = Number(match[6]);
+  // EXIF fractional seconds are decimal. Preserve millisecond precision while
+  // safely ignoring precision JavaScript Date cannot represent.
+  const millisecond = Number((match[7] ?? '').slice(0, 3).padEnd(3, '0'));
+  const instant = Date.UTC(year, month - 1, day, hour, minute, second, millisecond);
+  const date = new Date(instant);
+  if (
+    date.getUTCFullYear() !== year
+    || date.getUTCMonth() !== month - 1
+    || date.getUTCDate() !== day
+    || date.getUTCHours() !== hour
+    || date.getUTCMinutes() !== minute
+    || date.getUTCSeconds() !== second
+    || date.getUTCMilliseconds() !== millisecond
+  ) {
+    return undefined;
+  }
+  return { year, month, day, hour, minute, second, millisecond };
+}
+
+export type ExifCapturedAtOptions = {
+  /**
+   * Offset saved with the event in minutes east of UTC (KST = 540). When this
+   * is omitted, the historical device-local behaviour of
+   * `mediaMetadataFromExif` is preserved.
+   */
+  readonly timeZoneOffsetMinutes?: number | undefined;
+};
+
+/**
+ * Resolves the preferred EXIF datetime field to an ISO instant.
+ *
+ * Normal `mediaMetadataFromExif` callers should retain its device-local
+ * default. Consumers that know an immutable historical event offset can pass
+ * it here and avoid silently interpreting a travel photo in the device's
+ * *current* time zone. A datetime which already carries an explicit ISO offset
+ * retains that offset; malformed timezone-less EXIF values are rejected.
+ */
+export function capturedAtFromExif(
+  exif?: Readonly<Record<string, unknown>> | null,
+  options?: ExifCapturedAtOptions | undefined,
+): string | undefined {
+  const value = firstValue(exif ?? {}, CAPTURED_AT_KEYS);
+  const offsetMinutes = options?.timeZoneOffsetMinutes;
+  if (offsetMinutes === undefined) {
+    return capturedAtFromExifInCurrentTimeZone(value) ?? undefined;
+  }
+  if (
+    !Number.isInteger(offsetMinutes)
+    || Math.abs(offsetMinutes) > MAX_TIME_ZONE_OFFSET_MINUTES
+  ) {
+    return undefined;
+  }
+
+  const wallClock = parseExifWallClock(value);
+  if (wallClock) {
+    const instant = Date.UTC(
+      wallClock.year,
+      wallClock.month - 1,
+      wallClock.day,
+      wallClock.hour,
+      wallClock.minute,
+      wallClock.second,
+      wallClock.millisecond,
+    ) - offsetMinutes * 60_000;
+    return new Date(instant).toISOString();
+  }
+
+  // An ISO value with an offset is already an unambiguous instant. Do not
+  // reinterpret it through the supplied historical offset.
+  if (typeof value !== 'string' || !/(?:Z|[+-]\d{2}:?\d{2})$/i.test(value.trim())) {
+    return undefined;
+  }
+  return capturedAtFromExifInCurrentTimeZone(value) ?? undefined;
 }
 
 /**
@@ -155,7 +277,7 @@ export function mediaMetadataFromExif(
     firstValue(exif, GPS_LONGITUDE_REF_KEYS),
   );
   const geoPoint = validGeoPoint(latitude, longitude);
-  const capturedAt = capturedAtFromExif(firstValue(exif, CAPTURED_AT_KEYS));
+  const capturedAt = capturedAtFromExif(exif);
   if (!geoPoint && !capturedAt) return undefined;
   return {
     ...(capturedAt ? { capturedAt } : {}),

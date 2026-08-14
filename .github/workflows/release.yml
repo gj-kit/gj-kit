@@ -33,6 +33,11 @@ jobs:
           registry-url: https://registry.npmjs.org
       - run: pnpm install --frozen-lockfile
       - run: pnpm run verify:release
+      # `verify:release` proves source/dist contracts. This follows it with an
+      # actual Expo SDK 56 Metro export of the packed tarball, so the release
+      # cannot publish an export-map or optional-peer combination that only
+      # fails in a fresh consumer.
+      - run: pnpm run check:expo-media-consumer
       - uses: changesets/action@v1
         with:
           version: pnpm run version:packages

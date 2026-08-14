@@ -49,7 +49,14 @@ function packedFiles(directory) {
     // is constrained, which would otherwise make every CI pack check noisy.
     { cwd: directory, encoding: 'utf8', env: { ...process.env, npm_config_loglevel: 'error' } },
   );
-  const result = JSON.parse(output);
+  // npm 11 can still print a package lifecycle banner before its `--json`
+  // payload even with `--ignore-scripts`. Parse the final JSON array rather
+  // than treating that harmless banner as a release-check failure.
+  const json = output.match(/(\[\s*\{[\s\S]*\])\s*$/)?.[1];
+  if (json === undefined) {
+    throw new Error(`${directory}: npm pack did not emit a JSON file manifest.`);
+  }
+  const result = JSON.parse(json);
   if (!Array.isArray(result) || result.length !== 1 || !Array.isArray(result[0]?.files)) {
     throw new Error(`${directory}: npm pack did not return one file manifest.`);
   }

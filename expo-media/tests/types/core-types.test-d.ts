@@ -35,8 +35,11 @@ import type {
   DurableFile,
   DurableFileStore,
   DurableFileStoreAdapter,
+  ExifCapturedAtOptions,
+  ExifWallClock,
   VideoContentType,
 } from '../../src/core';
+import { capturedAtFromExif, parseExifWallClock } from '../../src/core';
 
 describe('§6.3-⑫ MediaMetadata는 geoPoint다 — location은 없다 (§5.3 · G5)', () => {
   it('`geoPoint` 프로퍼티가 존재한다', () => {
@@ -229,5 +232,24 @@ describe('durable local-file store contract', () => {
     }>();
     expectTypeOf<DurableFileStore>().toHaveProperty('copy');
     expectTypeOf<DurableFileStoreAdapter>().toHaveProperty('ensureDirectory');
+  });
+});
+
+describe('EXIF historical time-zone contract', () => {
+  it('keeps a timezone-free wall clock distinct from an ISO instant', () => {
+    expectTypeOf<ExifWallClock>().toEqualTypeOf<{
+      readonly year: number;
+      readonly month: number;
+      readonly day: number;
+      readonly hour: number;
+      readonly minute: number;
+      readonly second: number;
+      readonly millisecond: number;
+    }>();
+    expectTypeOf(parseExifWallClock('2024:01:02 03:04:05')).toEqualTypeOf<ExifWallClock | undefined>();
+    expectTypeOf<ExifCapturedAtOptions>().toEqualTypeOf<{
+      readonly timeZoneOffsetMinutes?: number | undefined;
+    }>();
+    expectTypeOf(capturedAtFromExif({}, { timeZoneOffsetMinutes: 540 })).toEqualTypeOf<string | undefined>();
   });
 });

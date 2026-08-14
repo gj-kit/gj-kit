@@ -5,7 +5,7 @@
 이 라이브러리의 존재 이유는 기능이 아니라 **경계**다. iOS 26에서 앱을 종료시키는 업로드 API, `ph://`를 stat까지는 통과시키고 URLSession에서 죽이는 PhotoKit 핸드오프, `quality<1` 재인코딩 시 원본 크기를 보고하는 Android `fileSize`, 초 단위 duration을 밀리초로 저장하는 웹 피커 — 이런 것들은 전부 프로덕션에서 며칠씩 태워 먹고 알아낸 것이고, 그 사고 이력이 소스 주석에 그대로 남아 있다.
 
 - **런타임 의존성 0** — `js-sha256`도 없다. 순수 TS 증분 SHA-256이 내장돼 있다.
-- **peer 5종 전부 optional** — "어느 엔트리를 import했나"가 peer 그래프를 결정한다. 런타임 마법(지연 `require`) 0.
+- **peer 6종 전부 optional** — Expo SDK 자체와 네이티브 모듈의 peer 관계까지 명시한다. "어느 엔트리를 import했나"가 실제 peer 그래프를 결정하며, 런타임 마법(지연 `require`)은 0이다.
 - **코어는 순수하다** — `src/core/**`에 `react-native`·`expo-*` import 0, DOM 전역 참조 0. 그래서 전 파이프라인이 네이티브 모킹 없이 vitest에서 돈다.
 - **문구는 전부 주입** — `MediaStrings` 22키 + 내장 `enMediaStrings`/`koMediaStrings`. 라이브러리 소스에 사용자 노출 리터럴이 없음을 정적 가드가 강제한다.
 - **운영 파이프라인 오류는 전부 `code`로 분기 가능** — 업로드·피커·기기·저장 등 공개
@@ -198,14 +198,14 @@ try {
 | 엔트리 | 내용 | 정적 import하는 peer |
 |---|---|---|
 | `.` | `./core` 전체 재export + `createMediaKit` + expo 기본 어댑터 | `react-native`, `expo-file-system` |
-| `./core` | 팩토리 8종, 어댑터 계약, `MediaError`(16코드), `MediaStrings`(22키), mediaTypes 테이블, EXIF 파서, 순수 TS SHA-256, `StagingCache`, 서명 URL 새니타이저 | **없음** (DOM lib도 없음) |
+| `./core` | 팩토리 9종, 어댑터 계약, `MediaError`(16코드), durable-file 오류/저장, mediaTypes 테이블, EXIF 파서, 순수 TS SHA-256, `StagingCache`, 서명 URL 새니타이저 | **없음** (DOM lib도 없음) |
 | `./picker` | `expoPicker` — OS 피커/카메라, 권한, iOS 원본 fast path | `expo-image-picker`, `react-native` |
 | `./device` | `expoDeviceLibrary` — granular 권한·페이지네이션·앨범·자산정보 | `expo-media-library/legacy`, `react-native` |
 | `./save` | `expoDeviceSave({ isExpoGo })` — MediaLibrary 저장 | `expo-media-library/legacy`, `react-native` |
 | `./video` | `expoVideoPoster` — 로컬 URI → 포스터 프레임 | `expo-video-thumbnails` |
 | `./web` | `webCanvasVideoPoster` · `createFetchBinaryTransport` · `createBrowserSaveTarget` · `createFetchBinarySourceLoader` | **없음** (브라우저 DOM 필요) |
 | `./testing` | 인메모리 파일시스템, 기록형 transport·telemetry, 페이크 피커·기기 라이브러리·업로드 API, EXIF·서명 URL 픽스처 | **없음** |
-| `./storage` | `createExpoDocumentFileStore` — 앱 소유 지속 파일의 검증 복사·안전한 정리 | `expo-file-system` |
+| `./storage` | `createExpoDocumentFileStore` — 앱 소유 지속 파일의 byte-size 검증 복사·안전한 정리·URI-safe 오류 | `expo-file-system` |
 
 소비자별로 실제 설치가 필요한 것:
 
@@ -226,21 +226,59 @@ try {
 
 기록 사진처럼 앱의 DB에 오래 보관할 URI는 업로드 스테이징 캐시가 아니라 `./storage`에 복사한다.
 경로를 URI 문자열로 직접 조립하지 않고, 검증된 세그먼트로 만든 앱 소유 root만 정리하므로 실패한
-복사나 DB 트랜잭션 롤백이 다른 파일을 삭제할 수 없다.
+복사나 DB 트랜잭션 롤백이 다른 파일을 삭제할 수 없다. 복사 뒤에는 원본·대상 byte size를 비교하며,
+오류는 카메라/피커 URI를 담지 않는 `DurableFileError`로만 전달된다.
 
 ```ts
-import { createExpoDocumentFileStore } from '@gj-kit/expo-media/storage';
+import {
+  createExpoDocumentFileStore,
+  isDurableFileError,
+} from '@gj-kit/expo-media/storage';
+import type { PickedAsset } from '@gj-kit/expo-media/core';
+
+declare const pickedAsset: PickedAsset;
 
 const photos = createExpoDocumentFileStore({ root: 'photos' });
-const copied = await photos.copy({
-  sourceUri: assetUri,
+const copied = await photos.copyPickedAsset({
+  asset: pickedAsset,
   directory: ['activity-42'],
-  fileName: 'photo-1.jpg',
+  // 앱의 안정 ID만 준다. picker MIME/확장자를 검증해 .heic/.png 등을 보존한다.
+  fileNameStem: 'photo-1',
+}).catch((error: unknown) => {
+  if (isDurableFileError(error)) {
+    // code는 durable-file-source-not-found / durable-file-copy-size-mismatch 등 URI-safe 값이다.
+  }
+  throw error;
 });
-
-// `copied.uri`와 `copied.sizeBytes`를 앱의 도메인 트랜잭션에 함께 저장한다.
+// `copied.uri`·`copied.sizeBytes`·`copied.contentType`을 앱의 도메인 트랜잭션에 함께 저장한다.
 await photos.remove(copied.uri); // 이 store가 만든 경로만 정리한다.
 ```
+
+카메라/피커 결과가 아니라 기존 `file://` URI만 있는 레거시 경로는 `copy({ sourceUri, fileName })`를
+계속 쓸 수 있다. 새 코드에서는 `copyPickedAsset`을 우선해 **호환 표현 선호가 JPEG 보장을 뜻하지
+않는** 플랫폼 차이를 파일명까지 보존하는 것이 안전하다.
+
+### 역사적 활동의 EXIF 시간
+
+기본 `mediaMetadataFromExif()`는 기존처럼 **현재 기기의 로컬 벽시계**로 EXIF 시간을 읽는다. 활동·여행처럼
+기록 당시의 offset을 데이터로 보관하는 앱은 별도 API로 그 정책을 명시한다. 이 함수는 경로 보간·활동
+시간대 선택 같은 제품 정책은 소유하지 않고, EXIF wall clock을 UTC instant로 바꾸는 일만 한다.
+
+```ts
+import { capturedAtFromExif, parseExifWallClock } from '@gj-kit/expo-media/core';
+
+declare const exif: Readonly<Record<string, unknown>>;
+
+const wallClock = parseExifWallClock(exif.DateTimeOriginal);
+const capturedAt = capturedAtFromExif(exif, {
+  // 기록을 시작할 때 저장한 offset. KST는 UTC+09:00 = 540이다.
+  timeZoneOffsetMinutes: 540,
+});
+```
+
+`capturedAtFromExif`는 offset이 이미 붙은 ISO 문자열은 재해석하지 않고, 존재하지 않는 날짜나 ±14시간 밖의
+offset은 `undefined`로 거부한다. 따라서 사용자가 기기 시간대를 바꿨거나 다른 나라에서 사진을 붙여도
+현재 기기 시간대로 조용히 이동하지 않는다.
 
 ### 능력 부착 — `with*`
 
@@ -311,6 +349,33 @@ const { savedCount, mode } = await saver.saveToDevice([
   { id: 'p_2', url: 'https://cdn.example.com/signed/p_2' },
 ]);
 ```
+
+### 이미 앱이 소유한 원본을 사진첩으로 저장
+
+원격 URL 저장은 위 `createMediaSaver` 경로다. 반대로 이미 앱 documents에 복사해 DB가 가리키는
+`file://` 원본은 `createLocalMediaSaver`를 쓴다. 이 경로는 **네트워크 다운로드·source 삭제를 절대
+하지 않으며**, 권한은 유효한 파일이 하나 이상 있을 때 배치당 한 번만 요청한다.
+
+```ts
+import { createExpoFileSystem } from '@gj-kit/expo-media';
+import { createLocalMediaSaver } from '@gj-kit/expo-media/core';
+import { expoDeviceSave } from '@gj-kit/expo-media/save';
+
+const localSaver = createLocalMediaSaver({
+  files: createExpoFileSystem(),
+  library: expoDeviceSave({ isExpoGo }),
+});
+
+const saved = await localSaver.saveLocalToDevice([
+  { id: 'activity-photo-1', uri: 'file:///…/documents/photos/activity-1/photo-1.heic' },
+  { id: 'activity-photo-2', uri: 'file:///…/documents/photos/activity-1/photo-2.jpg' },
+]);
+// items는 입력 순서 그대로이며 status는 saved | unavailable | failed다.
+// unavailable은 원본이 사라졌거나 비어 있는 경우, failed는 사진첩 저장 실패다.
+```
+
+OS share/file sheet는 사용자가 최종 위치를 결정하는 별도 UX이므로 이 저장 결과에 섞지 않는다.
+호스트가 자신의 공유 정책·파일 형식·재시도 문구를 소유한다.
 
 `with*`는 자기 자신을 넓히지 않고 **구체 킷을 새로 반환한다**. 조건부 타입이 0이므로, "타입 애노테이션 한 번에 기능이 통째로 사라지는" capability 교차 타입의 붕괴가 **표현 불가능**하다.
 
@@ -531,7 +596,7 @@ await uploads.uploadBinary({
 | **서명 URL 로그·공개 에러 유출** | iOS URLSession/백엔드/등록 실패가 **임시 자격증명이 든 서명 URL 전문**을 에러 메시지로 에코했다 | debug만 `summarizeUri`/`sanitizeMediaErrorMessage`로 URL→`[URL]` 치환 + 1000자 절단. public error·telemetry에는 새 `MediaError`만 전달하고, recovery API에는 URL 없는 object metadata만 남긴다 |
 | **base64 청크 정렬** | 3바이트 = base64 4문자. 청크가 3의 배수가 아니면 윈도우 경계에 패딩이 끼어 **해시가 조용히 틀린다** | `HASH_CHUNK_BYTES = 3*256*1024` 고정 + 가드가 `% 3 === 0`을 단언. 공개 `computeChunkRanges(size)`에서 `chunkBytes` 인자를 **제거**(전신은 기본 인자로 열려 있었고 그게 회귀 통로였다). node:crypto 대조 13종 크기 |
 | **혼합 드롭 부분 업로드** | 미지원 파일을 필터링하고 나머지를 올려서, 사용자가 결과도 모르고 거절된 파일을 고칠 수도 없었다 | `uploadDropped`가 **첫 presign 이전에** 배치 전체 검증. 유닛이 `createUploadIntent` 호출 0회를 단언 |
-| **EXIF 타임존** | EXIF DateTime에는 타임존이 없다. UTC로 읽으면 12:30 KST 촬영이 경로에 따라 9시간 어긋나 MediaLibrary `creationTime` 경로와 다른 날짜에 묶인다 | `capturedAtFromExif()`가 **기기 로컬 벽시계**로 해석. GPS 도분초·유리수·부호(S·W), IFD 순환 방지, 경계 검사 전부 보존. `TZ=Asia/Seoul`·`TZ=UTC` 두 실행으로 검증 |
+| **EXIF 타임존** | EXIF DateTime에는 타임존이 없다. UTC로 읽으면 12:30 KST 촬영이 경로에 따라 9시간 어긋나 MediaLibrary `creationTime` 경로와 다른 날짜에 묶인다 | 기본 `mediaMetadataFromExif()`는 **기기 로컬 벽시계** 해석을 보존한다. 활동/여행처럼 저장된 offset이 있으면 `capturedAtFromExif(exif, { timeZoneOffsetMinutes })`가 현재 기기 시간대 없이 strict wall clock을 UTC로 바꾼다. GPS 도분초·유리수·부호(S·W), IFD 순환 방지, 경계 검사 전부 보존 |
 
 그 밖에 유지되는 것들: iOS 피커 원본 fast path 고정 조합(`quality:1`+`exif:true`+`allowsEditing:false`+`Current` — 단일/다중 선택이 달라지면 안 된다) · 그리드에서 자산별 `getAssetInfoAsync` 호출 금지(60장 직렬 ≈ 페이지당 20초) · 기기 자산 업로드 루프의 의도적 순차 실행 · dedup 해시 실패가 업로드를 막지 않음 · 호출자 제공 `contentHash`가 있으면 hasher 미호출 · 포스터의 no-frame·추출 실패·로컬 cap 초과만 선택적으로 건너뜀(이미 presign/PUT을 시작한 poster 실패는 recovery metadata와 함께 중단) · 정보 조회 실패 시 **core가 만든 deadline만** 재throw하고, 호스트 어댑터 실패는 후보가 있으면 생존·없으면 URL 없는 `device-library-failed`로 정규화 · 웹 포스터 이벤트 3000ms 타임아웃과 seek 상한 `min(atMs/1000, duration−0.05)` · 웹 저장의 CORS 실패 시 숨김 iframe 폴백(60초 후 제거) · 다운로드 2xx 범위 검증 + 실패 시 임시 파일 정리 · 저장 파일명 우선순위(fileName → contentType → URL 확장자 → jpg, **5자 초과 확장자 거부**).
 
@@ -563,7 +628,7 @@ await uploads.uploadBinary({
 5. **웹 드롭 혼합 배치**(지원+미지원) — 부분 업로드 없이 전체가 거절되는가(하드닝 10).
 6. **Hermes에서 15MB 파일 해시 소요 시간** — 순수 TS SHA-256이 실기 예산 안인가(§9).
 
-`expo export --platform web` 산출물에 `expo-media-library` 문자열이 없는지는 **실기 체크리스트에서 내렸다** — SDK 56 스텁 앱으로 `single`·`static`·`ios` 8/8 확인이 끝났고, 같은 불변식을 `dist-peer-graph` 가드가 조건 3세트 × 모듈 2형식으로 CI에서 상시 대리 측정한다. Metro가 실제로 해석한 결과까지 보는 `web-export-guard`는 픽스처(수백 MB) 설치가 필요해 기본 skip이며, exports 맵을 손댈 때 수동으로 켠다.
+`pnpm run check:expo-media-consumer`는 release workflow에서 `npm pack --ignore-scripts` 산출물을 새 Expo SDK 56 소비 앱에 설치하고, Metro의 web/iOS/Android export를 실제로 실행한다. web 번들에는 `expo-media-library`가 없어야 하며, iOS/Android는 Hermes bytecode까지 native export branch를 실제 해석해야 한다. 그래서 exports map·optional peer·vendored artifact가 선언만 맞고 실제 소비에서 깨지는 회귀를 배포 전에 잡는다.
 
 ## 11. FAQ
 

@@ -1,5 +1,7 @@
 # gj-kit — 모노레포 규칙
 
+> 모든 구현 에이전트가 따를 라이브러리 설계·공개 API·artifact handoff 정본은 [AGENTS.md](AGENTS.md)다. 이 문서는 모노레포 운영 규칙을 보완한다.
+
 ## 구조
 
 - **루트의 각 폴더 = 독립 npm 라이브러리** (`packages/` 하위 아님). 예: `toss-payments/` = `@gj-kit/toss-payments`.

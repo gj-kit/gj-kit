@@ -18,6 +18,7 @@ import type { ToastVariant } from './icons';
 import { useIcons, useStrings, useTheme } from './provider';
 import { roleTextStyle } from './text';
 import { Button } from './button';
+import { useReducedMotion } from './use-reduced-motion';
 
 // ─── Skeleton ──────────────────────────────────────────────────────────────
 
@@ -43,8 +44,14 @@ export function Skeleton({
   const theme = useTheme();
   const strings = useStrings();
   const opacity = useRef(new Animated.Value(SKELETON_OPACITY_MIN)).current;
+  const reduceMotion = useReducedMotion();
 
   useEffect(() => {
+    if (reduceMotion !== false) {
+      opacity.stopAnimation();
+      opacity.setValue(SKELETON_OPACITY_MIN);
+      return;
+    }
     const animation = Animated.loop(
       Animated.sequence([
         Animated.timing(opacity, { toValue: 1, duration: SKELETON_PULSE_MS, useNativeDriver: true }),
@@ -57,7 +64,7 @@ export function Skeleton({
     );
     animation.start();
     return () => animation.stop();
-  }, [opacity]);
+  }, [opacity, reduceMotion]);
 
   return (
     <Animated.View

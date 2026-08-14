@@ -8,7 +8,6 @@
 import { isValidElement, useEffect, useId, useState } from 'react';
 import type { ReactElement, ReactNode } from 'react';
 import {
-  AccessibilityInfo,
   I18nManager,
   ScrollView,
   useWindowDimensions,
@@ -24,6 +23,7 @@ import type {
 import type { CommonProps } from './internal';
 import { nativeWindProps, themedStyles } from './internal';
 import { useTheme } from './provider';
+import { useReducedMotion } from './use-reduced-motion';
 
 export type SheetPresentation = 'auto' | 'bottom' | 'start' | 'end';
 
@@ -229,30 +229,10 @@ export function Sheet({
   const { height, width } = useWindowDimensions();
   const reactId = sanitizeId(useId());
   const overlayId = overlayIdProp ?? `gj-sheet-${reactId}`;
-  const [reduceMotion, setReduceMotion] = useState<boolean | null>(null);
+  const reduceMotion = useReducedMotion();
   const [cycleAnimation, setCycleAnimation] = useState<
     'none' | 'slide' | 'fade'
   >('none');
-
-  useEffect(() => {
-    let active = true;
-    void AccessibilityInfo.isReduceMotionEnabled()
-      .then((enabled) => {
-        if (active) setReduceMotion(enabled);
-      })
-      .catch(() => {
-        // Keep the conservative `null` state: no entrance animation until the
-        // platform returns a trustworthy preference.
-      });
-    const subscription = AccessibilityInfo.addEventListener(
-      'reduceMotionChanged',
-      setReduceMotion,
-    );
-    return () => {
-      active = false;
-      subscription?.remove?.();
-    };
-  }, []);
 
   assertNonEmptyString(title, 'Sheet title');
   assertOptionalNonEmptyString(description, 'Sheet description');

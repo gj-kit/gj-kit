@@ -16,5 +16,7 @@ describe('release artifact contract', () => {
     expect(manifest.scripts?.prepack).toContain('scripts/check-provenance.mjs --require-clean');
     expect(existsSync(join(packageRoot, 'scripts', 'stamp-provenance.mjs'))).toBe(true);
     expect(existsSync(join(packageRoot, 'scripts', 'check-provenance.mjs'))).toBe(true);
+    expect(existsSync(join(packageRoot, '..', 'scripts', 'stamp-package-provenance.mjs'))).toBe(true);
+    expect(existsSync(join(packageRoot, '..', 'scripts', 'check-package-provenance.mjs'))).toBe(true);
   });
 });

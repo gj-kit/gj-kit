@@ -183,6 +183,19 @@ describe('retry 기본 꺼짐 + onRetry/jitter/abort', () => {
     expect(calls).toHaveLength(1);
   });
 
+  it.each([
+    ['maxAttempts가 범위 밖', { retry: { maxAttempts: 6, delaysMs: [0] } }],
+    ['maxAttempts가 정수가 아님', { retry: { maxAttempts: 2.5, delaysMs: [0] } }],
+    ['delaysMs가 비어 있음', { retry: { maxAttempts: 2, delaysMs: [] } }],
+    ['delaysMs에 음수가 있음', { retry: { maxAttempts: 2, delaysMs: [-1] } }],
+    ['delaysMs가 상한을 넘음', { retry: { maxAttempts: 2, delaysMs: [60_001] } }],
+    ['delaysMs가 무한대', { retry: { maxAttempts: 2, delaysMs: [Infinity] } }],
+  ])('JavaScript 우회 설정: %s는 client 생성 시 거부한다', (_label, options) => {
+    expect(() => createTossClient(secretKey(), options as unknown as TossClientOptions)).toThrow(
+      'retry.',
+    );
+  });
+
   it('onRetry — attempt/reason/nextDelayMs/path 통지, jitter ±25% 범위', async () => {
     // Math.random 고정으로 jitter 결정화: 0 → ×0.75(하한), 그다음 0.999… → ×1.25(상한) 근사
     const randomSpy = vi.spyOn(Math, 'random');

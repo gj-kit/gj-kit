@@ -51,7 +51,10 @@ export type KeyKind = 'api' | 'widget';
 export interface RetryOptions {
   /** 총 시도 횟수(최초 포함). 기본 3. 리터럴 유니언 — 폭주 설정 원천 차단. */
   readonly maxAttempts?: 2 | 3 | 4 | 5;
-  /** 시도 간 지연(ms). 기본 [500, 2_000, 8_000], full jitter ±25% 자동. 부족하면 마지막 값 재사용. */
+  /**
+   * 시도 간 지연(ms). 기본 [500, 2_000, 8_000], full jitter ±25% 자동. 부족하면 마지막 값 재사용.
+   * 각 값은 0~60_000의 안전한 정수여야 하며 빈 배열은 허용하지 않는다.
+   */
   readonly delaysMs?: readonly number[];
   /**
    * reason이 2종 리터럴로 고정 — toss retryable류로 확장하려면 공개 타입 변경이 필요하도록
@@ -181,118 +184,260 @@ export function missingInternalHttpFailure(): TransportFailure {
   };
 }
 
-/**
- * (내부) 응답 원문 → Payment. 필드는 문서 근거 타입을 신뢰하고 원문 전체를 `raw`에 보존한다
- * (전체 런타임 스키마 검증은 범위 밖 — 타입에 없는 필드의 탈출구가 raw).
- */
+/** (내부) 검증된 Payment 원문 → `raw`를 포함하는 불변 스냅샷. */
 export function parsePayment(data: unknown): Payment {
   const record: Record<string, unknown> =
     typeof data === 'object' && data !== null ? (data as Record<string, unknown>) : {};
-  // 응답 shape 단언 — 위 문서 근거. Payment는 인터페이스 유니언이라 이중 단언이 필요하다.
+  // `parsePaymentChecked`가 판별 유니언의 모든 필드를 검증한 뒤에만 호출한다.
   return { ...record, raw: data } as unknown as Payment;
 }
 
+type JsonRecord = Record<string, unknown>;
+
+const PAYMENT_STATUSES = [
+  'READY',
+  'IN_PROGRESS',
+  'WAITING_FOR_DEPOSIT',
+  'DONE',
+  'CANCELED',
+  'PARTIAL_CANCELED',
+  'ABORTED',
+  'EXPIRED',
+] as const;
+const PAYMENT_TYPES = ['NORMAL', 'BILLING', 'BRANDPAY'] as const;
+const PAYMENT_METHODS = [
+  '카드',
+  '가상계좌',
+  '간편결제',
+  '휴대폰',
+  '계좌이체',
+  '문화상품권',
+  '도서문화상품권',
+  '게임문화상품권',
+] as const;
+const CARD_TYPES = ['신용', '체크', '기프트', '미확인'] as const;
+const CARD_OWNER_TYPES = ['개인', '법인', '미확인'] as const;
+const CANCEL_STATUSES = ['DONE', 'IN_PROGRESS', 'ABORTED'] as const;
+
+function isRecord(value: unknown): value is JsonRecord {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function hasOwn(record: JsonRecord, key: string): boolean {
+  return Object.prototype.hasOwnProperty.call(record, key);
+}
+
+function isString(value: unknown): value is string {
+  return typeof value === 'string';
+}
+
+function isNonEmptyString(value: unknown): value is string {
+  return typeof value === 'string' && value.length > 0;
+}
+
+function isStringOrNull(value: unknown): value is string | null {
+  return value === null || isString(value);
+}
+
+function isNonEmptyStringOrNull(value: unknown): value is string | null {
+  return value === null || isNonEmptyString(value);
+}
+
+function isTimestamp(value: unknown): value is string {
+  return isNonEmptyString(value) && Number.isFinite(Date.parse(value));
+}
+
+function isSafeNonNegativeInteger(value: unknown): value is number {
+  return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0;
+}
+
+function isOneOf(value: unknown, values: readonly string[]): value is string {
+  return typeof value === 'string' && values.includes(value);
+}
+
+function isUrlObjectOrNull(value: unknown): boolean {
+  return value === null || (isRecord(value) && isNonEmptyString(value['url']));
+}
+
+function isMetadataOrNull(value: unknown): boolean {
+  return value === null || (isRecord(value) && Object.values(value).every(isString));
+}
+
+function isFailureOrNull(value: unknown): boolean {
+  return (
+    value === null ||
+    (isRecord(value) && isString(value['code']) && isString(value['message']))
+  );
+}
+
+function isCardDetails(value: unknown): boolean {
+  if (!isRecord(value)) return false;
+  return (
+    isSafeNonNegativeInteger(value['amount']) &&
+    isString(value['issuerCode']) &&
+    isStringOrNull(value['acquirerCode']) &&
+    isString(value['number']) &&
+    isSafeNonNegativeInteger(value['installmentPlanMonths']) &&
+    isString(value['approveNo']) &&
+    typeof value['useCardPoint'] === 'boolean' &&
+    isOneOf(value['cardType'], CARD_TYPES) &&
+    isOneOf(value['ownerType'], CARD_OWNER_TYPES) &&
+    isString(value['acquireStatus']) &&
+    typeof value['isInterestFree'] === 'boolean' &&
+    isStringOrNull(value['interestPayer'])
+  );
+}
+
+function isVirtualAccountDetails(value: unknown): boolean {
+  if (!isRecord(value)) return false;
+  return (
+    isNonEmptyString(value['accountNumber']) &&
+    isString(value['accountType']) &&
+    isString(value['bankCode']) &&
+    isString(value['customerName']) &&
+    isTimestamp(value['dueDate']) &&
+    typeof value['expired'] === 'boolean' &&
+    isString(value['settlementStatus']) &&
+    isString(value['refundStatus']) &&
+    // `unknown | null`은 값을 좁히지 않지만, 타입이 약속한 필드는 응답에 존재해야 한다.
+    hasOwn(value, 'refundReceiveAccount')
+  );
+}
+
+function isEasyPayDetails(value: unknown): boolean {
+  return (
+    isRecord(value) &&
+    isString(value['provider']) &&
+    isSafeNonNegativeInteger(value['amount']) &&
+    isSafeNonNegativeInteger(value['discountAmount'])
+  );
+}
+
+function isTransferDetails(value: unknown): boolean {
+  return isRecord(value) && isString(value['bankCode']) && isString(value['settlementStatus']);
+}
+
+function isMobilePhoneDetails(value: unknown): boolean {
+  return (
+    isRecord(value) &&
+    isString(value['customerMobilePhone']) &&
+    isString(value['settlementStatus']) &&
+    isNonEmptyString(value['receiptUrl'])
+  );
+}
+
+function isGiftCertificateDetails(value: unknown): boolean {
+  return isRecord(value) && isString(value['approveNo']) && isString(value['settlementStatus']);
+}
+
+function isCancelTransaction(value: unknown): value is CancelTransaction {
+  if (!isRecord(value)) return false;
+  return (
+    isNonEmptyString(value['transactionKey']) &&
+    isSafeNonNegativeInteger(value['cancelAmount']) &&
+    value['cancelAmount'] > 0 &&
+    isString(value['cancelReason']) &&
+    isSafeNonNegativeInteger(value['taxFreeAmount']) &&
+    isSafeNonNegativeInteger(value['taxExemptionAmount']) &&
+    isSafeNonNegativeInteger(value['refundableAmount']) &&
+    isSafeNonNegativeInteger(value['transferDiscountAmount']) &&
+    isSafeNonNegativeInteger(value['easyPayDiscountAmount']) &&
+    isTimestamp(value['canceledAt']) &&
+    isStringOrNull(value['receiptKey']) &&
+    isOneOf(value['cancelStatus'], CANCEL_STATUSES) &&
+    isStringOrNull(value['cancelRequestId'])
+  );
+}
+
+/** `Payment` 판별 유니언의 method별 non-null 세부 객체까지 검증한다. */
+function hasValidMethodDetails(record: JsonRecord): boolean {
+  const method = record['method'];
+  if (method === null) return true;
+  if (!isOneOf(method, PAYMENT_METHODS)) return false;
+
+  switch (method) {
+    case '카드':
+      return isCardDetails(record['card']) && record['virtualAccount'] === null;
+    case '가상계좌':
+      return (
+        isVirtualAccountDetails(record['virtualAccount']) &&
+        record['card'] === null
+      );
+    case '간편결제':
+      return isEasyPayDetails(record['easyPay']);
+    case '계좌이체':
+      return isTransferDetails(record['transfer']);
+    case '휴대폰':
+      return isMobilePhoneDetails(record['mobilePhone']);
+    case '문화상품권':
+    case '도서문화상품권':
+    case '게임문화상품권':
+      return isGiftCertificateDetails(record['giftCertificate']);
+  }
+  return false;
+}
+
 /**
- * (내부) parsePayment의 Result 버전 — Payment를 반환해야 하는 소비 지점(confirm/approve/조회)
- * 전용 가드. 2xx인데 body가 비었거나(revoke처럼 빈 2xx가 정상인 API의 경로가 request()에서
- * ok(null)로 흐른다) 비객체 JSON이거나 필수 필드가 없으면, '전부 undefined인 Payment'를
- * 제조하는 대신 전송 계층 이상(TransportFailure, retryable)으로 표면화한다.
+ * (내부) Payment 응답의 완전한 런타임 경계.
+ *
+ * `Payment`는 method별 세부 객체와 가상계좌 secret 의미까지 약속하는 판별 유니언이다.
+ * 2xx라는 이유만으로 캐스팅하면 누락된 virtualAccount/secret이 저장소에 `undefined`로
+ * 흘러갈 수 있으므로, base·취소 이력·method별 필드를 모두 검증한 뒤에만 값을 만든다.
+ *
+ * 가상계좌 `secret`은 조회 응답에서는 합법적으로 `null`이다. approval 응답에서만 필요한
+ * non-null 보장은 `createConfirmFlow().confirm()`이 별도로 수행한다.
  */
 export function parsePaymentChecked(data: unknown): Result<Payment, TransportFailure> {
-  const record = typeof data === 'object' && data !== null ? (data as Record<string, unknown>) : null;
+  const record = isRecord(data) ? data : null;
   const paymentKeyValue = typeof record?.['paymentKey'] === 'string'
     ? parsePaymentKey(record['paymentKey'])
     : null;
   const orderIdValue = typeof record?.['orderId'] === 'string'
     ? parseOrderId(record['orderId'])
     : null;
-  const validStatus =
-    typeof record?.['status'] === 'string' &&
-    [
-      'READY',
-      'IN_PROGRESS',
-      'WAITING_FOR_DEPOSIT',
-      'DONE',
-      'CANCELED',
-      'PARTIAL_CANCELED',
-      'ABORTED',
-      'EXPIRED',
-    ].includes(record['status']);
-  const validType =
-    typeof record?.['type'] === 'string' &&
-    ['NORMAL', 'BILLING', 'BRANDPAY'].includes(record['type']);
-  const validMethod =
-    record?.['method'] === null ||
-    (typeof record?.['method'] === 'string' &&
-      [
-        '카드',
-        '가상계좌',
-        '간편결제',
-        '휴대폰',
-        '계좌이체',
-        '문화상품권',
-        '도서문화상품권',
-        '게임문화상품권',
-      ].includes(record['method']));
-  const validCurrency =
-    record?.['currency'] === 'KRW' ||
-    record?.['currency'] === 'USD' ||
-    record?.['currency'] === 'JPY';
-  const validLastTransactionKey =
-    record?.['lastTransactionKey'] === null ||
-    typeof record?.['lastTransactionKey'] === 'string';
-  const validAmount = (value: unknown): boolean =>
-    typeof value === 'number' && Number.isSafeInteger(value) && value >= 0;
-  const validCancelTransaction = (value: unknown): value is CancelTransaction => {
-    if (typeof value !== 'object' || value === null || Array.isArray(value)) return false;
-    const cancel = value as Record<string, unknown>;
-    return (
-      typeof cancel['transactionKey'] === 'string' &&
-      cancel['transactionKey'].length > 0 &&
-      typeof cancel['cancelAmount'] === 'number' &&
-      Number.isSafeInteger(cancel['cancelAmount']) &&
-      cancel['cancelAmount'] > 0 &&
-      typeof cancel['cancelReason'] === 'string' &&
-      validAmount(cancel['taxFreeAmount']) &&
-      validAmount(cancel['taxExemptionAmount']) &&
-      validAmount(cancel['refundableAmount']) &&
-      validAmount(cancel['transferDiscountAmount']) &&
-      validAmount(cancel['easyPayDiscountAmount']) &&
-      typeof cancel['canceledAt'] === 'string' &&
-      Number.isFinite(Date.parse(cancel['canceledAt'])) &&
-      (cancel['receiptKey'] === null || typeof cancel['receiptKey'] === 'string') &&
-      (cancel['cancelStatus'] === 'DONE' ||
-        cancel['cancelStatus'] === 'IN_PROGRESS' ||
-        cancel['cancelStatus'] === 'ABORTED') &&
-      (cancel['cancelRequestId'] === null || typeof cancel['cancelRequestId'] === 'string')
-    );
-  };
   const validCancels =
     record?.['cancels'] === null ||
-    (Array.isArray(record?.['cancels']) && record['cancels'].every(validCancelTransaction));
+    (Array.isArray(record?.['cancels']) && record['cancels'].every(isCancelTransaction));
   if (
     record === null ||
     paymentKeyValue === null ||
     !paymentKeyValue.ok ||
     orderIdValue === null ||
     !orderIdValue.ok ||
-    !validStatus ||
-    !validType ||
-    !validMethod ||
-    !validCurrency ||
-    !validLastTransactionKey ||
-    !validAmount(record['totalAmount']) ||
-    !validAmount(record['balanceAmount']) ||
+    !isNonEmptyString(record['version']) ||
+    !isOneOf(record['type'], PAYMENT_TYPES) ||
+    !isString(record['orderName']) ||
+    !isString(record['mId']) ||
+    (record['currency'] !== 'KRW' && record['currency'] !== 'USD' && record['currency'] !== 'JPY') ||
+    !isSafeNonNegativeInteger(record['totalAmount']) ||
+    !isSafeNonNegativeInteger(record['balanceAmount']) ||
+    !isOneOf(record['status'], PAYMENT_STATUSES) ||
+    !isTimestamp(record['requestedAt']) ||
+    !(record['approvedAt'] === null || isTimestamp(record['approvedAt'])) ||
+    typeof record['useEscrow'] !== 'boolean' ||
+    !isStringOrNull(record['lastTransactionKey']) ||
+    !isSafeNonNegativeInteger(record['suppliedAmount']) ||
+    !isSafeNonNegativeInteger(record['vat']) ||
+    typeof record['cultureExpense'] !== 'boolean' ||
+    !isSafeNonNegativeInteger(record['taxFreeAmount']) ||
+    !isSafeNonNegativeInteger(record['taxExemptionAmount']) ||
     typeof record['isPartialCancelable'] !== 'boolean' ||
     !validCancels ||
-    (record['status'] === 'DONE' && typeof record['approvedAt'] !== 'string')
+    !isNonEmptyStringOrNull(record['secret']) ||
+    !isMetadataOrNull(record['metadata']) ||
+    !isUrlObjectOrNull(record['receipt']) ||
+    !isUrlObjectOrNull(record['checkout']) ||
+    !isString(record['country']) ||
+    !isFailureOrNull(record['failure']) ||
+    !hasValidMethodDetails(record) ||
+    (record['status'] === 'DONE' && !isTimestamp(record['approvedAt']))
   ) {
     return err({
       source: 'network',
       code: 'NETWORK_ERROR',
       retryable: true,
       cause: new Error(
-        '2xx 응답이 Payment 계약을 만족하지 않습니다 — 필수 필드(ID·enum·금액·취소)를 검증하세요. 조회 API로 실제 상태를 재확인하세요.',
+        '2xx 응답이 Payment 계약을 만족하지 않습니다 — 필수 필드(base·금액·취소·method별 세부)를 검증하세요. 조회 API로 실제 상태를 재확인하세요.',
       ),
     });
   }
@@ -374,6 +519,37 @@ function sleep(ms: number, signal: AbortSignal | undefined): Promise<void> {
 
 /** §3.4 확정 기본값 — 최악 지연 +10.5s(README 계산 예시와 일치). */
 const DEFAULT_RETRY_DELAYS_MS: readonly number[] = [500, 2_000, 8_000];
+const MAX_RETRY_DELAY_MS = 60_000;
+
+function validateRetryOptions(retry: RetryOptions): {
+  readonly maxAttempts: 2 | 3 | 4 | 5;
+  readonly delaysMs: readonly number[];
+} {
+  if (typeof retry !== 'object' || retry === null || Array.isArray(retry)) {
+    throw new TypeError('retry는 RetryOptions 객체여야 합니다.');
+  }
+  const maxAttempts = retry.maxAttempts ?? 3;
+  if (!Number.isSafeInteger(maxAttempts) || maxAttempts < 2 || maxAttempts > 5) {
+    throw new TypeError('retry.maxAttempts는 2~5 사이의 안전한 정수여야 합니다.');
+  }
+
+  const delaysMs = retry.delaysMs ?? DEFAULT_RETRY_DELAYS_MS;
+  if (!Array.isArray(delaysMs) || delaysMs.length === 0) {
+    throw new TypeError('retry.delaysMs는 비어 있지 않은 배열이어야 합니다.');
+  }
+  if (
+    delaysMs.some(
+      (delay) =>
+        !Number.isSafeInteger(delay) || delay < 0 || delay > MAX_RETRY_DELAY_MS,
+    )
+  ) {
+    throw new TypeError(
+      `retry.delaysMs의 각 값은 0~${MAX_RETRY_DELAY_MS} 사이의 안전한 정수여야 합니다.`,
+    );
+  }
+
+  return { maxAttempts, delaysMs };
+}
 
 function createHttp(secretKey: string, env: Env, options: TossClientOptions): TossHttp {
   const fetchImpl = options.fetch ?? globalThis.fetch;
@@ -404,8 +580,9 @@ function createHttp(secretKey: string, env: Env, options: TossClientOptions): To
   const audit = options.audit;
   const retry = options.retry;
   // retry 미설정 = 1회 시도 — 현행 동작과 동일(기본 꺼짐 계약)
-  const maxAttempts = retry === undefined ? 1 : (retry.maxAttempts ?? 3);
-  const delaysMs = retry?.delaysMs ?? DEFAULT_RETRY_DELAYS_MS;
+  const validatedRetry = retry === undefined ? null : validateRetryOptions(retry);
+  const maxAttempts = validatedRetry?.maxAttempts ?? 1;
+  const delaysMs = validatedRetry?.delaysMs ?? DEFAULT_RETRY_DELAYS_MS;
   // 'api.call' 발행 계층 — createTossEvents 산출물이 아니면 null(발행 no-op)
   const emit = getInternalEmit<TossEventMap>(options.events);
 

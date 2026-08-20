@@ -18,7 +18,7 @@ import {
   type PaymentKey,
 } from '../core/ids';
 import type { Env } from '../core/keys';
-import type { Payment } from '../core/payment';
+import type { Payment, VirtualAccountPayment } from '../core/payment';
 import { err, ok, type Result } from '../core/result';
 import {
   getInternalHttp,
@@ -129,7 +129,7 @@ export function parseSuccessCallback(
   if (!oid.ok) return parseError('bad-order-id', ['orderId']);
 
   const amount = Number(amountRaw);
-  if (!Number.isFinite(amount) || amountRaw.trim() === '') {
+  if (!Number.isSafeInteger(amount) || amount <= 0 || amountRaw.trim() === '') {
     return parseError('bad-amount', ['amount']);
   }
 
@@ -177,6 +177,7 @@ export interface ConfirmFlowOptions {
    * 초과 시 상태 EXPIRED → confirm은 404 NOT_FOUND_PAYMENT_SESSION(재시도 불가 최종 실패).
    * 30분은 결제창 실행(READY)→구매자 인증 구간의 별개 시한 — 라이브러리 통제 밖.
    */
+  /** 1~600_000ms의 안전한 정수. provider 승인 시한(10분)을 넘겨 local 검증을 느슨하게 할 수 없다. */
   readonly approvalWindowMs?: number;
   readonly clock?: () => Date;
   /**
@@ -188,13 +189,15 @@ export interface ConfirmFlowOptions {
    *
    * 저장 실패여도 confirm은 **Ok 유지**(협상 불가) — 승인은 토스 측에서 이미 완결이라
    * Err로 뒤집으면 "승인됐는데 실패 처리 + 사용자 재confirm"이라는 더 큰 사고가 된다.
-   * secret은 `getPaymentByOrderId` 재조회 응답에도 있어(실측) 유실이 영구적이지 않다.
-   * 실패 통지: {@link onDepositSecretSaveFailed} + 'deposit.secret-save-failed' 이벤트.
+   * 가상계좌 secret은 승인 응답에서만 얻을 수 있고 조회로 복구할 수 없으므로, 저장 실패는
+   * 반드시 운영 알림·재처리 대상으로 남겨야 한다. 실패 통지:
+   * {@link onDepositSecretSaveFailed} + 'deposit.secret-save-failed' 이벤트.
    */
   readonly depositSecrets?: DepositSecretStore;
   /**
    * saveSecret 실패 통지 — payload에 **secret 원문 미포함**(로그 유출 방지).
-   * 복구: `getPaymentByOrderId(orderId)` → `Payment.secret` → `saveSecret` 재시도.
+   * 가상계좌 secret은 조회로 복구할 수 없으므로, 호출자는 결제를 보류하고 승인 응답 원문을
+   * 노출하지 않는 운영 복구 절차를 통해 처리해야 한다.
    * 미지정 시 실패 1건당 console.warn 1회(라이브러리에서 유일하게 시끄러운 기본값 —
    * 침묵 유실 방지: 저장 누락 = 해당 주문의 DEPOSIT_CALLBACK 전부 unknown-order 거부).
    * 이 콜백의 throw는 삼켜진다(Ok 확정 결과 무간섭).
@@ -264,7 +267,32 @@ export type VerifyCheckoutError =
     };
 
 /** 가상계좌 confirm은 DONE이 아니다 — WAITING_FOR_DEPOSIT 포함. */
-export type ConfirmedPayment = Payment & { readonly status: 'DONE' | 'WAITING_FOR_DEPOSIT' };
+type ConfirmedStatus = 'DONE' | 'WAITING_FOR_DEPOSIT';
+
+/**
+ * 승인 API가 직접 반환한 결제.
+ *
+ * 일반 조회의 가상계좌 `secret`은 `null`일 수 있지만, confirm 성공으로 반환하는 가상계좌는
+ * DEPOSIT_CALLBACK을 검증할 non-empty secret을 반드시 포함한다. 이 좁힘은 2xx 응답의
+ * runtime 검사 뒤에만 부여된다.
+ */
+export type ConfirmedPayment =
+  | (Exclude<Payment, VirtualAccountPayment> & { readonly status: ConfirmedStatus })
+  | (VirtualAccountPayment & { readonly status: ConfirmedStatus; readonly secret: string });
+
+/** 조회 기반 복구가 확인한 결제. 가상계좌 secret은 조회에서 null일 수 있다. */
+export type ResolvedConfirmedPayment = Payment & { readonly status: ConfirmedStatus };
+
+/**
+ * confirm 응답에서 secret을 받지 못했고, 조회가 결제 자체는 확인한 가상계좌.
+ *
+ * 결제를 실패로 처리하거나 재confirm하면 안 되지만, DEPOSIT_CALLBACK을 안전하게 검증할
+ * 비밀값도 복구할 수 없다. 호출자는 주문을 보류하고 운영 복구 경로로 보내야 한다.
+ */
+export type ConfirmedWithoutDepositSecret = VirtualAccountPayment & {
+  readonly status: ConfirmedStatus;
+  readonly secret: null;
+};
 
 export type ConfirmError =
   | TossApiFailure<ConfirmErrorCode>
@@ -284,8 +312,13 @@ export type ConfirmError =
  * 확정한 뒤 분기하라.
  */
 export type ConfirmResolution =
-  /** 조회로 DONE|WAITING_FOR_DEPOSIT 확인됨 — 성공으로 처리하라. */
+  /** 조회로 DONE|WAITING_FOR_DEPOSIT 및 (가상계좌라면) secret까지 확인됨. */
   | { readonly resolution: 'actually-confirmed'; readonly payment: ConfirmedPayment }
+  /** 결제는 확인됐지만 가상계좌 secret은 lookup으로 복구할 수 없다 — 주문 보류/운영 복구. */
+  | {
+      readonly resolution: 'confirmed-without-deposit-secret';
+      readonly payment: ConfirmedWithoutDepositSecret;
+    }
   /** NOT_FOUND_PAYMENT_SESSION(10분 초과) 등 — 결제 재요청 유도. */
   | { readonly resolution: 'retry-payment' }
   /** 조회로도 미승인 확정. */
@@ -294,7 +327,9 @@ export type ConfirmResolution =
 /**
  * confirm 실패를 조회 기반으로 판정한다 (설계 §3.7 확정 로직):
  * - `source === 'network'`(transport) 또는 `ALREADY_PROCESSED_PAYMENT` →
- *   `getPaymentByOrderId` 조회 → status가 DONE|WAITING_FOR_DEPOSIT이면 'actually-confirmed'.
+ *   `getPaymentByOrderId` 조회 → status가 DONE|WAITING_FOR_DEPOSIT이면 결제를 확인한다.
+ *   단, 가상계좌 조회의 `secret:null`은 정상 응답이므로
+ *   'confirmed-without-deposit-secret'으로 명시한다.
  * - `NOT_FOUND_PAYMENT_SESSION`(10분 초과 — 라이브러리 시한 초과 에러 동일 취급) →
  *   조회 없이 'retry-payment'.
  * - 그 외 REJECT/AUTH 계열 → 조회 없이 'definitively-failed'.
@@ -318,14 +353,44 @@ export async function resolveConfirmFailure<E extends Env>(
   if (error.source === 'network' || error.code === 'ALREADY_PROCESSED_PAYMENT') {
     const looked = await client.getPaymentByOrderId(orderId);
     if (!looked.ok) return looked;
-    const status = looked.value.status;
-    if (status === 'DONE' || status === 'WAITING_FOR_DEPOSIT') {
-      // 조회로 승인 완결 확인 — 협착 단언 근거는 위 status 가드
-      return ok({ resolution: 'actually-confirmed', payment: looked.value as ConfirmedPayment });
+    if (isResolvedConfirmedPayment(looked.value)) {
+      if (isConfirmedPayment(looked.value)) {
+        return ok({ resolution: 'actually-confirmed', payment: looked.value });
+      }
+      if (!isConfirmedWithoutDepositSecret(looked.value)) {
+        // isResolvedConfirmedPayment + isConfirmedPayment의 보완 분기는 parser 계약상 여기로
+        // 올 수 없다. 타입과 런타임 계약이 어긋났을 때 성공으로 오분류하지 않기 위한 방어다.
+        return ok({ resolution: 'definitively-failed', error });
+      }
+      return ok({
+        resolution: 'confirmed-without-deposit-secret',
+        payment: looked.value,
+      });
     }
     return ok({ resolution: 'definitively-failed', error });
   }
   return ok({ resolution: 'definitively-failed', error });
+}
+
+function isResolvedConfirmedPayment(payment: Payment): payment is ResolvedConfirmedPayment {
+  return payment.status === 'DONE' || payment.status === 'WAITING_FOR_DEPOSIT';
+}
+
+function isConfirmedPayment(payment: Payment): payment is ConfirmedPayment {
+  return (
+    isResolvedConfirmedPayment(payment) &&
+    (payment.method !== '가상계좌' || (typeof payment.secret === 'string' && payment.secret.length > 0))
+  );
+}
+
+function isConfirmedWithoutDepositSecret(
+  payment: Payment,
+): payment is ConfirmedWithoutDepositSecret {
+  return (
+    isResolvedConfirmedPayment(payment) &&
+    payment.method === '가상계좌' &&
+    payment.secret === null
+  );
 }
 
 export interface ConfirmFlow<E extends Env> {
@@ -359,9 +424,10 @@ export interface ConfirmFlow<E extends Env> {
   ): Promise<Result<ConfirmedPayment, CallbackParseError | VerifyCheckoutError | ConfirmError>>;
 
   /**
-   * §3.7 {@link resolveConfirmFailure}의 플로우 결합판 — 플로우의 client를 재사용하고,
-   * 'actually-confirmed'가 **가상계좌면 §3.1 depositSecrets 저장 경로를 재사용**한다
-   * (secret이 조회 응답에 있음 — 실측. confirm 실패로 저장 기회를 잃은 secret의 복구 지점).
+   * §3.7 {@link resolveConfirmFailure}의 플로우 결합판 — 플로우의 client를 재사용한다.
+   * 일반적인 가상계좌 조회는 secret을 반환하지 않으므로
+   * `confirmed-without-deposit-secret`을 주문 보류/운영 복구로 처리해야 한다. provider가
+   * 예외적으로 secret을 보존한 `actually-confirmed`일 때만 §3.1 저장 경로를 재사용한다.
    *
    * ⚠ 조회 Err = 진실 미확정 — 성공/실패 어느 쪽으로도 사용자에게 단정 안내하지 말 것.
    */
@@ -377,6 +443,13 @@ export function createConfirmFlow<E extends Env>(
   options?: ConfirmFlowOptions,
 ): ConfirmFlow<E> {
   const approvalWindowMs = options?.approvalWindowMs ?? 600_000;
+  if (
+    !Number.isSafeInteger(approvalWindowMs) ||
+    approvalWindowMs <= 0 ||
+    approvalWindowMs > 600_000
+  ) {
+    throw new TypeError('approvalWindowMs는 1~600000 사이의 안전한 정수여야 합니다.');
+  }
   const clock = options?.clock ?? (() => new Date());
   const http = getInternalHttp(client);
   const depositSecrets = options?.depositSecrets;
@@ -404,7 +477,7 @@ export function createConfirmFlow<E extends Env>(
       console.warn(
         `[@gj-kit/toss-payments] 가상계좌 secret 저장 실패 (orderId=${orderIdValue}) — ` +
           '이 주문의 입금 웹훅(DEPOSIT_CALLBACK)이 전부 unknown-order로 거부됩니다. ' +
-          'getPaymentByOrderId(orderId) → Payment.secret → saveSecret 재시도로 복구하세요. ' +
+          '가상계좌 secret은 조회 API로 복구할 수 없으므로 주문을 보류하고 운영 복구 절차로 처리하세요. ' +
           '(onDepositSecretSaveFailed 콜백 지정 시 이 경고 대신 콜백으로 통지됩니다)',
         cause,
       );
@@ -432,12 +505,12 @@ export function createConfirmFlow<E extends Env>(
   };
 
   const createOrder: ConfirmFlow<E>['createOrder'] = async (input) => {
-    if (!Number.isFinite(input.amount) || input.amount <= 0) {
+    if (!Number.isSafeInteger(input.amount) || input.amount <= 0) {
       return err({
         source: 'library',
         kind: 'invalid-input',
         field: 'amount',
-        reason: '금액은 0보다 큰 수여야 합니다',
+        reason: '금액은 0보다 큰 안전한 정수여야 합니다',
       });
     }
     const name = parseOrderNameRaw(input.orderName);
@@ -535,11 +608,11 @@ export function createConfirmFlow<E extends Env>(
       signal: callOptions?.signal,
     });
     if (!r.ok) return err(r.error);
-    // 2xx라도 빈 body/비객체 JSON이면 '빈 Payment' 제조 금지 — 필수 필드 가드 통과 후에만 Ok
+    // 2xx라도 빈 body/비객체 JSON이면 '빈 Payment' 제조 금지 — 완전한 계약 가드 통과 후에만 Ok
     const parsed = parsePaymentChecked(r.value);
     if (!parsed.ok) return parsed;
     if (
-      (parsed.value.status !== 'DONE' && parsed.value.status !== 'WAITING_FOR_DEPOSIT') ||
+      !isConfirmedPayment(parsed.value) ||
       parsed.value.paymentKey !== checkout.paymentKey ||
       parsed.value.orderId !== checkout.orderId ||
       parsed.value.totalAmount !== checkout.amount
@@ -548,10 +621,12 @@ export function createConfirmFlow<E extends Env>(
         source: 'network',
         code: 'NETWORK_ERROR',
         retryable: true,
-        cause: new Error('결제 승인 2xx 응답이 요청(status/paymentKey/orderId/amount)과 일치하지 않습니다.'),
+        cause: new Error(
+          '결제 승인 2xx 응답이 요청(status/paymentKey/orderId/amount) 또는 가상계좌 secret 계약과 일치하지 않습니다.',
+        ),
       });
     }
-    return ok(parsed.value as ConfirmedPayment);
+    return ok(parsed.value);
   };
 
   // ── §3.3 이벤트 래퍼 — Result 확정 **후** fire-and-forget 발화(핸들러 격리는 이미터 소유),
@@ -595,8 +670,9 @@ export function createConfirmFlow<E extends Env>(
     async resolveFailure(orderIdValue, error) {
       const resolved = await resolveConfirmFailure(client, orderIdValue, error);
       if (resolved.ok && resolved.value.resolution === 'actually-confirmed') {
-        // §3.1 저장 경로 재사용 — confirm 실패로 저장 기회를 잃은 가상계좌 secret의
-        // 복구 지점(secret이 조회 응답에 있음 — 실측). 실패여도 판정 결과는 불변.
+        // 조회가 예외적으로 secret을 보존한 경우에만 기존 저장 경로를 재사용한다. 일반적인
+        // 가상계좌 조회는 secret:null이므로 그 경우는 별도 보류 variant로 반환되어 여기까지
+        // 오지 않는다. 실패여도 결제 확정 판정은 불변.
         await saveDepositSecret(resolved.value.payment);
       }
       return resolved;

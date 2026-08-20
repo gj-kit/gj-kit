@@ -62,7 +62,7 @@ export function forbiddenFetch(): { fetch: typeof fetch; calls: RecordedCall[] }
 
 /** Payment 응답 원문 픽스처 (raw 필드 없음 — 서버 응답 그대로). */
 export function rawPayment(overrides: Record<string, unknown> = {}): Record<string, unknown> {
-  return {
+  const payment: Record<string, unknown> = {
     version: '2022-11-16',
     paymentKey: 'tviva20260809abcdef',
     type: 'NORMAL',
@@ -107,6 +107,47 @@ export function rawPayment(overrides: Record<string, unknown> = {}): Record<stri
     country: 'KR',
     failure: null,
     ...overrides,
+  };
+
+  // `Payment`의 가상계좌 variant는 실제 승인 응답에서 내려오는 detail 전체를 약속한다.
+  // 테스트에서 accountNumber만 관심 있는 경우에도 API 응답 픽스처 자체는 유효한 계약을
+  // 유지한다. 누락/nullable 경계 테스트는 `virtualAccount: null` 또는 `secret: null`을
+  // 명시해 정상화 없이 만들 수 있다.
+  if (payment['method'] === '가상계좌') {
+    if (!Object.prototype.hasOwnProperty.call(overrides, 'card')) payment['card'] = null;
+    if (!Object.prototype.hasOwnProperty.call(overrides, 'secret')) {
+      payment['secret'] = 'va-secret-fixture';
+    }
+
+    const virtualAccount = payment['virtualAccount'];
+    if (!Object.prototype.hasOwnProperty.call(overrides, 'virtualAccount')) {
+      payment['virtualAccount'] = defaultVirtualAccount();
+    } else if (
+      typeof virtualAccount === 'object' &&
+      virtualAccount !== null &&
+      !Array.isArray(virtualAccount)
+    ) {
+      payment['virtualAccount'] = {
+        ...defaultVirtualAccount(),
+        ...(virtualAccount as Record<string, unknown>),
+      };
+    }
+  }
+
+  return payment;
+}
+
+function defaultVirtualAccount(): Record<string, unknown> {
+  return {
+    accountNumber: '70123456789',
+    accountType: '일반',
+    bankCode: '20',
+    customerName: '테스트 고객',
+    dueDate: '2026-08-12T23:59:59+09:00',
+    expired: false,
+    settlementStatus: 'INCOMPLETED',
+    refundStatus: 'NONE',
+    refundReceiveAccount: null,
   };
 }
 

@@ -5,6 +5,7 @@ import type {
   ConfirmError,
   ConfirmFlow,
   ConfirmedPayment,
+  ConfirmedWithoutDepositSecret,
   DepositSecretStore,
   OrderStore,
   TossEvents,
@@ -12,7 +13,7 @@ import type {
   UnverifiedCallback,
   VerifiedCheckout,
 } from '../../src/server';
-import type { OrderId, PaymentKey } from '../../src/index';
+import type { OrderId, PaymentKey, VirtualAccountPayment } from '../../src/index';
 
 const forge = <T>(): T => undefined as T; // 타입 테스트 전용 헬퍼
 
@@ -78,13 +79,27 @@ describe('§3.1/§3.7 v1.1 additive — depositSecrets 옵션 + resolveFailure',
     void createConfirmFlow(client, store, { depositSecrets: { saveSecret: forge<DepositSecretStore['saveSecret']>() } });
   });
 
-  it('resolveFailure — ConfirmResolution 3분기 판별 유니언', () => {
+  it('가상계좌 조회 secret은 nullable지만 confirm 성공 VA는 non-null로 좁혀진다', () => {
+    const lookup = forge<VirtualAccountPayment>();
+    expectTypeOf(lookup.secret).toEqualTypeOf<string | null>();
+
+    const confirmed = forge<ConfirmedPayment>();
+    if (confirmed.method === '가상계좌') {
+      expectTypeOf(confirmed.secret).toEqualTypeOf<string>();
+    }
+  });
+
+  it('resolveFailure — ConfirmResolution 4분기 판별 유니언', () => {
     const flow = forge<ConfirmFlow<'test'>>();
     const resolution = forge<Awaited<ReturnType<ConfirmFlow<'test'>['resolveFailure']>>>();
     void flow.resolveFailure(forge<OrderId>(), forge<ConfirmError>());
     if (resolution.ok) {
       if (resolution.value.resolution === 'actually-confirmed') {
         expectTypeOf(resolution.value.payment).toEqualTypeOf<ConfirmedPayment>();
+      }
+      if (resolution.value.resolution === 'confirmed-without-deposit-secret') {
+        expectTypeOf(resolution.value.payment).toEqualTypeOf<ConfirmedWithoutDepositSecret>();
+        expectTypeOf(resolution.value.payment.secret).toEqualTypeOf<null>();
       }
       if (resolution.value.resolution === 'definitively-failed') {
         expectTypeOf(resolution.value.error).toEqualTypeOf<ConfirmError>();

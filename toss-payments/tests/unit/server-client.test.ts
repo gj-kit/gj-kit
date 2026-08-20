@@ -62,6 +62,53 @@ describe('createTossClient — 인증/요청 형식', () => {
       expect(r.value.raw).toEqual(raw);
     }
   });
+
+  it.each([
+    [
+      '카드',
+      rawPayment({ method: '카드' }),
+    ],
+    [
+      '가상계좌 조회(secret:null)',
+      rawPayment({ method: '가상계좌', status: 'WAITING_FOR_DEPOSIT', secret: null }),
+    ],
+    [
+      '간편결제',
+      rawPayment({
+        method: '간편결제',
+        easyPay: { provider: '토스페이', amount: 1000, discountAmount: 0 },
+      }),
+    ],
+    [
+      '계좌이체',
+      rawPayment({ method: '계좌이체', transfer: { bankCode: '20', settlementStatus: 'INCOMPLETED' } }),
+    ],
+    [
+      '휴대폰',
+      rawPayment({
+        method: '휴대폰',
+        mobilePhone: {
+          customerMobilePhone: '01012345678',
+          settlementStatus: 'INCOMPLETED',
+          receiptUrl: 'https://example.test/receipt',
+        },
+      }),
+    ],
+    [
+      '상품권',
+      rawPayment({
+        method: '문화상품권',
+        giftCertificate: { approveNo: 'gift-approve-1', settlementStatus: 'COMPLETED' },
+      }),
+    ],
+  ])('문서화한 %s Payment variant 조회를 계약대로 파싱한다', async (_label, body) => {
+    const { fetch } = mockFetch(() => ({ status: 200, body }));
+    const result = await createTossClient(secretKey(), { fetch }).getPayment(
+      orThrow(paymentKey('pk-variant')),
+    );
+
+    expect(result).toMatchObject({ ok: true });
+  });
 });
 
 describe('createTossClient — 에러 매핑 (코드 테이블 판정, HTTP status 아님)', () => {
@@ -188,6 +235,39 @@ describe('createTossClient — 에러 매핑 (코드 테이블 판정, HTTP stat
     ['lastTransactionKey', { lastTransactionKey: 123 }],
   ])('환불 실행 지문에 쓰는 %s가 잘못된 2xx도 차단한다', async (_, overrides) => {
     const { fetch } = mockFetch(() => ({ status: 200, body: rawPayment(overrides) }));
+    const result = await createTossClient(secretKey(), { fetch }).getPayment(
+      orThrow(paymentKey('pk-x')),
+    );
+
+    expect(result).toMatchObject({
+      ok: false,
+      error: { source: 'network', code: 'NETWORK_ERROR', retryable: true },
+    });
+  });
+
+  it.each([
+    [
+      '가상계좌 secret 필드 누락',
+      () => {
+        const body = rawPayment({ method: '가상계좌', status: 'WAITING_FOR_DEPOSIT' });
+        delete body['secret'];
+        return body;
+      },
+    ],
+    [
+      '가상계좌 detail 누락',
+      () => rawPayment({ method: '가상계좌', virtualAccount: null }),
+    ],
+    [
+      '카드 detail의 number 누락',
+      () => {
+        const body = rawPayment();
+        delete (body['card'] as Record<string, unknown>)['number'];
+        return body;
+      },
+    ],
+  ])('method 판별 유니언의 %s 2xx를 fail-closed 한다', async (_label, makeBody) => {
+    const { fetch } = mockFetch(() => ({ status: 200, body: makeBody() }));
     const result = await createTossClient(secretKey(), { fetch }).getPayment(
       orThrow(paymentKey('pk-x')),
     );

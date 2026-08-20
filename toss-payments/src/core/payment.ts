@@ -139,8 +139,14 @@ export interface CardPayment extends PaymentBase {
 export interface VirtualAccountPayment extends PaymentBase {
   readonly method: '가상계좌';
   readonly virtualAccount: VirtualAccountDetails;
-  /** 가상계좌 결제에서는 non-null — DEPOSIT_CALLBACK 대조 원본. */
-  readonly secret: string;
+  /**
+   * 가상계좌 승인 응답에서만 내려오는 DEPOSIT_CALLBACK 대조값.
+   *
+   * 결제 조회 API는 같은 가상계좌 결제라도 `null`을 반환할 수 있다. 따라서 일반
+   * `Payment` 조회 결과에서 이 값을 복구할 수 있다고 가정하면 안 된다. confirm 응답에서
+   * secret을 보장해야 하는 코드는 server의 `ConfirmedPayment`를 사용한다.
+   */
+  readonly secret: string | null;
   readonly card: null;
 }
 export interface EasyPayPayment extends PaymentBase {

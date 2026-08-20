@@ -43,6 +43,7 @@ export {
 } from './confirm';
 export type {
   CallbackParseError,
+  ConfirmedWithoutDepositSecret,
   ConfirmResolution,
   CallbackQueryInput,
   ConfirmedPayment,
@@ -52,6 +53,7 @@ export type {
   CreateOrderError,
   FailCallbackResult,
   PendingOrder,
+  ResolvedConfirmedPayment,
   UnverifiedCallback,
   VerifiedCheckout,
   VerifyCheckoutError,

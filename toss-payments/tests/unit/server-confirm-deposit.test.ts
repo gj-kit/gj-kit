@@ -41,7 +41,7 @@ function memoryOrders(): OrderStore {
 }
 
 /** 가상계좌 confirm 성공 응답 — secret non-null, status WAITING_FOR_DEPOSIT(문서). */
-function vaPayment(): Record<string, unknown> {
+function vaPayment(overrides: Record<string, unknown> = {}): Record<string, unknown> {
   return rawPayment({
     paymentKey: 'pk-abc',
     method: '가상계좌',
@@ -49,6 +49,7 @@ function vaPayment(): Record<string, unknown> {
     secret: VA_SECRET,
     card: null,
     virtualAccount: { accountNumber: '70123456789', bankCode: '20', dueDate: '2026-08-12T23:59:59+09:00' },
+    ...overrides,
   });
 }
 
@@ -102,6 +103,39 @@ describe('§3.1 depositSecrets — 가상계좌 secret 자동 저장', () => {
     await seedOrder(flow);
     expect(isOk(await flow.confirmCallback(CALLBACK))).toBe(true);
   });
+
+  it.each([
+    [
+      'secret 누락',
+      () => {
+        const body = vaPayment();
+        delete body['secret'];
+        return body;
+      },
+    ],
+    ['virtualAccount 누락', () => vaPayment({ virtualAccount: null })],
+  ])(
+    '가상계좌 승인 2xx의 %s는 Ok로 만들거나 undefined secret을 저장하지 않는다',
+    async (_label, makeBody) => {
+      const { fetch } = mockFetch(() => ({ status: 200, body: makeBody() }));
+      const saved: unknown[] = [];
+      const deposits: DepositSecretStore = {
+        saveSecret: async (_orderId, secret) => {
+          saved.push(secret);
+        },
+        getSecret: async () => null,
+      };
+      const flow = createConfirmFlow(testClient(fetch), memoryOrders(), { depositSecrets: deposits });
+      await seedOrder(flow);
+
+      const result = await flow.confirmCallback(CALLBACK);
+      expect(result).toMatchObject({
+        ok: false,
+        error: { source: 'network', code: 'NETWORK_ERROR', retryable: true },
+      });
+      expect(saved).toEqual([]);
+    },
+  );
 
   it('저장 실패여도 confirm Ok 유지 + 콜백 통지(payload에 secret 미포함) + 이벤트 발행', async () => {
     const { fetch } = mockFetch(() => ({ status: 200, body: vaPayment() }));
@@ -323,6 +357,32 @@ describe('§3.7 resolveConfirmFailure — 조회 기반 3분기', () => {
     }));
     const r = await resolveConfirmFailure(testClient(fetch), oid(), transportError);
     expect(isErr(r)).toBe(true);
+  });
+
+  it('가상계좌 lookup의 secret:null은 결제 실패가 아닌 운영 보류 variant다', async () => {
+    const { fetch } = mockFetch(() => ({
+      status: 200,
+      body: vaPayment({ secret: null }),
+    }));
+    const saved: unknown[] = [];
+    const flow = createConfirmFlow(testClient(fetch), memoryOrders(), {
+      depositSecrets: {
+        saveSecret: async (_orderId, secret) => {
+          saved.push(secret);
+        },
+        getSecret: async () => null,
+      },
+    });
+    const r = await flow.resolveFailure(oid(), transportError);
+
+    expect(isOk(r)).toBe(true);
+    if (isOk(r)) {
+      expect(r.value.resolution).toBe('confirmed-without-deposit-secret');
+      if (r.value.resolution === 'confirmed-without-deposit-secret') {
+        expect(r.value.payment.secret).toBeNull();
+      }
+    }
+    expect(saved).toEqual([]);
   });
 
   it('flow.resolveFailure — actually-confirmed 가상계좌면 depositSecrets 저장 경로 재사용', async () => {

@@ -58,6 +58,11 @@ describe('parseSuccessCallback — 입력 4형태 정규화', () => {
     if (isErr(r)) expect(r.error.reason).toBe('bad-amount');
   });
 
+  it.each(['0', '-1', '1000.5', '9007199254740992'])('amount=%s는 결제 금액으로 파싱하지 않는다', (amount) => {
+    const r = parseSuccessCallback(`?paymentKey=pk&orderId=order-123456&amount=${amount}`);
+    expect(r).toMatchObject({ ok: false, error: { reason: 'bad-amount' } });
+  });
+
   it('필수 파라미터 누락 → missing-param + 누락 목록', () => {
     const r = parseSuccessCallback('?orderId=order-123456');
     expect(isErr(r)).toBe(true);
@@ -149,6 +154,31 @@ describe('createConfirmFlow — createOrder', () => {
     expect(isErr(r)).toBe(true);
     if (isErr(r) && r.error.kind === 'store-failure') expect(r.error.cause).toBe(boom);
   });
+
+  it.each([1000.5, Number.MAX_SAFE_INTEGER + 1])(
+    '분수/안전 범위 밖 금액(%s)은 저장 전에 invalid-input으로 거부한다',
+    async (amount) => {
+      const { fetch } = forbiddenFetch();
+      const store = memoryOrders();
+      const flow = createConfirmFlow(createTossClient(secretKey(), { fetch }), store);
+
+      const result = await flow.createOrder({ amount, orderName: '정수 결제만' });
+      expect(result).toMatchObject({ ok: false, error: { kind: 'invalid-input', field: 'amount' } });
+      expect([...store.map]).toHaveLength(0);
+    },
+  );
+
+  it.each([0, -1, 1000.5, 600_001, Number.MAX_SAFE_INTEGER + 1])(
+    'approvalWindowMs=%s는 부팅 시 거부한다',
+    (approvalWindowMs) => {
+      const { fetch } = forbiddenFetch();
+      expect(() =>
+        createConfirmFlow(createTossClient(secretKey(), { fetch }), memoryOrders(), {
+          approvalWindowMs,
+        }),
+      ).toThrow('approvalWindowMs');
+    },
+  );
 });
 
 describe('createConfirmFlow — verify/confirm (검증 강제)', () => {

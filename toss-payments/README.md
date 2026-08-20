@@ -12,6 +12,13 @@
 - 환불 정책(전체·시간 구간 비율·잔여 일수/회차·custom)과 민감정보 없는 결제 상태 스냅샷을 제공합니다(§4.2).
 - 모든 부가 옵션은 **기본 꺼짐**이고, 옵션 내부의 실패가 결제 `Result`를 바꾸는 경로는 존재하지 않습니다(§3).
 
+> **0.4 마이그레이션 — 가상계좌 secret**: `getPayment*()`의 `VirtualAccountPayment.secret`은
+> `string | null`입니다. Toss 조회 응답은 승인 때 받은 secret을 다시 주지 않을 수 있습니다.
+> 반대로 `confirm`/`confirmCallback`의 `ConfirmedPayment` 가상계좌 분기는 non-empty `string`을
+> 보장합니다. confirm이 응답 유실로 실패한 뒤 조회가 가상계좌 `secret: null`을 반환하면
+> `resolveFailure()`는 `confirmed-without-deposit-secret`을 돌려줍니다. 결제를 실패/재시도하지
+> 말고 주문을 보류해 운영 복구로 처리하세요.
+
 ---
 
 ## 1. 설치와 키 설정
@@ -170,8 +177,8 @@ const verifier = createWebhookVerifier({ dedupe, depositSecrets });
 ```
 
 - **동작**: `confirm`/`confirmCallback`이 Ok이고 **`payment.method === '가상계좌'`일 때만** `saveSecret`을 await 합니다. secret 존재 여부로 판정하지 않습니다 — 실측상 BILLING 카드 결제 응답에도 secret이 non-null로 내려와, 존재 판정이면 빌링 결제마다 무의미한 저장이 발생합니다.
-- **실패 시맨틱**: `saveSecret`이 실패해도 confirm은 **Ok 유지**입니다. 승인은 토스 측에서 이미 완결이라, Err로 뒤집으면 "승인됐는데 실패 처리 + 사용자 재confirm"이라는 더 큰 사고가 됩니다. secret은 `getPaymentByOrderId` 재조회 응답에도 있어(실측) 유실이 영구적이지 않습니다 — 통지는 `onDepositSecretSaveFailed` 콜백 + `deposit.secret-save-failed` 이벤트로 흐르고, 콜백 미지정 시 실패 1건당 `console.warn` 1회가 나갑니다(이 라이브러리에서 유일하게 시끄러운 기본값 — 침묵 유실 방지).
-- **복구**: `getPaymentByOrderId(orderId)` → `Payment.secret` → `saveSecret` 재시도. 통지 payload에는 secret 원문이 실리지 않습니다.
+- **실패 시맨틱**: `saveSecret`이 실패해도 confirm은 **Ok 유지**입니다. 승인은 토스 측에서 이미 완결이라, Err로 뒤집으면 "승인됐는데 실패 처리 + 사용자 재confirm"이라는 더 큰 사고가 됩니다. 다만 가상계좌 secret은 조회 API로 복구할 수 없으므로, 통지(`onDepositSecretSaveFailed`/`deposit.secret-save-failed`)를 운영 알림으로 연결하고 주문을 보류해야 합니다. 콜백 미지정 시 실패 1건당 `console.warn` 1회가 납니다.
+- **복구 경계**: `getPaymentByOrderId(orderId)`의 `Payment.secret`은 `null`일 수 있습니다. 승인 응답을 놓친 뒤 secret을 조회 재시도로 되살리는 코드를 만들지 마세요. 통지 payload에는 secret 원문이 실리지 않습니다.
 
 ### 3.2 `audit` — 아웃바운드 전 req/res 증거 기록
 
@@ -255,7 +262,7 @@ const batch = createTossPayments({
 4. **그 외 전부 재시도 없음**: 키 없는 POST(confirm 기본 정책)는 어떤 실패든 자동 재시도 절대 없음(이중 승인 방지 — `retryable: true`여도 무시). 토스 4xx/5xx 에러 응답도 재시도하지 않습니다(4xx는 멱등 재생 실측 확정, 5xx는 미실측 보수 배제) — 왜 `PROVIDER_ERROR`를 자동 재시도하지 않는지는 §5 참고.
 
 - confirm에 retry 효과를 받으려면 `options.idempotencyKey` 명시가 전제입니다(기본 미부착 — §12 FAQ).
-- 기본 지연은 `[500, 2_000, 8_000]ms` + full jitter ±25% — **최악 +10.5초**(+ 시도별 timeout 독립 적용)입니다. 사용자가 기다리는 confirm 경로에 켜야 한다면 `maxAttempts: 2`를 권장합니다. 409 폴링은 테스트 환경 분당 100건 쿼터를 소모합니다.
+- 기본 지연은 `[500, 2_000, 8_000]ms` + full jitter ±25% — **최악 +10.5초**(+ 시도별 timeout 독립 적용)입니다. `maxAttempts`는 2~5, 각 `delaysMs`는 0~60,000ms 안전한 정수이며 빈 배열은 부팅 시 거부합니다. 사용자가 기다리는 confirm 경로에 켜야 한다면 `maxAttempts: 2`를 권장합니다. 409 폴링은 테스트 환경 분당 100건 쿼터를 소모합니다.
 - cancel의 `CancelRetryTicket`(§5)과 역할이 다릅니다: retry는 "요청 내" 자동화, 티켓은 "요청 간(큐 저장 후)" 수동 재실행 — 티켓 동봉은 그대로 유지됩니다.
 
 ### 3.5 webhook `autoRefetch` — Unverified에 조회 재확인 결과 자동 첨부
@@ -306,7 +313,7 @@ await strict.billing.approve(profile, order, {
 
 ### 3.7 `resolveConfirmFailure` — confirm 실패는 결제 실패가 아니다
 
-confirm의 Err에는 "승인됐는데 응답만 유실"(transport)과 "새로고침 이중 confirm"(`ALREADY_PROCESSED_PAYMENT`)이 섞여 있습니다. 일괄 실패 처리하면 **"돈은 나갔는데 실패 안내"** 라는 최악의 CS 사고가 납니다. 조회로 진실을 확정한 뒤 3분기하세요.
+confirm의 Err에는 "승인됐는데 응답만 유실"(transport)과 "새로고침 이중 confirm"(`ALREADY_PROCESSED_PAYMENT`)이 섞여 있습니다. 일괄 실패 처리하면 **"돈은 나갔는데 실패 안내"** 라는 최악의 CS 사고가 납니다. 조회로 진실을 확정한 뒤 4분기하세요.
 
 ```ts
 import { isErr } from '@gj-kit/toss-payments';
@@ -316,8 +323,10 @@ if (isErr(done)) {
   const resolved = await confirmFlow.resolveFailure(verified.orderId, done.error);
   if (isErr(resolved)) return respond503();            // 조회도 실패 = 진실 미확정 — 성공/실패 어느 쪽으로도 단정 안내 금지
   switch (resolved.value.resolution) {
-    case 'actually-confirmed':                         // 조회로 DONE|WAITING_FOR_DEPOSIT 확인 — 성공 처리
-      return completeOrder(resolved.value.payment);    // 가상계좌면 §3.1 secret 저장 경로도 재사용됨
+    case 'actually-confirmed':                         // 조회로 DONE|WAITING_FOR_DEPOSIT + 안전한 secret 확인
+      return completeOrder(resolved.value.payment);
+    case 'confirmed-without-deposit-secret':           // 가상계좌 lookup secret:null — 재confirm 금지
+      return new Response(null, { status: 202 });      // 주문 보류 + 운영 알림은 앱의 durable queue로
     case 'retry-payment':                              // NOT_FOUND_PAYMENT_SESSION(10분 초과) — 결제 재요청 유도
       return redirectToCheckout();
     case 'definitively-failed':                        // 조회로도 미승인 확정
@@ -326,8 +335,8 @@ if (isErr(done)) {
 }
 ```
 
-- 판정 로직: transport 실패 또는 `ALREADY_PROCESSED_PAYMENT` → `getPaymentByOrderId` 조회 후 상태로 확정. `NOT_FOUND_PAYMENT_SESSION`(및 라이브러리의 시한 초과 선판정) → 조회 없이 `retry-payment`. 그 외 REJECT/AUTH 계열 → 즉시 `definitively-failed`.
-- 플로우 없이 쓰는 자유 함수 `resolveConfirmFailure(client, orderId, error)`도 export 됩니다. `ConfirmFlow.resolveFailure`는 플로우의 client를 재사용하고, `actually-confirmed`가 가상계좌면 depositSecrets 저장 경로를 재사용합니다(confirm 실패로 저장 기회를 잃은 secret의 복구 지점).
+- 판정 로직: transport 실패 또는 `ALREADY_PROCESSED_PAYMENT` → `getPaymentByOrderId` 조회 후 상태로 확정. 가상계좌가 `secret:null`이면 결제 자체는 확인됐지만 DEPOSIT_CALLBACK 대조값을 복구할 수 없으므로 `confirmed-without-deposit-secret`으로 보류합니다. `NOT_FOUND_PAYMENT_SESSION`(및 라이브러리의 시한 초과 선판정) → 조회 없이 `retry-payment`. 그 외 REJECT/AUTH 계열 → 즉시 `definitively-failed`.
+- 플로우 없이 쓰는 자유 함수 `resolveConfirmFailure(client, orderId, error)`도 export 됩니다. `ConfirmFlow.resolveFailure`는 플로우의 client를 재사용하며, provider가 예외적으로 secret을 보존한 `actually-confirmed`일 때만 depositSecrets 저장 경로를 재사용합니다.
 
 ---
 
@@ -421,6 +430,8 @@ export async function GET(req: Request) {
     if (isErr(resolved)) return new Response(null, { status: 503 }); // 진실 미확정 — 단정 안내 금지
     if (resolved.value.resolution === 'actually-confirmed')
       return Response.redirect(new URL(`/orders/${resolved.value.payment.orderId}/complete`, req.url));
+    if (resolved.value.resolution === 'confirmed-without-deposit-secret')
+      return new Response(null, { status: 202 }); // 주문 보류 + 운영 알림은 앱의 durable queue로
     if (resolved.value.resolution === 'retry-payment')
       return Response.redirect(new URL('/checkout?expired=1', req.url));
     return Response.redirect(new URL('/checkout/fail', req.url));
@@ -438,6 +449,7 @@ const result = await confirmFlow.confirmCallback(req.url);
 > **왜 이 단계를 건너뛸 수 없는가**
 >
 > - **금액 검증은 공식 문서의 의무 사항** — successUrl 쿼리의 `amount`는 브라우저를 거쳐 온 값이라 위변조 가능합니다. `verify`는 `createOrder`가 저장 시점에 고정한 금액(단일 진실 공급원)과 대조하고, 통과해야만 `VerifiedCheckout` 브랜드를 부여합니다. `confirm(unverifiedCallback)`은 컴파일 에러입니다.
+> - **금액은 양의 안전한 정수** — `createOrder`와 successUrl parser는 분수·0·음수·안전 범위 밖 수를 API 호출 전에 거부합니다. `approvalWindowMs`도 provider의 10분 시한을 넘길 수 없고 1~600,000ms 안전한 정수만 허용합니다.
 > - **10분 시한** — 인증 완료 후 10분 안에 confirm하지 않으면 결제는 `EXPIRED`가 되고, 이후 confirm은 404 `NOT_FOUND_PAYMENT_SESSION`(재시도 불가 최종 실패)입니다. `verify`가 시한을 함께 판정합니다.
 > - 가상계좌 confirm의 결과는 `DONE`이 아니라 `WAITING_FOR_DEPOSIT`일 수 있습니다 — `ConfirmedPayment` 타입이 두 상태를 모두 담습니다. secret 저장은 §3.1 배선이 소유하므로 라우트에 수동 저장 코드를 두지 마세요.
 

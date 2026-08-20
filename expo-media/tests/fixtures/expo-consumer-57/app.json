@@ -1,0 +1,12 @@
+{
+  "expo": {
+    "name": "gj-kit expo-media SDK 57 release smoke",
+    "slug": "gj-kit-expo-media-sdk-57-release-smoke",
+    "version": "1.0.0",
+    "platforms": ["ios", "android", "web"],
+    "web": {
+      "bundler": "metro",
+      "output": "single"
+    }
+  }
+}

@@ -182,7 +182,7 @@
     "test:all": "pnpm run test && pnpm run test:types"
   },
   "peerDependencies": {
-    "expo": ">=56.0.0 <57.0.0",
+    "expo": ">=56.0.0 <58.0.0",
     "expo-file-system": ">=56.0.0",
     "expo-image-picker": ">=16.0.0",
     "expo-media-library": ">=56.0.5",
@@ -211,10 +211,10 @@
   },
   "devDependencies": {
     "@types/react": "~19.2.0",
-    "expo": "~56.0.0",
-    "expo-file-system": "~56.0.8",
-    "expo-image-picker": "~56.0.21",
-    "expo-media-library": "~56.0.9",
+    "expo": "~56.0.20",
+    "expo-file-system": "~56.0.10",
+    "expo-image-picker": "~56.0.24",
+    "expo-media-library": "~56.0.11",
     "expo-video-thumbnails": "~56.0.3",
     "jsdom": "^25.0.1",
     "react": "19.2.3",

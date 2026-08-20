@@ -13,7 +13,7 @@
   저수준 어댑터의 오류는 이 계약 밖이며, 어댑터를 호출하는 파이프라인에서만 안전하게 감싼다.
 
 > **SDK 요구 (엔트리별로 다르다 — 이 두 줄이 전부다)**
-> - `.` · `./picker` · `./device` · `./save`는 **Expo SDK 56 의존성 그래프에서 검증**된다 (`expo-file-system@56.0.0`의 `File.upload()` / `expo-media-library@56.0.5`의 `/legacy` 서브패스가 하한을 지배한다). peer의 하한은 이후 SDK 호환성을 자동으로 보장하지 않으며, 새 SDK는 별도 검증 뒤 지원 범위에 추가한다.
+> - `.` · `./picker` · `./device` · `./save`는 **Expo SDK 56·57 의존성 그래프에서 검증**된다 (`expo-file-system@56.0.0`의 `File.upload()` / `expo-media-library@56.0.5`의 `/legacy` 서브패스가 하한을 지배한다). peer의 하한은 이후 SDK 호환성을 자동으로 보장하지 않으며, 새 SDK는 별도 검증 뒤 지원 범위에 추가한다.
 > - `./core` · `./web` · `./testing`은 **peer 0**이라 **SDK와 무관하다.** bare RN·웹 전용·Node 스크립트에서 그대로 쓴다.
 
 ```sh
@@ -288,7 +288,7 @@ tarball SHA-256을 추가로 기록할 수 있지만, 이 패키지 내부 stamp
 artifact metadata이므로 이 보호 장치만 추가하는 경우에는 패키지 버전을 임의로 올리지 않는다.
 
 현재 `check:pack`은 export map·실제 packed 파일·내부 provenance stamp를, `check:expo-media-consumer`는 새
-Expo SDK 56 소비자의 web/iOS/Android export를 검증한다.
+Expo SDK 56·57 소비자의 web/iOS/Android export를 검증한다.
 
 ### 역사적 활동의 EXIF 시간
 

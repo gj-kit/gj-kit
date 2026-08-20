@@ -10,17 +10,31 @@ import { Test } from '@nestjs/testing';
 import { describe, expect, it } from 'vitest';
 
 import { orThrow } from '@gj-kit/toss-payments';
-import { defineTossPaymentsConfig, parseApiSecretKey } from '@gj-kit/toss-payments/server';
+import {
+  defineTossPaymentsConfig,
+  parseApiSecretKey,
+  parseWidgetSecretKey,
+} from '@gj-kit/toss-payments/server';
 import type { OrderStore, StoredOrder } from '@gj-kit/toss-payments/server';
 import { memoryBillingKeyStore, memoryDedupeStore } from '@gj-kit/toss-payments/testing';
 
-import { InjectTossPayments, TOSS_PAYMENTS, TossPaymentsModule } from '../../src/index';
+import {
+  getTossPaymentsToken,
+  InjectTossPayments,
+  TOSS_PAYMENTS,
+  TossPaymentsModule,
+} from '../../src/index';
 import type { TossPaymentsFor } from '../../src/index';
 
 const SK_RAW = 'test_sk_nestmodule01';
+const GSK_RAW = 'test_gsk_nestmodule01';
 
 function sk() {
   return orThrow(parseApiSecretKey(SK_RAW));
+}
+
+function gsk() {
+  return orThrow(parseWidgetSecretKey(GSK_RAW));
 }
 
 function memoryOrders(): OrderStore {
@@ -43,6 +57,11 @@ function makeConfig() {
   });
 }
 type AppToss = TossPaymentsFor<ReturnType<typeof makeConfig>>;
+
+function makeWidgetConfig() {
+  return defineTossPaymentsConfig({ secretKey: gsk(), orders: memoryOrders() });
+}
+type WidgetToss = TossPaymentsFor<ReturnType<typeof makeWidgetConfig>>;
 
 @Injectable()
 class PaymentsService {
@@ -155,8 +174,64 @@ describe('§4.2 forRootAsync — 스토어를 Nest 프로바이더로 조립하�
   });
 });
 
+@Injectable()
+class NamedPaymentsService {
+  constructor(
+    @InjectTossPayments('billing') readonly billing: AppToss,
+    @InjectTossPayments('widget') readonly widget: WidgetToss,
+  ) {}
+}
+
+describe('이름 있는 kit 등록 — 서로 다른 키 쌍/플로우의 DI 분리', () => {
+  it('register({ name, config })는 이름별 토큰에 독립 kit을 바인딩한다', async () => {
+    const moduleRef = await Test.createTestingModule({
+      imports: [
+        TossPaymentsModule.register({ name: 'billing', config: makeConfig() }),
+        TossPaymentsModule.register({ name: 'widget', config: makeWidgetConfig() }),
+      ],
+      providers: [NamedPaymentsService],
+    }).compile();
+
+    const billingToken = getTossPaymentsToken('billing');
+    const widgetToken = getTossPaymentsToken('widget');
+    const service = moduleRef.get(NamedPaymentsService);
+
+    expect(billingToken).not.toBe(widgetToken);
+    expect(service.billing).toBe(moduleRef.get<AppToss>(billingToken));
+    expect(service.widget).toBe(moduleRef.get<WidgetToss>(widgetToken));
+    expect(service.billing.client.keyKind).toBe('api');
+    expect(service.widget.client.keyKind).toBe('widget');
+    await moduleRef.close();
+  });
+
+  it('registerAsync({ name, useFactory })도 이름별 토큰으로 비동기 조립한다', async () => {
+    const moduleRef = await Test.createTestingModule({
+      imports: [
+        TossPaymentsModule.registerAsync({
+          name: 'async-billing',
+          useFactory: async () => defineTossPaymentsConfig({ secretKey: sk() }),
+        }),
+      ],
+    }).compile();
+
+    const kit = moduleRef.get<{ client: { keyKind: string } }>(
+      getTossPaymentsToken('async-billing'),
+    );
+    expect(kit.client.keyKind).toBe('api');
+    await moduleRef.close();
+  });
+});
+
 describe('§4.2 TOSS_PAYMENTS 토큰', () => {
   it('Symbol.for 기반 — 전역 레지스트리 경유로 이중 로드에도 동일 토큰', () => {
     expect(TOSS_PAYMENTS).toBe(Symbol.for('@gj-kit/toss-payments-nestjs:facade'));
+  });
+
+  it('named token도 Symbol.for 기반이며 빈 이름은 조기에 거부한다', () => {
+    expect(getTossPaymentsToken('billing')).toBe(
+      Symbol.for('@gj-kit/toss-payments-nestjs:facade:billing'),
+    );
+    expect(() => getTossPaymentsToken('')).toThrow(/비어 있지 않은 문자열/);
+    expect(() => getTossPaymentsToken(' billing ')).toThrow(/앞뒤 공백/);
   });
 });

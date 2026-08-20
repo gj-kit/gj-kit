@@ -10,6 +10,7 @@
 import type { RawBodyRequest } from '@nestjs/common';
 import type {
   NodeIncomingMessageLike,
+  NodeHandlerOptions,
   NodeServerResponseLike,
   WebhookHandlers,
   WebhookVerifier,
@@ -21,6 +22,15 @@ import type {
  * `RawBodyRequest<Request>`(Express)·`RawBodyRequest<FastifyRequest['raw']>` 모두 충족.
  */
 export type NestWebhookRequest = RawBodyRequest<NodeIncomingMessageLike>;
+
+/**
+ * 코어 `nodeHandler`의 source IP 옵션을 Nest raw-body 경계에 그대로 전달한다.
+ *
+ * 기본값은 원본 Node socket의 `remoteAddress`다. reverse proxy 뒤에서 원본 IP가
+ * 필요하면, **앱이 신뢰하는 ingress가 재작성한 헤더만** 읽도록 sourceIp를 명시적으로
+ * 제공해야 한다. 임의의 `X-Forwarded-For`를 기본 신뢰하지 않는다.
+ */
+export type NestWebhookHandlerOptions = NodeHandlerOptions;
 
 /**
  * 컨트롤러 사용 (설계 §4.4):
@@ -37,8 +47,9 @@ export type NestWebhookRequest = RawBodyRequest<NodeIncomingMessageLike>;
 export function toNestWebhookHandler(
   verifier: WebhookVerifier,
   handlers: WebhookHandlers,
+  options?: NestWebhookHandlerOptions,
 ): (req: NestWebhookRequest, res: NodeServerResponseLike) => Promise<void> {
-  const nodeHandler = verifier.nodeHandler(handlers);
+  const nodeHandler = verifier.nodeHandler(handlers, options);
   return async (req, res) => {
     const rawBody = req.rawBody;
     if (rawBody === undefined) {
@@ -60,6 +71,9 @@ export function toNestWebhookHandler(
     const shim: NodeIncomingMessageLike = {
       headers: req.headers,
       body: rawBody,
+      // 일반 상태 웹훅은 기본적으로 socket.remoteAddress로 IP를 검증한다. Nest wrapper가
+      // 이를 누락하면 코어의 fail-closed 정책 때문에 정상 이벤트도 모두 400이 된다.
+      ...(req.socket === undefined ? {} : { socket: req.socket }),
       // NodeIncomingMessageLike의 AsyncIterable 계약 충족용 — body가 실려 있어 순회되지 않는다
       async *[Symbol.asyncIterator]() {
         yield rawBody;

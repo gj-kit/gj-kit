@@ -19,7 +19,7 @@ import type {
 } from '@gj-kit/toss-payments/server';
 import type { WebhookDedupeStore, WebhookVerifier } from '@gj-kit/toss-payments/webhook';
 
-import { TossPaymentsModule } from '../../src/index';
+import { getTossPaymentsToken, TossPaymentsModule } from '../../src/index';
 import type { TossPaymentsFor } from '../../src/index';
 
 const forge = <T>(): T => undefined as T; // 타입 테스트 전용 헬퍼
@@ -87,6 +87,16 @@ describe('§4.2 모듈 시그니처 — config 수용 범위', () => {
       useFactory: async () => config,
       global: true,
     });
+    void TossPaymentsModule.register({ name: 'billing', config });
+    void TossPaymentsModule.register({ name: 'widget', config, global: false });
+    void TossPaymentsModule.registerAsync({ name: 'billing', useFactory: () => config });
+    void TossPaymentsModule.registerAsync({
+      name: 'widget',
+      inject: [],
+      useFactory: async () => config,
+      global: true,
+    });
+    expectTypeOf(getTossPaymentsToken('billing')).toEqualTypeOf<symbol>();
   });
 
   it('config가 아닌 값은 거부된다', () => {
@@ -94,5 +104,11 @@ describe('§4.2 모듈 시그니처 — config 수용 범위', () => {
     TossPaymentsModule.forRoot({ orders });
     // @ts-expect-error raw string 키 — 브랜드 파서 통과가 유일한 경로(§7-1 기각 보존)
     TossPaymentsModule.forRoot({ secretKey: 'test_sk_raw', orders });
+    // @ts-expect-error name 없는 named registration은 허용하지 않는다
+    TossPaymentsModule.register({ config: defineTossPaymentsConfig({ secretKey: sk, orders }) });
+    // @ts-expect-error config 없는 named registration은 허용하지 않는다
+    TossPaymentsModule.register({ name: 'billing' });
+    // @ts-expect-error name 없는 named async registration은 허용하지 않는다
+    TossPaymentsModule.registerAsync({ useFactory: () => config });
   });
 });

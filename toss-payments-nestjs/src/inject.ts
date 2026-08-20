@@ -14,6 +14,37 @@ import { Inject } from '@nestjs/common';
 export const TOSS_PAYMENTS: unique symbol = Symbol.for('@gj-kit/toss-payments-nestjs:facade');
 
 /**
+ * Named kit 식별자. 서로 다른 키 쌍(API `sk`, 결제위젯 `gsk` 등)은 반드시 다른 이름으로
+ * 등록한다. 이름은 Nest application 안에서 유일해야 한다.
+ */
+export type TossPaymentsKitName = string;
+
+const NAMED_TOKEN_PREFIX = '@gj-kit/toss-payments-nestjs:facade:';
+
+function requireKitName(name: TossPaymentsKitName): string {
+  if (typeof name !== 'string' || name.trim().length === 0) {
+    throw new TypeError(
+      '[@gj-kit/toss-payments-nestjs] named TossPayments kit의 name은 비어 있지 않은 문자열이어야 합니다.',
+    );
+  }
+  if (name !== name.trim()) {
+    throw new TypeError(
+      '[@gj-kit/toss-payments-nestjs] named TossPayments kit의 name 앞뒤 공백을 제거하세요.',
+    );
+  }
+  return name;
+}
+
+/**
+ * 이름별 kit 바인딩 토큰을 만든다. `Symbol.for`를 써 ESM/CJS 이중 로드에서도 같은
+ * 이름은 같은 토큰으로 해석된다. 같은 Nest application에서 같은 이름을 두 번
+ * register하면 provider 토큰이 충돌하므로 이름을 유일하게 유지해야 한다.
+ */
+export function getTossPaymentsToken(name: TossPaymentsKitName): symbol {
+  return Symbol.for(`${NAMED_TOKEN_PREFIX}${requireKitName(name)}`);
+}
+
+/**
  * 파사드 kit 주입 데코레이터.
  *
  * 주입 파라미터의 타입은 소실되지 않도록 {@link TossPaymentsFor} 별칭(설계 §4.3 —
@@ -22,6 +53,10 @@ export const TOSS_PAYMENTS: unique symbol = Symbol.for('@gj-kit/toss-payments-ne
  *
  * ```ts
  * constructor(@InjectTossPayments() private readonly toss: AppToss) {}
+ *
+ * // 여러 키 쌍을 쓸 때는 register({ name })와 같은 이름을 명시한다.
+ * constructor(@InjectTossPayments('billing') private readonly toss: BillingToss) {}
  * ```
  */
-export const InjectTossPayments = (): ParameterDecorator => Inject(TOSS_PAYMENTS);
+export const InjectTossPayments = (name?: TossPaymentsKitName): ParameterDecorator =>
+  Inject(name === undefined ? TOSS_PAYMENTS : getTossPaymentsToken(name));

@@ -32,10 +32,11 @@
     "prepack": "npm run build",
     "typecheck": "tsc --noEmit",
     "test": "vitest run --project unit",
-    "test:types": "vitest run --project types"
+    "test:types": "vitest run --project types",
+    "check:readme": "pnpm test:types && node scripts/check-readme.mjs"
   },
   "peerDependencies": {
-    "@gj-kit/toss-payments": "^0.2.0 || ^0.3.0",
+    "@gj-kit/toss-payments": "^0.2.0 || ^0.3.0 || ^0.4.0",
     "@nestjs/common": "^10 || ^11",
     "reflect-metadata": "^0.1.13 || ^0.2",
     "rxjs": "^7"

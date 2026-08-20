@@ -6,6 +6,7 @@ import {
   computeKeyboardRevealOffset,
   nativeBottomInset,
   nativeBottomPadding,
+  resolveModalSafeAreaInsets,
 } from '../../src/insets/pure';
 
 const pureSource = readFileSync(resolve(process.cwd(), 'src/insets/pure.ts'), 'utf8');
@@ -34,5 +35,16 @@ describe('./insets/pure', () => {
         viewportHeight: 800,
       }),
     ).toBe(156);
+  });
+
+  it('exports deterministic full-screen Modal inset resolution without pulling in React Native', () => {
+    expect(
+      resolveModalSafeAreaInsets({
+        insets: { top: 0, right: 0, bottom: 16, left: 0 },
+        platformOS: 'android',
+        statusBarTranslucent: true,
+        statusBarHeight: 24,
+      }),
+    ).toEqual({ top: 24, right: 0, bottom: 16, left: 0 });
   });
 });

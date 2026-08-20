@@ -43,6 +43,7 @@ describe('MEDIA_ERROR_CODES', () => {
       'device-not-found',
       'device-library-failed',
       'picker-failed',
+      'image-processing-failed',
       'unsupported-file-type',
       'file-too-large',
       'upload-failed',

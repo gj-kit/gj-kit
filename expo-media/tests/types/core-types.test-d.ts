@@ -115,14 +115,15 @@ describe('§6.3-⑱ gif는 유니언에 없다 (§5.1 · G15)', () => {
   });
 });
 
-describe('`MediaErrorCode` 16종 exhaustive (§5.2)', () => {
-  it('유니언이 정확히 16종이다 — 순서·문자열이 계약이다', () => {
+describe('`MediaErrorCode` 17종 exhaustive (§5.2)', () => {
+  it('유니언이 정확히 17종이다 — 순서·문자열이 계약이다', () => {
     expectTypeOf<MediaErrorCode>().toEqualTypeOf<
       | 'device-timeout'
       | 'device-icloud-only'
       | 'device-not-found'
       | 'device-library-failed'
       | 'picker-failed'
+      | 'image-processing-failed'
       | 'unsupported-file-type'
       | 'file-too-large'
       | 'upload-failed'
@@ -136,12 +137,12 @@ describe('`MediaErrorCode` 16종 exhaustive (§5.2)', () => {
       | 'platform-unsupported'
     >();
     // 튜플 길이로 개수를 못 박는다 — 스냅샷은 `-u`로 조용히 갱신되므로 쓰지 않는다(§7.2 선례).
-    expectTypeOf(MEDIA_ERROR_CODES.length).toEqualTypeOf<16>();
+    expectTypeOf(MEDIA_ERROR_CODES.length).toEqualTypeOf<17>();
     expectTypeOf(MEDIA_ERROR_CODES[0]).toEqualTypeOf<'device-timeout'>();
-    expectTypeOf(MEDIA_ERROR_CODES[15]).toEqualTypeOf<'platform-unsupported'>();
+    expectTypeOf(MEDIA_ERROR_CODES[16]).toEqualTypeOf<'platform-unsupported'>();
   });
 
-  it('16종을 전부 분기하면 `assertNeverMediaError`가 통과한다', () => {
+  it('17종을 전부 분기하면 `assertNeverMediaError`가 통과한다', () => {
     const classify = (code: MediaErrorCode): string => {
       switch (code) {
         case 'device-timeout':
@@ -149,6 +150,7 @@ describe('`MediaErrorCode` 16종 exhaustive (§5.2)', () => {
         case 'device-not-found':
         case 'device-library-failed':
         case 'picker-failed':
+        case 'image-processing-failed':
           return 'device';
         case 'unsupported-file-type':
         case 'file-too-large':
@@ -180,7 +182,7 @@ describe('`MediaErrorCode` 16종 exhaustive (§5.2)', () => {
         case 'device-timeout':
           return 'device';
         default:
-          // @ts-expect-error 나머지 15종이 남아 있으므로 `never`가 아니다
+          // @ts-expect-error 나머지 16종이 남아 있으므로 `never`가 아니다
           return assertNeverMediaError(code);
       }
     };
@@ -188,7 +190,7 @@ describe('`MediaErrorCode` 16종 exhaustive (§5.2)', () => {
   });
 
   it('없는 코드는 만들 수 없다', () => {
-    // @ts-expect-error 'network-offline'은 16종에 없다 — rename·추가는 라이브러리의 결정이다
+    // @ts-expect-error 'network-offline'은 17종에 없다 — rename·추가는 라이브러리의 결정이다
     new MediaError('network-offline', 'x');
     // 정상 경로.
     void new MediaError('upload-failed', 'x');

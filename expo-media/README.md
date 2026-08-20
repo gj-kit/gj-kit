@@ -13,7 +13,7 @@
   저수준 어댑터의 오류는 이 계약 밖이며, 어댑터를 호출하는 파이프라인에서만 안전하게 감싼다.
 
 > **SDK 요구 (엔트리별로 다르다 — 이 두 줄이 전부다)**
-> - `.` · `./picker` · `./device` · `./save`는 **Expo SDK 56·57 의존성 그래프에서 검증**된다 (`expo-file-system@56.0.0`의 `File.upload()` / `expo-media-library@56.0.5`의 `/legacy` 서브패스가 하한을 지배한다). peer의 하한은 이후 SDK 호환성을 자동으로 보장하지 않으며, 새 SDK는 별도 검증 뒤 지원 범위에 추가한다.
+> - `.` · `./picker` · `./image` · `./device` · `./save`는 **Expo SDK 56·57 의존성 그래프에서 검증**된다 (`expo-file-system@56.0.0`의 `File.upload()` / `expo-image-manipulator@56.0.0`의 transform API / `expo-media-library@56.0.5`의 `/legacy` 서브패스가 하한을 지배한다). peer의 하한은 이후 SDK 호환성을 자동으로 보장하지 않으며, 새 SDK는 별도 검증 뒤 지원 범위에 추가한다.
 > - `./core` · `./web` · `./testing`은 **peer 0**이라 **SDK와 무관하다.** bare RN·웹 전용·Node 스크립트에서 그대로 쓴다.
 
 ```sh
@@ -193,13 +193,15 @@ try {
 건너뛰지만, presign/PUT이 시작된 뒤 실패하면 possibly-uploaded poster를 숨기지 않고 이 recovery 경로로
 전파한다.
 
-## 2. 서브패스 9개와 peer
+## 2. 서브패스 11개와 peer
 
 | 엔트리 | 내용 | 정적 import하는 peer |
 |---|---|---|
 | `.` | `./core` 전체 재export + `createMediaKit` + expo 기본 어댑터 | `react-native`, `expo-file-system` |
-| `./core` | 팩토리 9종, 어댑터 계약, `MediaError`(16코드), durable-file 오류/저장, mediaTypes 테이블, EXIF 파서, 순수 TS SHA-256, `StagingCache`, 서명 URL 새니타이저 | **없음** (DOM lib도 없음) |
+| `./core` | 팩토리 9종, 어댑터 계약, `MediaError`(17코드), durable-file 오류/저장, mediaTypes 테이블, EXIF 파서, 순수 TS SHA-256, `StagingCache`, 서명 URL 새니타이저 | **없음** (DOM lib도 없음) |
 | `./picker` | `expoPicker` — OS 피커/카메라, 권한, iOS 원본 fast path | `expo-image-picker`, `react-native` |
+| `./image` | `createExpoImageProcessor` — EXIF 정규화, 비확대 축소, 회전, Android raster-aware crop | `expo-image-manipulator`, `react-native` |
+| `./image/pure` | crop 좌표 변환·축소 여부 판정 | **없음** |
 | `./device` | `expoDeviceLibrary` — granular 권한·페이지네이션·앨범·자산정보 | `expo-media-library/legacy`, `react-native` |
 | `./save` | `expoDeviceSave({ isExpoGo })` — MediaLibrary 저장 | `expo-media-library/legacy`, `react-native` |
 | `./video` | `expoVideoPoster` — 로컬 URI → 포스터 프레임 | `expo-video-thumbnails` |
@@ -218,7 +220,7 @@ try {
 | bare RN 커스텀 어댑터 | `./core` | 전부 |
 | 로컬 활동 사진처럼 앱 DB에 URI를 저장할 첨부 파일 | `./storage` | image-picker, media-library, video-thumbnails, react-native |
 
-**`.`은 `./picker`·`./device`·`./save`·`./video`·`./web`을 import하지 않는다** — 단방향이고, 조합은 소비자가 한다. 이 규율이 optional peer 격리의 **정적 근거**다: `.`의 모듈 그래프에는 `expo-media-library`가 문자열로도 없으므로 Metro가 해석을 시도조차 하지 않는다. `dist-peer-graph` 가드가 위 표와 산출물을 조건 3세트(`browser`/`node`/네이티브) × 모듈 2형식(ESM·CJS)으로 대조한다 — "optional peer로 강등했다"가 문서 주장이 아니라 CI 단언이다.
+**`.`은 `./picker`·`./image`·`./device`·`./save`·`./video`·`./web`을 import하지 않는다** — 단방향이고, 조합은 소비자가 한다. 이 규율이 optional peer 격리의 **정적 근거**다: `.`의 모듈 그래프에는 `expo-image-manipulator`·`expo-media-library`가 문자열로도 없으므로 Metro가 해석을 시도조차 하지 않는다. `dist-peer-graph` 가드가 위 표와 산출물을 조건 3세트(`browser`/`node`/네이티브) × 모듈 2형식(ESM·CJS)으로 대조한다 — "optional peer로 강등했다"가 문서 주장이 아니라 CI 단언이다.
 
 `./device`·`./save`는 **비네이티브 포크**를 갖는다(exports의 `node`·`browser` 조건). 웹·SSR에서는 열거가 빈 결과를 주고 resolve/저장은 `MediaError('platform-unsupported')`를 던진다 — `expo-media-library`를 import하지 않는 별개 산출물이다.
 
@@ -326,6 +328,24 @@ const uploaded = await picker.pickAndUpload({ max: 10, kinds: ['image'] });
 // 카메라 캡처는 **항상 최대 1건**이다 — 그래서 옵션 타입에 max가 아예 없다.
 const shot = await picker.captureAndUpload({ kind: 'image' });
 ```
+
+### 이미지 정규화·crop — OCR과 문서 분석용 명시적 adapter
+
+`./image`는 피커·업로드와 별개다. EXIF 태그를 읽어 수동 회전하지 않고, decoder의 no-action JPEG 재인코드로 orientation을 고정한다. `resizeToMaxWidth()`는 작은 crop을 확대하지 않으며, `cropDisplayed()`는 Android에서 표시된 source dimensions로 rasterize한 뒤 pixel crop을 적용한다.
+
+```ts
+import { createExpoImageProcessor } from '@gj-kit/expo-media/image';
+
+const images = createExpoImageProcessor();
+const normalized = await images.normalizeOrientation(localUri);
+const uploaded = await images.resizeToMaxWidth({
+  uri: normalized.uri,
+  maxWidth: 1500,
+  compress: 0.7,
+});
+```
+
+제스처 UI는 앱이 소유한다. 표시 crop을 source pixels로만 바꾸고 싶다면 peer 없는 `@gj-kit/expo-media/image/pure`의 `toPixelCropRect()`를 사용한다. adapter 실패는 URI·native 원문을 담지 않는 `MediaError('image-processing-failed')`다.
 
 앱이 파일을 직접 자르거나 분석할 때는 업로드 설정 없이 선택 전용 API를 조합한다. 권한 확인,
 단일 촬영 제한, 피커 결과 정규화는 라이브러리가 맡고 이후 처리만 앱에 남긴다.
@@ -526,6 +546,7 @@ try {
 | `device-not-found` | 로컬 파일 없음/판독 불가 |
 | `device-library-failed` | 기기 라이브러리 adapter/OS 조회 실패 — 원문은 공개하지 않음 |
 | `picker-failed` | 피커 adapter/웹 바이너리 로더 실패 — 원문은 공개하지 않음 |
+| `image-processing-failed` | 이미지 decoder/transform 실패 — URI와 native 원문은 공개하지 않음 |
 | `unsupported-file-type` | 지원 8형식 밖 |
 | `file-too-large` | `limits` 초과 |
 | `upload-failed` | presign·스토리지 PUT·등록(finalizer) 실패 — `mediaUploadFailureInfo()`로 정리 후보 확인 |

@@ -18,6 +18,16 @@ export default defineConfig({
       {
         extends: true,
         test: {
+          // Explicit native-adapter contract tests may mock optional peers.
+          // Core/unit tests remain peer-free and are guarded separately.
+          name: 'native',
+          environment: 'node',
+          include: ['tests/native/**/*.test.ts'],
+        },
+      },
+      {
+        extends: true,
+        test: {
           // src/web/** 테스트만 jsdom으로 분리 (§10.1).
           name: 'web',
           environment: 'jsdom',

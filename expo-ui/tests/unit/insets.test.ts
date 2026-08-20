@@ -11,6 +11,7 @@
 import { describe, expect, it } from 'vitest';
 import { nativeBottomInset, nativeBottomPadding } from '../../src/insets/safeArea';
 import { computeKeyboardRevealOffset } from '../../src/insets/keyboardReveal';
+import { resolveModalSafeAreaInsets } from '../../src/insets/pure';
 
 // ─── §7 nativeBottomInset ──────────────────────────────────────────────────
 
@@ -33,6 +34,37 @@ describe('§7 nativeBottomInset', () => {
 
   it('platformOS 기본값은 Platform.OS — RNW alias 테스트 환경에서는 web이라 0', () => {
     expect(nativeBottomInset(34)).toBe(0);
+  });
+});
+
+describe('full-screen Modal safe-area resolution', () => {
+  const insets = { top: 24, right: 3, bottom: 16, left: 2 };
+
+  it('uses root-provider insets directly outside Android translucent Modals', () => {
+    expect(resolveModalSafeAreaInsets({ insets, platformOS: 'ios', statusBarHeight: 59 })).toEqual(insets);
+    expect(resolveModalSafeAreaInsets({ insets, platformOS: 'android', statusBarHeight: 32 })).toEqual(insets);
+  });
+
+  it('uses the Android status-bar fallback only for a translucent Modal', () => {
+    expect(
+      resolveModalSafeAreaInsets({
+        insets: { ...insets, top: 0 },
+        platformOS: 'android',
+        statusBarTranslucent: true,
+        statusBarHeight: 28,
+      }),
+    ).toEqual({ top: 28, right: 3, bottom: 16, left: 2 });
+  });
+
+  it('clamps malformed system values without creating synthetic padding', () => {
+    expect(
+      resolveModalSafeAreaInsets({
+        insets: { top: -1, right: -2, bottom: -3, left: -4 },
+        platformOS: 'android',
+        statusBarTranslucent: true,
+        statusBarHeight: -10,
+      }),
+    ).toEqual({ top: 0, right: 0, bottom: 0, left: 0 });
   });
 });
 

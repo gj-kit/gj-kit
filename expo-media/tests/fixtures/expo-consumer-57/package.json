@@ -7,6 +7,7 @@
     "@gj-kit/expo-media": "file:__GJ_KIT_EXPO_MEDIA_TARBALL__",
     "expo": "~57.0.14",
     "expo-file-system": "~57.0.4",
+    "expo-image-manipulator": "~57.0.6",
     "expo-image-picker": "~57.0.11",
     "expo-media-library": "~57.0.4",
     "expo-video-thumbnails": "~57.0.1",

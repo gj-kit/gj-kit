@@ -30,12 +30,14 @@ const FORMATS: readonly ModuleFormat[] = ['esm', 'cjs'];
 /**
  * §2.2 표 전사(轉寫). "이 엔트리가 정적 import하는 peer" 열 그대로다.
  *
- * `./device`·`./save`만 조건에 따라 갈린다 — 나머지 6개는 세 세트에서 같은 파일이다.
+ * `./device`·`./save`만 조건에 따라 갈린다 — 나머지 entries are shared across condition sets.
  */
 const TABLE: Record<string, Partial<Record<ConditionSet, readonly string[]>> & { readonly default: readonly string[] }> = {
   '.': { default: ['expo-file-system', 'expo-file-system/legacy', 'react-native'] },
   './core': { default: [] },
   './picker': { default: ['expo-image-picker', 'react-native'] },
+  './image': { default: ['expo-image-manipulator', 'react-native'] },
+  './image/pure': { default: [] },
   './device': {
     default: ['expo-media-library/legacy', 'react-native'],
     // 비네이티브 포크 — **공집합**(§8.5). 이 두 줄이 `web-export-guard`가 실기로 확인한 것을
@@ -103,21 +105,21 @@ describe('dist-peer-graph — §2.2 표 × 조건 3세트 × 형식 2', () => {
     }
   }
 
-  it('§2.2 불변식 — "."은 picker·device·save·video·web의 peer를 끌어오지 않는다', () => {
+  it('§2.2 불변식 — "."은 picker·image·device·save·video·web의 peer를 끌어오지 않는다', () => {
     // 단방향 규칙의 직접 증거. 골든패스를 쓰는 동기화 앱이 피커·기기 라이브러리·썸네일
     // peer를 설치하지 않아도 되어야 한다(§2.2 소비자 시나리오표 1행).
     for (const set of SETS) {
       for (const format of FORMATS) {
         const externals = externalSpecifiers(resolveSubpath(pkg, '.', set, format));
-        for (const forbidden of ['expo-image-picker', 'expo-media-library', 'expo-video-thumbnails']) {
+    for (const forbidden of ['expo-image-picker', 'expo-image-manipulator', 'expo-media-library', 'expo-video-thumbnails']) {
           expect(externals.some((s) => s.startsWith(forbidden)), `${set}/${format}`).toBe(false);
         }
       }
     }
   });
 
-  it('§2.2 불변식 — ./core · ./web · ./testing 은 peer 0', () => {
-    for (const subpath of ['./core', './web', './testing']) {
+  it('§2.2 불변식 — ./core · ./image/pure · ./web · ./testing 은 peer 0', () => {
+    for (const subpath of ['./core', './image/pure', './web', './testing']) {
       for (const set of SETS) {
         for (const format of FORMATS) {
           expect(externalSpecifiers(resolveSubpath(pkg, subpath, set, format))).toEqual([]);

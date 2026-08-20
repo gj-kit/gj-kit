@@ -1,7 +1,7 @@
 // 가드 3/7 — `nodom-dist-guard` (설계 문서 §2.4 무DOM 가드 2 · §10.3).
 //
 // 규칙: `tests/guards/tsconfig.nodom.json`(`lib:["ES2022"]` + **`skipLibCheck:false`**)으로
-//       `./web`을 제외한 **공개 서브패스 8개**의 `.d.ts`를 실제로 컴파일한다.
+//       DOM 전용 `./web`과 RN peer 전용 `./image`을 제외한 **공개 서브패스 9개**의 `.d.ts`를 실제로 컴파일한다.
 //
 // 소스 가드(가드 2)와 겹치지 않는다. 소스가 깨끗해도 `dts` 롤업이 DOM 타입을 끌어올 수 있고,
 // 그때 소비자에게 일어나는 일이 §2.4 실측표의 두 번째 행이다:
@@ -20,8 +20,8 @@ import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 
 const GUARD_TSCONFIG = 'tests/guards/tsconfig.nodom.json';
-/** `./web`을 제외한 공개 서브패스 8개 — `nodom-entries.ts` 전문과 같은 목록. */
-const NODOM_ENTRIES = ['core', 'index', 'picker', 'device', 'save', 'video', 'testing', 'storage'] as const;
+/** `./web`·`./image`을 제외한 공개 서브패스 9개 — `nodom-entries.ts` 전문과 같은 목록. */
+const NODOM_ENTRIES = ['core', 'index', 'picker', 'image/pure', 'device', 'save', 'video', 'testing', 'storage'] as const;
 
 describe('nodom-dist-guard — dist d.ts 무DOM 컴파일', () => {
   it('픽스처가 skipLibCheck:false를 유지한다 (이 값이 true면 가드가 무력해진다)', () => {
@@ -32,17 +32,17 @@ describe('nodom-dist-guard — dist d.ts 무DOM 컴파일', () => {
     expect(config).toMatch(/"types"\s*:\s*\[\s*\]/);
   });
 
-  it('엔트리 목록이 ./web 제외 8개다', () => {
+  it('엔트리 목록이 ./web·./image 제외 9개다', () => {
     const entries = read(join(PACKAGE_ROOT, 'tests/guards/nodom-entries.ts'));
     for (const entry of NODOM_ENTRIES) {
       expect(entries).toContain(`'@gj-kit/expo-media/${entry}.js'`);
     }
-    // `./web`은 **의도적으로** 빠진다 — DOM 각인 대상이자 유일하게 DOM 타입을 노출해도 되는 엔트리.
+    // `./web`은 DOM 각인 대상, `./image`는 React Native peer 전용이라 무DOM 입력에서 의도적으로 뺀다.
     expect(entries).not.toContain("/web.js'");
     expect(entries.match(/@gj-kit\/expo-media\//g)?.length).toBe(NODOM_ENTRIES.length);
   });
 
-  it('8개 엔트리의 d.ts가 모두 빌드돼 있다 (없으면 가드가 공집합을 통과시킨다)', () => {
+  it('9개 엔트리의 d.ts가 모두 빌드돼 있다 (없으면 가드가 공집합을 통과시킨다)', () => {
     for (const entry of NODOM_ENTRIES) {
       const path = join(PACKAGE_ROOT, 'dist', `${entry}.d.ts`);
       expect(existsSync(path), `${entry}.d.ts 없음 — 먼저 \`pnpm build\`가 필요하다`).toBe(true);

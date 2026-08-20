@@ -3,7 +3,7 @@
  * README ts 코드블록 컴파일 검증 — expo-ui `scripts/check-readme.mjs`에서 복제(설계 문서 §10.5).
  *
  * README.md의 모든 ```ts 블록을 추출해 **dist 타입에 대해** tsc --noEmit로 검사한다.
- * 라이브러리 import는 tsconfig paths로 dist d.ts에 매핑하고(공개 서브패스 **9개** — §2.1 개수
+ * 라이브러리 import는 tsconfig paths로 dist d.ts에 매핑하고(공개 서브패스 **11개** — §2.1 개수
  * 정본), 예제가 가정하는 앱 소유 식별자는 ambient d.ts로 선언한다.
  *
  * 왜 소스가 아니라 dist인가: 소비자가 실제로 읽는 것이 `dist/*.d.ts`이기 때문이다.
@@ -129,6 +129,7 @@ declare const media: import('@gj-kit/expo-media').MediaKit<Photo>;
 // ── 앱 소유 (검증 대상 아님) ──
 declare const isExpoGo: boolean;
 declare const assetUri: string;
+declare const localUri: string;
 /** 웹 드롭존이 넘겨주는 DOM File 배열. \`NamedBinarySource\`를 구조적으로 만족한다. */
 declare const droppedFiles: readonly File[];
 declare function openPermissionSettings(): void;
@@ -162,7 +163,7 @@ declare module 'expo-constants' {
 `,
 );
 
-// ── 4. tsconfig — 라이브러리 import를 dist d.ts에 매핑 (공개 서브패스 9개) ───
+// ── 4. tsconfig — 라이브러리 import를 dist d.ts에 매핑 (공개 서브패스 11개) ───
 const paths = {
   '@gj-kit/expo-media': [join(distDir, 'index.d.ts')],
   '@gj-kit/expo-media/core': [join(distDir, 'core.d.ts')],
@@ -173,6 +174,8 @@ const paths = {
   '@gj-kit/expo-media/web': [join(distDir, 'web.d.ts')],
   '@gj-kit/expo-media/testing': [join(distDir, 'testing.d.ts')],
   '@gj-kit/expo-media/storage': [join(distDir, 'storage.d.ts')],
+  '@gj-kit/expo-media/image': [join(distDir, 'image.d.ts')],
+  '@gj-kit/expo-media/image/pure': [join(distDir, 'image/pure.d.ts')],
 };
 
 writeFileSync(

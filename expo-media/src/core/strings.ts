@@ -29,6 +29,8 @@ export interface MediaStrings {
   readonly deviceLibraryFailed: string;
   /** 피커 어댑터/웹 바이너리 로더 호출 실패 — 원본 예외를 공개하지 않는다. */
   readonly pickerFailed: string;
+  /** 이미지 decoder 또는 transform 실패 — URI와 네이티브 원문은 공개하지 않는다. */
+  readonly imageProcessingFailed: string;
 
   // ── 업로드 검증 (전신 uploader.ts) ────────────────────────────────────────
   readonly unsupportedFileType: string;
@@ -83,6 +85,7 @@ export const enMediaStrings: MediaStrings = {
   fileNotFound: 'The photo file could not be found.',
   deviceLibraryFailed: 'Could not read the photo library. Please try again in a moment.',
   pickerFailed: 'Could not open the media picker. Please try again in a moment.',
+  imageProcessingFailed: 'Could not process the image. Please try again in a moment.',
 
   unsupportedFileType:
     'Unsupported file type. Only JPG, PNG, WebP, HEIC, HEIF images or MP4, MOV, WebM videos can be uploaded.',
@@ -124,6 +127,7 @@ export const koMediaStrings: MediaStrings = {
   fileNotFound: '사진 파일을 찾을 수 없습니다.',
   deviceLibraryFailed: '사진 보관함을 읽지 못했습니다. 잠시 후 다시 시도해주세요.',
   pickerFailed: '미디어 선택기를 열지 못했습니다. 잠시 후 다시 시도해주세요.',
+  imageProcessingFailed: '이미지를 처리하지 못했습니다. 잠시 후 다시 시도해주세요.',
 
   // 전신 uploader.ts:110
   unsupportedFileType:

@@ -118,24 +118,25 @@
 ### 2.1 디렉토리 트리
 
 > **개수 정본 (G19 해소 — 문서 전체가 이 두 수를 쓴다)**
-> **공개 서브패스 = 8** (`.` · `./core` · `./picker` · `./device` · `./save` · `./video` · `./web` · `./testing`)
-> **tsup 엔트리 = 10** = 공개 8 + 조건 포크 2(`src/device.web.ts` · `src/save.web.ts`).
+> **공개 서브패스 = 11** (`.` · `./core` · `./picker` · `./image` · `./image/pure` · `./device` · `./save` · `./video` · `./web` · `./testing` · `./storage`)
+> **tsup 엔트리 = 13** = 공개 11 + 조건 포크 2(`src/device.web.ts` · `src/save.web.ts`).
 > 포크 2개는 exports 맵의 `node`/`browser` 브랜치 타깃일 뿐 **서브패스가 아니다** — 소비자가 `@gj-kit/expo-media/device.web`으로 import할 수 없다.
-> `scripts/check-readme.mjs`의 `paths` 맵과 `dist-peer-graph`·`nodom-entries` 가드는 **공개 8**을 쓰고, `tsup.config.ts`의 `entry` 배열만 **10**을 쓴다.
+> `scripts/check-readme.mjs`의 `paths` 맵과 `dist-peer-graph`·`nodom-entries` 가드는 **공개 11**을 쓰고, `tsup.config.ts`의 `entry` 배열만 **13**을 쓴다.
 
 ```
 expo-media/                        # @gj-kit/expo-media
 ├─ package.json                    # sideEffects:false, ESM+CJS(tsup), 런타임 의존성 0
-├─ tsup.config.ts                  # entry 10 = 공개 서브패스 8 + 조건 포크 2, splitting:false
+├─ tsup.config.ts                  # entry 13 = 공개 서브패스 11 + 조건 포크 2, splitting:false
 ├─ tsconfig.json                   # 빌드·dts 정본 — lib:["ES2022","DOM"] (tsup이 읽는 유일한 tsconfig, §2.4)
 ├─ tsconfig.core.json              # 무DOM 소스 가드 — lib:["ES2022"], src/web 제외 (§2.4)
 ├─ tsconfig.tests.json             # tests — DOM 포함
-├─ scripts/check-readme.mjs        # expo-ui에서 복제, paths 8개 공개 서브패스
+├─ scripts/check-readme.mjs        # expo-ui에서 복제, paths 11개 공개 서브패스
 ├─ scripts/stamp-dom-reference.mjs # 빌드 후처리 — dist/web.d.{ts,cts}에만 DOM 각인 (§2.4)
 └─ src/
    ├─ core.ts                      # "./core" 배럴 — peer 0, DOM 0
    ├─ index.ts                     # "." 배럴 — core 재export + createMediaKit + expo 기본 어댑터
    ├─ picker.ts                    # "./picker"
+   ├─ image.ts / image/pure.ts     # "./image" adapter / peer-free geometry
    ├─ device.ts / device.web.ts    # "./device" 조건 포크 쌍
    ├─ save.ts   / save.web.ts      # "./save"   조건 포크 쌍
    ├─ video.ts                     # "./video"  — expo-video-thumbnails 전용
@@ -145,9 +146,9 @@ expo-media/                        # @gj-kit/expo-media
    │  ├─ brand.ts                  # (비공개) **타입 전용** phantom property — 런타임 심볼 없음(§5.3). 재export 금지
    │  ├─ adapters.ts               # 어댑터 계약 전부 (§3)
    │  ├─ types.ts                  # api 계약, 결과 타입, telemetry
-   │  ├─ errors.ts                 # MediaError(Symbol.for 태그) + 16 코드
+   │  ├─ errors.ts                 # MediaError(Symbol.for 태그) + 17 코드
    │  ├─ telemetry.ts              # MediaTelemetry/MediaActivity 스팬 계약 + MEDIA_OPERATIONS 6종
-   │  ├─ strings.ts                # MediaStrings(22키) + enMediaStrings/koMediaStrings
+   │  ├─ strings.ts                # MediaStrings(23키) + enMediaStrings/koMediaStrings
    │  ├─ mediaTypes.ts             # 확장자↔MIME 단일 테이블 (전신 168줄 그대로)
    │  ├─ metadata.ts               # EXIF dict + JPEG APP1 파서 (전신 290줄 그대로)
    │  ├─ sha256.ts                 # 순수 TS 증분 SHA-256 (§9)
@@ -170,26 +171,29 @@ expo-media/                        # @gj-kit/expo-media
 
 | 엔트리 | 내용 | 이 엔트리가 정적 import하는 peer | 대표 소비자 |
 |---|---|---|---|
-| `"./core"` | 어댑터 계약 전부, 팩토리 8종(§5), `MediaError`(16코드), `MediaStrings`(22키)+en/ko, mediaTypes 테이블, EXIF 파서, 순수 TS SHA-256, `computeChunkRanges`, `StagingCache`, `summarizeUri`/`sanitizeMediaErrorMessage`, 기기 자산 해석 정책, 크기·duration 정규화 | **없음** (react-native조차 없음. DOM lib도 없음) | bare RN, web-only, Node 스크립트, gj-kit vitest, 커스텀 어댑터 구현자 |
+| `"./core"` | 어댑터 계약 전부, 팩토리 8종(§5), `MediaError`(17코드), `MediaStrings`(23키)+en/ko, mediaTypes 테이블, EXIF 파서, 순수 TS SHA-256, `computeChunkRanges`, `StagingCache`, `summarizeUri`/`sanitizeMediaErrorMessage`, 기기 자산 해석 정책, 크기·duration 정규화 | **없음** (react-native조차 없음. DOM lib도 없음) | bare RN, web-only, Node 스크립트, gj-kit vitest, 커스텀 어댑터 구현자 |
 | `"."` | `"./core"` 전체 재export + `createMediaKit` + expo 기본 어댑터(platform·fs·localTransport·binaryTransport·hasher) | `react-native`, `expo-file-system`(+`/legacy`) | **골든패스.** 로컬 URI 업로드(동기화 엔진), 웹 Blob 업로드 |
 | `"./picker"` | `expoPicker` — OS 피커/카메라, 권한, iOS 원본 fast path | `expo-image-picker`, `react-native` | 피커·카메라 업로드를 하는 앱 |
+| `"./image"` | `createExpoImageProcessor` — EXIF no-action JPEG 정규화, 비확대 max-width 축소, 회전, Android raster-aware display crop | `expo-image-manipulator`, `react-native` | OCR·문서 분석처럼 앱이 파생 이미지를 소유하는 흐름 |
+| `"./image/pure"` | `toPixelCropRect`, `shouldResizeToMaxWidth` | **없음** | 제스처 UI·서버 계산 |
 | `"./device"` | `expoDeviceLibrary` — 권한(granular)·페이지네이션·앨범·자산정보. **비네이티브 포크**(`node`+`browser` 조건) → 열거는 빈 결과, resolve는 `platform-unsupported` | `expo-media-library/legacy`, `react-native` | 인앱 기기 사진 그리드, 자동 동기화 스캐너 |
 | `"./save"` | `expoDeviceSave({ isExpoGo })` — MediaLibrary 저장. **비네이티브 포크**(`node`+`browser` 조건) → 브라우저 다운로드 타깃, MediaLibrary import 0 | `expo-media-library/legacy`, `react-native` | 저장된 자산을 기기로 내려받는 앱 |
 | `"./video"` | `expoVideoPoster` — 로컬 URI → 포스터 프레임 | `expo-video-thumbnails` | 동영상을 올리는 네이티브 앱 |
 | `"./web"` | `webCanvasVideoPoster`(Blob→canvas JPEG), `createFetchBinaryTransport`, `createBrowserSaveTarget({ document, fetch })` | **없음** (브라우저 DOM 필요) | 웹 드롭존, 웹 관리자 도구 |
 | `"./testing"` | `createMemoryFileSystem`, `createRecordingTransport`, `createFakeDeviceLibrary`, `createFakePicker`, `createFakeUploadApi`, EXIF·서명URL 픽스처 | **없음** | gj-kit unit 테스트, 소비 앱 통합 테스트 |
+| `"./storage"` | `createExpoDocumentFileStore` — 앱 소유 지속 파일의 byte-size 검증 복사·안전한 정리·URI-safe 오류 | `expo-file-system` | 오래 보관하는 앱 소유 첨부 파일 |
 
 **소비자 시나리오 검증표** (난제 B의 판단 기준 — "이 optional peer를 설치하지 않은 소비자가 여전히 쓸 수 있어야 하는 코드는 다른 엔트리에 있어야 한다")
 
 | 소비자 | 필요한 엔트리 | 설치 불필요한 peer |
 |---|---|---|
-| 백그라운드 동기화(로컬 URI 업로드만) | `.` | expo-image-picker, expo-media-library, expo-video-thumbnails |
+| 백그라운드 동기화(로컬 URI 업로드만) | `.` | expo-image-picker, expo-image-manipulator, expo-media-library, expo-video-thumbnails |
 | 웹 드롭존 / 웹 관리자 도구 | `./core` + `./web` | expo-* 전부, react-native |
 | OS 피커 업로드(이미지 전용) | `.` + `./picker` | expo-media-library, expo-video-thumbnails |
 | 기기 그리드 + 저장 + 동영상 (= memorylog2) | 전 엔트리 | — |
 | bare RN 커스텀 어댑터 | `./core` | 전부 |
 
-**불변식**: `"."`은 `"./picker"`·`"./device"`·`"./save"`·`"./video"`·`"./web"`을 import하지 않는다(단방향 — 소비자가 조합). `tests/unit/dist-peer-graph.test.ts`가 이 표와 산출물을 **조건 3세트(`browser`/`node`/네이티브) × 모듈 2형식(ESM·CJS)**으로 대조한다(§10.3 — 초안의 ESM/CJS 2세트만으로는 §8.2 케이스 H의 SSR 누수를 잡지 못한다).
+**불변식**: `"."`은 `"./picker"`·`"./image"`·`"./device"`·`"./save"`·`"./video"`·`"./web"`을 import하지 않는다(단방향 — 소비자가 조합). `tests/unit/dist-peer-graph.test.ts`가 이 표와 산출물을 **조건 3세트(`browser`/`node`/네이티브) × 모듈 2형식(ESM·CJS)**으로 대조한다(§10.3 — 초안의 ESM/CJS 2세트만으로는 §8.2 케이스 H의 SSR 누수를 잡지 못한다).
 
 ### 2.3 package.json exports (확정 형태)
 
@@ -421,14 +425,16 @@ export default defineConfig({
 ```
 
 ```ts
-// tests/guards/nodom-entries.ts — 공개 서브패스 8 중 ./web을 제외한 7개
+// tests/guards/nodom-entries.ts — 공개 서브패스 11 중 ./web·./image를 제외한 9개
 export type * as Core    from '@gj-kit/expo-media/core.js';
 export type * as Index   from '@gj-kit/expo-media/index.js';
 export type * as Picker  from '@gj-kit/expo-media/picker.js';
+export type * as ImagePure from '@gj-kit/expo-media/image/pure.js';
 export type * as Device  from '@gj-kit/expo-media/device.js';
 export type * as Save    from '@gj-kit/expo-media/save.js';
 export type * as Video   from '@gj-kit/expo-media/video.js';
 export type * as Testing from '@gj-kit/expo-media/testing.js';
+export type * as Storage from '@gj-kit/expo-media/storage.js';
 ```
 
 **파생 규칙 — DOM 타입이 공개 시그니처에 나타나도 되는 엔트리는 `./web` 하나뿐이다.** §8.4-③(양 포크가 같은 `.d.ts`를 가리킨다)에 의해 `./save`의 비네이티브 포크는 `Document`·`typeof fetch`를 시그니처에 노출할 수 없다 — 비네이티브 포크 구현은 내부에서만 DOM을 쓰고 공개 표면은 `expoDeviceSave(input?: { isExpoGo?: boolean })` / `MediaLibrarySaveAdapter`로 네이티브 포크와 동일해야 한다. 각인 대상은 "dist 가드가 실패하는 엔트리"로 **기계적으로 결정**되며, `./web` 외의 엔트리가 가드에 걸리면 **각인이 아니라 소스를 고친다**.
@@ -2341,7 +2347,7 @@ vitest. **expo·react-native 모킹 0** — `"./testing"`의 인메모리 어댑
 
 ### 10.5 README 컴파일 검증
 
-`expo-ui/scripts/check-readme.mjs`를 복제하되 `paths`를 **공개 서브패스 8개**(§2.1 개수 정본)로 확장하고, 예제가 import하는 `expo-*`는 ambient `declare module`로 선언한다(라이브러리 유래 식별자만 실타입). `pnpm check:readme`.
+`expo-ui/scripts/check-readme.mjs`를 복제하되 `paths`를 **공개 서브패스 11개**(§2.1 개수 정본)로 확장하고, 예제가 import하는 `expo-*`는 ambient `declare module`로 선언한다(라이브러리 유래 식별자만 실타입). `pnpm check:readme`.
 
 README 상단 고정 문구 2줄(§2.3):
 - `.`·`./picker`·`./device`·`./save`는 **Expo SDK 56 이상**을 요구한다.
@@ -2518,7 +2524,7 @@ tarball은 실제로 `node_modules`에 설치되므로 jest `moduleNameMapper`�
 6. **`splitting:false`의 코드 복제.** 엔트리 격리를 얻는 대가로 코어가 엔트리마다 복제된다. `MediaError`는 `Symbol.for` 태그로, `Brand`는 **타입 전용화**로 해결했지만(§5.3), 소비자가 `koMediaStrings` 등 다른 export의 **객체 정체성을 엔트리 간에 비교하면 어긋난다**(expo-ui §12-9와 동종). README 경고가 유일한 방어.
 7. **비네이티브 포크가 web jest·SSR·Node 스크립트에서 함께 매치된다.** jsdom은 `browser`, expo-router SSR/RSC와 vitest node 환경은 `node`를 켜므로 `@gj-kit/expo-media/device`가 세 경우 모두 스텁으로 로드된다. 이는 **의도한 동작**(그 환경엔 네이티브 모듈이 없다)이지만, 앱이 웹 jest나 SSR에서 네이티브 어댑터를 테스트하려 하면 빈 결과와 `platform-unsupported`를 보고 혼란스러울 수 있다. README의 플랫폼 동작 표(§8.5)로 완화.
 8. **`node` 조건이 Bun·Deno·엣지 런타임에서 어떻게 켜지는지는 미측정.** Bun은 기본적으로 `node`를 켜므로 스텁으로 떨어질 것이 유력하나 실측하지 않았다. 소비자가 이 런타임을 쓸 근거가 현재 없어 리스크로만 남긴다.
-9. **엔트리 개수의 인지 부담.** 공개 서브패스 8개는 expo-ui 4, toss-payments 5보다 많다. "엔트리 1개 = optional peer 1개" 규칙이 성립하는 한 외울 것은 규칙 하나지만, `./video`처럼 작은 엔트리를 `./picker`에 합치자는 반론이 나올 수 있다(합치면 `expo-video-thumbnails`가 피커 소비자에게 강요된다는 대가가 생긴다).
+9. **엔트리 개수의 인지 부담.** 공개 서브패스 11개는 expo-ui 4, toss-payments 5보다 많다. "엔트리 1개 = optional peer 1개" 규칙이 성립하는 한 외울 것은 규칙 하나지만, `./video`처럼 작은 엔트리를 `./picker`에 합치자는 반론이 나올 수 있다(합치면 `expo-video-thumbnails`가 피커 소비자에게 강요된다는 대가가 생긴다).
 10. **팩토리 7종 조립의 첫인상 비용.** `"./core"` 소비자는 `createLocalUploads` → `createDeviceLibrary` → `createDeviceUploads`를 순서대로 엮어야 한다. `createMediaKit` + `with*`가 골든패스를 한/두 줄로 유지하지만, 커스텀 어댑터 경로의 학습 곡선은 실재한다. README에 3종 소비자 시나리오(§2.2 표) 전문을 게재해 완화.
 11. **`"./device"` 비네이티브 포크가 열거는 graceful·resolve는 throw로 갈리는 것은 학습 비용이다.** 전신 동작을 보존한 판정(§6.1-⑭)이지만 "어떤 건 빈 배열, 어떤 건 예외"는 처음 보는 사람에게 일관성 없어 보인다. TSDoc과 README 플랫폼 표로만 완화 가능.
 12. **`BinarySource` 추상화가 DOM `File`의 일부 실사용을 놓친다.** `lastModified`(memorylog2 `pendingPhotos`의 dedup 키에 사용됨), `slice()` 등은 계약에 없다. 그 코드는 앱에 남으므로 이번 이관에선 무해하지만, 웹 소비자가 늘면 재검토 대상.

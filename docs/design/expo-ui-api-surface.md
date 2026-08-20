@@ -117,7 +117,7 @@ expo-ui/                       # @gj-kit/expo-ui
 |---|---|---|
 | `"."` | 컴포넌트 전부 + Provider/훅 + strings/icons + `./theme` 전체 재export. `react-native` 조건은 native 산출물, `node`·`browser` 조건은 `react-native-web` 직접 import 산출물을 선택 | 앱 코드의 단일 import 지점. 별칭 없는 Node SSR/CJS에서도 웹 산출물을 즉시 로드하고, 네이티브에는 RNW 설치를 강제하지 않음 |
 | `"./theme"` | 토큰 타입, createTheme(s), 내장 테마 — **react/react-native import 0** | ① 앱 테마 모듈이 여기만 import하면 tailwind.config(Node)에서 require 가능 ② 비-React 접근 ③ 테스트에서 RN alias 없이 순수 로드. toss-payments core(중립)/server(Node) 격리 규칙과 동형 |
-| `"./insets"` | 키보드·safe-area 유틸 4종+α | `react-native-safe-area-context`를 optional peer로 격리. 미설치+import 시 번들 resolve 실패로 조기 발각(런타임 마법 없음) |
+| `"./insets"` | 키보드·safe-area 유틸과 full-screen Modal inset hook | `react-native-safe-area-context`를 optional peer로 격리. 미설치+import 시 번들 resolve 실패로 조기 발각(런타임 마법 없음) |
 | `"./tailwind"` | createTailwindPreset | tailwind.config는 Node 평가 — RN 심볼 섞이면 로드 실패. 물리적 격리 |
 
 `"."`의 어떤 컴포넌트도 insets를 import하지 않는다(단방향 — 소비자가 조합).
@@ -1672,6 +1672,9 @@ export function computeKeyboardRevealOffset(input: {
 export function useBottomInset(): number;                          // web 0, native max(0, inset)
 export function useBottomSheetPadding(designPadding: number): number;
 export function useModalKeyboardOverlap(): number;                 // Android 엣지투엣지 Modal 보정 포함
+export function useModalSafeAreaInsets(options?: {
+  statusBarTranslucent?: boolean | undefined;
+}): { top: number; right: number; bottom: number; left: number };
 ```
 
 - 원본 TSDoc(재현 근거 포함)을 그대로 이전한다 — KAV가 Modal 윈도우에서 동작하지 않는 실측, Android inset 합성 최소치 금지 규칙.

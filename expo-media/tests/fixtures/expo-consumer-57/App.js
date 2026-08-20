@@ -1,5 +1,6 @@
 import { createMediaKit } from '@gj-kit/expo-media';
 import { expoPicker } from '@gj-kit/expo-media/picker';
+import { createExpoImageProcessor } from '@gj-kit/expo-media/image';
 import { expoDeviceSave } from '@gj-kit/expo-media/save';
 import { createExpoDocumentFileStore } from '@gj-kit/expo-media/storage';
 import React from 'react';
@@ -15,6 +16,7 @@ const media = createMediaKit({
   limits: { image: { maxBytes: 1 }, video: { maxBytes: 1 } },
 });
 const picker = expoPicker();
+const imageProcessor = createExpoImageProcessor();
 const saver = expoDeviceSave();
 const store = createExpoDocumentFileStore({ root: 'smoke' });
 
@@ -23,6 +25,7 @@ export default function App() {
     onTouchEnd() {
       void media;
       void picker;
+      void imageProcessor.normalizeOrientation;
       void saver.saveToLibrary;
       void store;
     },

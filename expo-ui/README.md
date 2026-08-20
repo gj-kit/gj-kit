@@ -1229,6 +1229,7 @@ import {
   useBottomInset,          // 하단 safe-area inset (web 0)
   useBottomSheetPadding,   // 디자인 여백 + 실측 inset — 하단 앵커 서피스의 paddingBottom
   useModalKeyboardOverlap, // <Modal> 안 하단 시트가 키보드에 가려지는 높이
+  useModalSafeAreaInsets,  // full-screen Modal의 root-provider inset
 } from '@gj-kit/expo-ui/insets';
 import { StickyActionBar, Button } from '@gj-kit/expo-ui';
 import { View } from 'react-native';
@@ -1249,7 +1250,9 @@ function BottomAnchoredSurface({ children }: { children: ReactNode }) {
 }
 ```
 
-훅 3종은 `react-native-safe-area-context`(optional peer)가 필요하다 — 이 서브패스를 import하지 않으면 설치할 필요 없고, 설치 없이 import하면 번들 시점에 바로 실패한다(런타임 마법 없음). `useModalKeyboardOverlap`은 Android 엣지투엣지 Modal 윈도우에서 KeyboardAvoidingView가 동작하지 않는 실측 문제의 우회이며, 근거는 소스 TSDoc에 있다.
+훅 4종은 `react-native-safe-area-context`(optional peer)가 필요하다 — 이 서브패스를 import하지 않으면 설치할 필요 없고, 설치 없이 import하면 번들 시점에 바로 실패한다(런타임 마법 없음). `useModalKeyboardOverlap`은 Android 엣지투엣지 Modal 윈도우에서 KeyboardAvoidingView가 동작하지 않는 실측 문제의 우회이며, 근거는 소스 TSDoc에 있다.
+
+`statusBarTranslucent` full-screen Modal은 `SafeAreaView`나 Modal 내부 `SafeAreaProvider` 대신 `useModalSafeAreaInsets({ statusBarTranslucent: true })`를 호출하고 결과를 plain `View` padding에 넣는다. Android 첫 프레임에서 top inset이 0으로 보고되는 경우에도 `StatusBar.currentHeight`와 큰 값을 사용해 header가 system UI 아래로 들어가지 않는다.
 
 React Native, React, safe-area peer가 없는 공유 코드·빌드 도구·서버 계산에는 dependency-free `./insets/pure`를 쓴다. 이 경로는 `Platform.OS`를 읽을 수 없으므로 플랫폼을 명시적으로 넘긴다.
 

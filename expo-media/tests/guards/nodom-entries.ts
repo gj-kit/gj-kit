@@ -1,4 +1,4 @@
-// 무DOM dist 가드의 입력 — 공개 서브패스 9 중 `./web`을 제외한 8개.
+// 무DOM dist 가드의 입력 — DOM 전용 `./web`과 RN peer 전용 `./image`을 제외한 공개 서브패스.
 //
 // `./web`만 빠지는 이유: DOM 타입이 공개 시그니처에 나타나도 되는 엔트리는 그 하나뿐이고,
 // 그래서 그 하나에만 `/// <reference lib="dom" />`을 각인한다(§2.4 파생 규칙).
@@ -14,6 +14,7 @@
 export type * as Core from '@gj-kit/expo-media/core.js';
 export type * as Index from '@gj-kit/expo-media/index.js';
 export type * as Picker from '@gj-kit/expo-media/picker.js';
+export type * as ImagePure from '@gj-kit/expo-media/image/pure.js';
 export type * as Device from '@gj-kit/expo-media/device.js';
 export type * as Save from '@gj-kit/expo-media/save.js';
 export type * as Video from '@gj-kit/expo-media/video.js';

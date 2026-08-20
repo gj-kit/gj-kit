@@ -7,5 +7,18 @@
  * one-way, and consumers do the composing.
  */
 export { nativeBottomInset, nativeBottomPadding } from './insets/safeArea';
-export { computeKeyboardRevealOffset } from './insets/keyboardReveal';
-export { useBottomInset, useBottomSheetPadding, useModalKeyboardOverlap } from './insets/hooks';
+export {
+  computeKeyboardRevealOffset,
+  resolveModalSafeAreaInsets,
+} from './insets/pure';
+export type {
+  ModalSafeAreaInsets,
+  ResolveModalSafeAreaInsetsInput,
+} from './insets/pure';
+export {
+  useBottomInset,
+  useBottomSheetPadding,
+  useModalKeyboardOverlap,
+  useModalSafeAreaInsets,
+} from './insets/hooks';
+export type { UseModalSafeAreaInsetsOptions } from './insets/hooks';

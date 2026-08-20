@@ -28,6 +28,50 @@ export function nativeBottomPadding(
   return basePadding + nativeBottomInset(bottomInset, platformOS);
 }
 
+/** A structural safe-area value that does not depend on the optional React Native peer. */
+export interface ModalSafeAreaInsets {
+  readonly top: number;
+  readonly right: number;
+  readonly bottom: number;
+  readonly left: number;
+}
+
+/** Input for resolving the padding of a full-screen native Modal. */
+export interface ResolveModalSafeAreaInsetsInput {
+  readonly insets: ModalSafeAreaInsets;
+  readonly platformOS: string;
+  readonly statusBarTranslucent?: boolean | undefined;
+  readonly statusBarHeight?: number | undefined;
+}
+
+const nonNegativeInset = (value: number): number => Math.max(0, value);
+
+/**
+ * Resolves full-screen Modal padding from root-provider safe-area values.
+ *
+ * Android can report a zero top safe-area inset in the first frame of a
+ * translucent Modal while content still renders below the status bar. In that
+ * one configuration, retain the larger of the provider inset and the reported
+ * status-bar height. All other platforms use the provider values unchanged.
+ */
+export function resolveModalSafeAreaInsets({
+  insets,
+  platformOS,
+  statusBarTranslucent = false,
+  statusBarHeight = 0,
+}: ResolveModalSafeAreaInsetsInput): ModalSafeAreaInsets {
+  const top = nonNegativeInset(insets.top);
+  return {
+    top:
+      platformOS === 'android' && statusBarTranslucent
+        ? Math.max(top, nonNegativeInset(statusBarHeight))
+        : top,
+    right: nonNegativeInset(insets.right),
+    bottom: nonNegativeInset(insets.bottom),
+    left: nonNegativeInset(insets.left),
+  };
+}
+
 /** The default gap between a focused input and the keyboard. */
 const DEFAULT_REVEAL_MARGIN = 16;
 

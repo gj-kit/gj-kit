@@ -69,6 +69,26 @@
         "default": "./dist/picker.cjs"
       }
     },
+    "./image": {
+      "import": {
+        "types": "./dist/image.d.ts",
+        "default": "./dist/image.js"
+      },
+      "require": {
+        "types": "./dist/image.d.cts",
+        "default": "./dist/image.cjs"
+      }
+    },
+    "./image/pure": {
+      "import": {
+        "types": "./dist/image/pure.d.ts",
+        "default": "./dist/image/pure.js"
+      },
+      "require": {
+        "types": "./dist/image/pure.d.cts",
+        "default": "./dist/image/pure.cjs"
+      }
+    },
     "./device": {
       "node": {
         "import": {
@@ -175,7 +195,7 @@
     "build": "tsup && node scripts/stamp-dom-reference.mjs && node scripts/stamp-provenance.mjs",
     "prepack": "npm run build && node scripts/check-provenance.mjs --require-clean",
     "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.core.json && tsc --noEmit -p tsconfig.tests.json",
-    "test": "vitest run --project unit --project web",
+    "test": "vitest run --project unit --project native --project web",
     "test:types": "vitest run --project types",
     "check:readme": "corepack pnpm run build && node scripts/check-readme.mjs",
     "check:expo-sdk": "expo install --check",
@@ -184,6 +204,7 @@
   "peerDependencies": {
     "expo": ">=56.0.0 <58.0.0",
     "expo-file-system": ">=56.0.0",
+    "expo-image-manipulator": ">=56.0.0",
     "expo-image-picker": ">=16.0.0",
     "expo-media-library": ">=56.0.5",
     "expo-video-thumbnails": ">=8.0.0",
@@ -194,6 +215,9 @@
       "optional": true
     },
     "expo-file-system": {
+      "optional": true
+    },
+    "expo-image-manipulator": {
       "optional": true
     },
     "expo-image-picker": {
@@ -213,6 +237,7 @@
     "@types/react": "~19.2.0",
     "expo": "~56.0.20",
     "expo-file-system": "~56.0.10",
+    "expo-image-manipulator": "~56.0.24",
     "expo-image-picker": "~56.0.24",
     "expo-media-library": "~56.0.11",
     "expo-video-thumbnails": "~56.0.3",

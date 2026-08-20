@@ -7,9 +7,33 @@
  * at bundle time — caught early, with no runtime magic.
  */
 import { useEffect, useState } from 'react';
-import { Keyboard, Platform } from 'react-native';
+import { Keyboard, Platform, StatusBar } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { nativeBottomInset, nativeBottomPadding } from './safeArea';
+import { resolveModalSafeAreaInsets, type ModalSafeAreaInsets } from './pure';
+
+export interface UseModalSafeAreaInsetsOptions {
+  /** Set this when the native Modal uses React Native's `statusBarTranslucent` prop. */
+  readonly statusBarTranslucent?: boolean | undefined;
+}
+
+/**
+ * Returns root-provider insets for padding a plain View inside a full-screen Modal.
+ *
+ * Do not mount another SafeAreaProvider or SafeAreaView inside the Modal: their
+ * first layout can arrive after the header has already rendered under the
+ * system UI. Apply this result directly as View padding instead.
+ */
+export function useModalSafeAreaInsets(
+  options: UseModalSafeAreaInsetsOptions = {},
+): ModalSafeAreaInsets {
+  return resolveModalSafeAreaInsets({
+    insets: useSafeAreaInsets(),
+    platformOS: Platform.OS,
+    statusBarTranslucent: options.statusBarTranslucent,
+    statusBarHeight: StatusBar.currentHeight,
+  });
+}
 
 /** The bottom safe-area inset (0 on the web). For composing StickyActionBar bottomInset and Toast bottomOffset. */
 export function useBottomInset(): number {

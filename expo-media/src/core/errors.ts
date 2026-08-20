@@ -22,6 +22,7 @@ export const MEDIA_ERROR_CODES = [
   'device-not-found', // 로컬 파일 없음/판독 불가
   'device-library-failed', // 기기 라이브러리 adapter/OS 조회 실패 (원문은 공개하지 않음)
   'picker-failed', // 피커 adapter/웹 loader 실패 (원문은 공개하지 않음)
+  'image-processing-failed', // image adapter/OS transform 실패 (원문은 공개하지 않음)
   'unsupported-file-type', // 업로드 시작 전에 클라이언트가 거절
   'file-too-large', // 바이트를 하나도 보내기 전에 클라이언트가 거절
   'upload-failed', // 전송/등록 실패 (대체로 재시도 가능)

@@ -2,6 +2,7 @@
 // 공개 표면은 설계 문서 §3.4와 일치시킨다 — 내부 파서(parseWebhookEnvelope 등)는 export하지 않는다.
 export { parseTossTimestamp } from './envelope';
 export { TOSS_WEBHOOK_SOURCE_IPS } from './events';
+export { DEFAULT_WEBHOOK_MAX_BODY_BYTES } from './adapters';
 export type {
   AcceptedWebhook,
   ArsReservationChangedEvent,

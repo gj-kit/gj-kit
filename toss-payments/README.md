@@ -928,6 +928,8 @@ export const POST = verifier.fetchHandler({
   },
   onBillingDeleted: async (w) => { await deactivateSubscription(w.event.data.billingKey); },
 }, {
+  // 기본은 256 KiB. ingress/body-parser 제한과 같은 값으로 명시해도 됩니다.
+  maxBodyBytes: 256 * 1024,
   // 이 헤더는 외부 요청 값을 그대로 통과시키지 않고 ingress가 반드시 덮어써야 합니다.
   sourceIp: (request) => request.headers.get('x-trusted-client-ip'),
 });
@@ -939,15 +941,38 @@ export const POST = verifier.fetchHandler({
 
 ```ts
 // ⚠ JSON 파싱 미들웨어(express.json)를 이 경로에 두지 마세요 — raw body가 파괴되면 서명 검증이 불가능합니다.
-app.post('/webhooks/toss', express.raw({ type: '*/*' }), verifier.nodeHandler({
+import { DEFAULT_WEBHOOK_MAX_BODY_BYTES } from '@gj-kit/toss-payments/webhook';
+
+const maxBodyBytes = DEFAULT_WEBHOOK_MAX_BODY_BYTES;
+
+app.post('/webhooks/toss', express.raw({ type: '*/*', limit: maxBodyBytes }), verifier.nodeHandler({
   onDepositCallback: async ({ event }) => { await fulfillOrder(event.orderId); },
 }, {
+  maxBodyBytes,
   sourceIp: (request) => {
     const value = request.headers['x-trusted-client-ip'];
     return typeof value === 'string' ? value : undefined;
   },
 }));
 ```
+
+### 수신 body 상한과 핸들러 deadline
+
+`fetchHandler`와 `nodeHandler`는 기본으로 **256 KiB**까지만 raw body를 수용합니다.
+`Content-Length`가 상한을 넘으면 body를 읽기 전에 413을 반환하고, 헤더가 없거나 거짓이어도
+스트림을 상한까지만 누적한 뒤 413으로 끝냅니다. 이 경로는 검증·dedupe·앱 핸들러에 도달하지
+않습니다. 결제 웹훅은 작은 제어 메시지여야 하므로 상한을 크게 풀지 말고, 필요한 경우
+`maxBodyBytes`와 ingress/프레임워크의 body limit을 같은 값으로 설정하세요.
+
+특히 Express의 `express.raw()`는 이 라이브러리가 받기 전에 Buffer를 만들 수 있습니다. 따라서
+위 예시처럼 `express.raw({ limit: maxBodyBytes })`를 함께 써야 프로세스 메모리 할당까지
+제한됩니다. Next.js·Fetch 런타임에서는 어댑터가 직접 stream을 제한합니다.
+
+어댑터는 핸들러를 임의로 timeout/cancel하지 않습니다. DB 반영이 진행된 뒤 핸들러만 중단하면
+claim 상태와 실제 부수효과가 어긋날 수 있기 때문입니다. 핸들러는 검증된 이벤트를 **내구성 있는
+inbox/outbox에 저장하는 지점까지만** 빠르게 끝내고, entitlement·메일·외부 호출 같은 느린 작업은
+worker가 처리하세요. 배포 환경의 request timeout은 현재 provider callback SLA보다 짧지 않게
+설정하고, 200 응답 지연·processing lease·재전송 수를 모니터링해야 합니다.
 
 `onBillingApproved` 같은 핸들러 키는 **타입에 없습니다** — 토스가 빌링 승인 웹훅을 제공하지 않기 때문입니다(§9 FAQ).
 

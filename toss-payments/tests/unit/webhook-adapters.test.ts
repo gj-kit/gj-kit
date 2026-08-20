@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { createWebhookVerifier } from '../../src/webhook';
+import { createWebhookVerifier, DEFAULT_WEBHOOK_MAX_BODY_BYTES } from '../../src/webhook';
 import type {
   NodeIncomingMessageLike,
   NodeServerResponseLike,
@@ -131,6 +131,51 @@ describe('fetchHandler — Request → rawBody → 검증 → 디스패치 → 2
     expect(attempts).toBe(2);
     expect(error).toHaveBeenCalled();
   });
+
+  it('Content-Length가 상한을 넘으면 body를 읽거나 dedupe/핸들러에 도달하기 전에 413', async () => {
+    const verifier = createWebhookVerifier({ dedupe: memoryDedupe(), allowedSourceIps: false });
+    const onPaymentStatusChanged = vi.fn();
+    const handler = verifier.fetchHandler({ onPaymentStatusChanged }, { maxBodyBytes: 8 });
+    const request = new Request('https://shop.example/api/webhooks/toss', {
+      method: 'POST',
+      headers: { ...headersFor(), 'content-length': '9' },
+    });
+
+    const res = await handler(request);
+    expect(res.status).toBe(413);
+    expect(onPaymentStatusChanged).not.toHaveBeenCalled();
+  });
+
+  it('Content-Length가 없거나 거짓이어도 Fetch stream 누적 상한을 넘으면 413', async () => {
+    const verifier = createWebhookVerifier({ dedupe: memoryDedupe(), allowedSourceIps: false });
+    const onPaymentStatusChanged = vi.fn();
+    const handler = verifier.fetchHandler({ onPaymentStatusChanged }, { maxBodyBytes: 8 });
+    let cancelled = false;
+    const stream = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        controller.enqueue(new TextEncoder().encode('too-large'));
+      },
+      cancel() {
+        cancelled = true;
+      },
+    });
+    const request = new Request(
+      'https://shop.example/api/webhooks/toss',
+      {
+        method: 'POST',
+        headers: headersFor(),
+        body: stream,
+        // Node의 Request는 ReadableStream body에 duplex를 요구한다.
+        duplex: 'half',
+      } as RequestInit,
+    );
+
+    expect(request.headers.get('content-length')).toBeNull();
+    const res = await handler(request);
+    expect(res.status).toBe(413);
+    expect(cancelled).toBe(true);
+    expect(onPaymentStatusChanged).not.toHaveBeenCalled();
+  });
 });
 
 // ── nodeHandler ────────────────────────────────────────────────────────────
@@ -231,5 +276,77 @@ describe('nodeHandler — IncomingMessage 스트림/express.raw 수용', () => {
     expect(res1.statusCode).toBe(200);
     expect(res2.statusCode).toBe(200);
     expect(onPaymentStatusChanged).toHaveBeenCalledTimes(1);
+  });
+
+  it('Content-Length가 상한을 넘으면 Node stream을 소비하지 않고 413', async () => {
+    const verifier = createWebhookVerifier({ dedupe: memoryDedupe(), allowedSourceIps: false });
+    const onPaymentStatusChanged = vi.fn();
+    const handler = verifier.nodeHandler({ onPaymentStatusChanged }, { maxBodyBytes: 8 });
+    let consumed = false;
+    const req: NodeIncomingMessageLike = {
+      headers: { ...headersFor(), 'Content-Length': '9' },
+      async *[Symbol.asyncIterator]() {
+        consumed = true;
+        yield new TextEncoder().encode(LEGACY_BODY);
+      },
+    };
+    const res = mockRes();
+
+    await handler(req, res);
+    expect(res.statusCode).toBe(413);
+    expect(res.ended).toBe(true);
+    expect(consumed).toBe(false);
+    expect(onPaymentStatusChanged).not.toHaveBeenCalled();
+  });
+
+  it('Content-Length가 없거나 거짓이어도 Node stream을 상한까지만 누적하고 413', async () => {
+    const verifier = createWebhookVerifier({ dedupe: memoryDedupe(), allowedSourceIps: false });
+    const onPaymentStatusChanged = vi.fn();
+    const handler = verifier.nodeHandler({ onPaymentStatusChanged }, { maxBodyBytes: 8 });
+    let iteratorClosed = false;
+    const req: NodeIncomingMessageLike = {
+      headers: headersFor(),
+      async *[Symbol.asyncIterator]() {
+        try {
+          yield new TextEncoder().encode('too-large');
+          yield new TextEncoder().encode('must-not-be-buffered');
+        } finally {
+          iteratorClosed = true;
+        }
+      },
+    };
+    const res = mockRes();
+
+    await handler(req, res);
+    expect(res.statusCode).toBe(413);
+    expect(res.ended).toBe(true);
+    expect(iteratorClosed).toBe(true);
+    expect(onPaymentStatusChanged).not.toHaveBeenCalled();
+  });
+
+  it('express.raw가 이미 만든 Buffer도 maxBodyBytes를 넘으면 verify 전에 413', async () => {
+    const verifier = createWebhookVerifier({ dedupe: memoryDedupe(), allowedSourceIps: false });
+    const onPaymentStatusChanged = vi.fn();
+    const handler = verifier.nodeHandler({ onPaymentStatusChanged }, { maxBodyBytes: 8 });
+    const req: NodeIncomingMessageLike = {
+      headers: headersFor(),
+      body: new TextEncoder().encode('too-large'),
+      async *[Symbol.asyncIterator]() {
+        throw new Error('Buffer body가 있으면 stream은 소비하면 안 된다');
+      },
+    };
+    const res = mockRes();
+
+    await handler(req, res);
+    expect(res.statusCode).toBe(413);
+    expect(res.ended).toBe(true);
+    expect(onPaymentStatusChanged).not.toHaveBeenCalled();
+  });
+
+  it('maxBodyBytes는 양의 안전한 정수만 수용하고 기본 상한은 공개 상수로 고정한다', () => {
+    const verifier = createWebhookVerifier({ dedupe: memoryDedupe(), allowedSourceIps: false });
+    expect(DEFAULT_WEBHOOK_MAX_BODY_BYTES).toBe(256 * 1024);
+    expect(() => verifier.fetchHandler({}, { maxBodyBytes: 0 })).toThrow(/maxBodyBytes/);
+    expect(() => verifier.nodeHandler({}, { maxBodyBytes: 1.5 })).toThrow(/maxBodyBytes/);
   });
 });

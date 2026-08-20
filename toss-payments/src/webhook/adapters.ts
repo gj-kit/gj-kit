@@ -2,7 +2,7 @@
  * 프레임워크 어댑터 — fetchHandler(Next.js Route Handler / Hono) + nodeHandler(Express).
  *
  * raw body 보존·검증·dedupe·처리 claim 수명주기를 라이브러리가 소유한다.
- * 영구 거부는 400, store 장애와 이미 처리 중인 전달은 503으로 재전송을 유도한다.
+ * 검증 거부는 400, body 상한 초과는 413, store 장애와 이미 처리 중인 전달은 503으로 재전송을 유도한다.
  * duplicate는 정상 200 ack — 400을 돌려주면 3일 19시간 재전송 폭탄을 맞는다.
  */
 import type { Result } from '../core/result';
@@ -33,6 +33,14 @@ export type WebhookPrefetchFn = (webhook: AcceptedWebhook) => Promise<AcceptedWe
 
 export interface FetchHandlerOptions {
   /**
+   * 수신 raw body의 최대 바이트 수. 기본 256 KiB.
+   *
+   * Content-Length가 이 값을 넘으면 body를 읽기 전에 413을 반환하고, 길이 헤더가
+   * 없거나 거짓이어도 스트림을 이 값까지만 누적한다. webhook payload는 작아야 하므로
+   * 앱의 reverse proxy/body-parser 제한과 같은 값으로 맞추는 것을 권장한다.
+   */
+  readonly maxBodyBytes?: number;
+  /**
    * 신뢰할 수 있는 런타임/ingress 메타데이터에서 원본 클라이언트 IP를 추출한다.
    * X-Forwarded-For를 무조건 믿지 말고, 해당 ingress가 재작성한 값만 사용할 것.
    */
@@ -40,9 +48,20 @@ export interface FetchHandlerOptions {
 }
 
 export interface NodeHandlerOptions {
+  /**
+   * 수신 raw body의 최대 바이트 수. 기본 256 KiB.
+   *
+   * Content-Length 초과는 body를 읽기 전에 413으로 거부한다. 스트림 경로도 누적 상한을
+   * 적용한다. `express.raw()`가 이미 Buffer를 만들었다면 그 할당을 되돌릴 수 없으므로
+   * `express.raw({ limit: maxBodyBytes })`를 함께 설정해야 한다.
+   */
+  readonly maxBodyBytes?: number;
   /** 프록시 트러스트 설정을 반영한 원본 IP 추출기. 생략 시 socket.remoteAddress. */
   readonly sourceIp?: (request: NodeIncomingMessageLike) => string | null | undefined;
 }
+
+/** Fetch/Node 어댑터가 기본으로 수용하는 최대 raw webhook body 크기(256 KiB). */
+export const DEFAULT_WEBHOOK_MAX_BODY_BYTES = 256 * 1024;
 
 /** Node IncomingMessage와 구조 호환 — node: 빌트인 타입 import 없이 플랫폼 중립을 유지한다. */
 export interface NodeIncomingMessageLike extends AsyncIterable<unknown> {
@@ -56,6 +75,99 @@ export interface NodeIncomingMessageLike extends AsyncIterable<unknown> {
 export interface NodeServerResponseLike {
   statusCode: number;
   end(): unknown;
+}
+
+type BodyReadResult =
+  | { readonly kind: 'ok'; readonly body: Uint8Array }
+  | { readonly kind: 'too-large' };
+
+const encoder = new TextEncoder();
+
+function resolveMaxBodyBytes(value: number | undefined): number {
+  const maxBodyBytes = value ?? DEFAULT_WEBHOOK_MAX_BODY_BYTES;
+  if (!Number.isSafeInteger(maxBodyBytes) || maxBodyBytes <= 0) {
+    throw new TypeError('maxBodyBytes는 0보다 큰 안전한 정수여야 합니다.');
+  }
+  return maxBodyBytes;
+}
+
+function contentLengthExceeds(
+  headers: Readonly<Record<string, string | readonly string[] | undefined>> | Headers,
+  maxBodyBytes: number,
+): boolean {
+  let raw: string | null | undefined;
+  if (headers instanceof Headers) {
+    raw = headers.get('content-length');
+  } else {
+    let value = headers['content-length'];
+    if (value === undefined) {
+      for (const key of Object.keys(headers)) {
+        if (key.toLowerCase() === 'content-length') {
+          value = headers[key];
+          break;
+        }
+      }
+    }
+    raw = value === undefined ? undefined : (typeof value === 'string' ? value : value[0]);
+  }
+  if (raw === null || raw === undefined || !/^\d+$/.test(raw)) return false;
+  const length = Number(raw);
+  return Number.isSafeInteger(length) && length > maxBodyBytes;
+}
+
+function tooLargeResponse(): Response {
+  return new Response(null, { status: 413 });
+}
+
+function writePayloadTooLarge(res: NodeServerResponseLike): void {
+  res.statusCode = 413;
+  res.end();
+}
+
+async function readFetchBody(request: Request, maxBodyBytes: number): Promise<BodyReadResult> {
+  const stream = request.body;
+  if (stream === null) return { kind: 'ok', body: new Uint8Array() };
+
+  const reader = stream.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) return { kind: 'ok', body: concatChunks(chunks) };
+      if (value === undefined) continue;
+      total += value.byteLength;
+      if (total > maxBodyBytes) {
+        // 더 큰 request를 계속 읽지 않는다. cancel 실패는 이미 413을 보낼 결정에 영향을 주지 않는다.
+        await reader.cancel().catch(() => undefined);
+        return { kind: 'too-large' };
+      }
+      chunks.push(value);
+    }
+  } finally {
+    reader.releaseLock();
+  }
+}
+
+async function readNodeStream(
+  req: NodeIncomingMessageLike,
+  maxBodyBytes: number,
+): Promise<BodyReadResult> {
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  for await (const chunk of req) {
+    const bytes =
+      chunk instanceof Uint8Array
+        ? chunk
+        : typeof chunk === 'string'
+          ? encoder.encode(chunk)
+          : undefined;
+    if (bytes === undefined) continue;
+    total += bytes.byteLength;
+    if (total > maxBodyBytes) return { kind: 'too-large' };
+    chunks.push(bytes);
+  }
+  return { kind: 'ok', body: concatChunks(chunks) };
 }
 
 /**
@@ -123,11 +235,14 @@ export function createFetchHandler(
   complete?: WebhookClaimAction,
   release?: WebhookClaimAction,
 ): (request: Request) => Promise<Response> {
+  const maxBodyBytes = resolveMaxBodyBytes(options?.maxBodyBytes);
   return async (request) => {
-    const rawBody = await request.text();
+    if (contentLengthExceeds(request.headers, maxBodyBytes)) return tooLargeResponse();
+    const body = await readFetchBody(request, maxBodyBytes);
+    if (body.kind === 'too-large') return tooLargeResponse();
     const sourceIp = options?.sourceIp?.(request) ?? undefined;
     const result = await verify(
-      rawBody,
+      body.body,
       request.headers,
       sourceIp === undefined ? undefined : { sourceIp },
     );
@@ -175,15 +290,29 @@ export function createNodeHandler(
   complete?: WebhookClaimAction,
   release?: WebhookClaimAction,
 ): (req: NodeIncomingMessageLike, res: NodeServerResponseLike) => Promise<void> {
-  const encoder = new TextEncoder();
+  const maxBodyBytes = resolveMaxBodyBytes(options?.maxBodyBytes);
   return async (req, res) => {
-    let rawBody: string | Uint8Array;
+    if (contentLengthExceeds(req.headers, maxBodyBytes)) {
+      writePayloadTooLarge(res);
+      return;
+    }
+
+    let rawBody: Uint8Array;
     if (req.body !== undefined) {
       // express.raw() 경유 — Buffer(Uint8Array 서브클래스)가 이미 실려 있다
       if (req.body instanceof Uint8Array) {
+        if (req.body.byteLength > maxBodyBytes) {
+          writePayloadTooLarge(res);
+          return;
+        }
         rawBody = req.body;
       } else if (typeof req.body === 'string') {
-        rawBody = req.body;
+        const bytes = encoder.encode(req.body);
+        if (bytes.byteLength > maxBodyBytes) {
+          writePayloadTooLarge(res);
+          return;
+        }
+        rawBody = bytes;
       } else {
         console.error(
           '[@gj-kit/toss-payments] nodeHandler: req.body가 이미 JSON으로 파싱된 객체입니다. ' +
@@ -196,12 +325,12 @@ export function createNodeHandler(
       }
     } else {
       // 미들웨어 없는 순수 http 서버 — 스트림을 직접 수집한다
-      const chunks: Uint8Array[] = [];
-      for await (const chunk of req) {
-        if (chunk instanceof Uint8Array) chunks.push(chunk);
-        else if (typeof chunk === 'string') chunks.push(encoder.encode(chunk));
+      const body = await readNodeStream(req, maxBodyBytes);
+      if (body.kind === 'too-large') {
+        writePayloadTooLarge(res);
+        return;
       }
-      rawBody = concatChunks(chunks);
+      rawBody = body.body;
     }
 
     const sourceIp = options?.sourceIp?.(req) ?? req.socket?.remoteAddress;

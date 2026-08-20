@@ -107,7 +107,12 @@ describe('피커 파이프라인 — pick → stat → hash → intent → PUT �
     expect(picker.calls.pick).toEqual([{ kinds: ['image'], max: 12 }]);
     // ③ presign — 크기는 stat 값이지 자칭 값이 아니다(§7 하드닝 3)
     expect(api.intents).toEqual([
-      { fileName: 'a.jpg', contentType: 'image/jpeg', sizeBytes: 2048 },
+      {
+        fileName: 'a.jpg',
+        contentType: 'image/jpeg',
+        sizeBytes: 2048,
+        collectionId: 'album-1',
+      },
     ]);
     // ④ PUT — 발급받은 슬롯 그대로, 로컬 URI 스트리밍(본문 없음 = 바이트를 힙에 올리지 않았다)
     expect(transport.puts).toEqual([

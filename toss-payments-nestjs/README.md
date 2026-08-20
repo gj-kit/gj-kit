@@ -1,6 +1,6 @@
 # @gj-kit/toss-payments-nestjs
 
-[`@gj-kit/toss-payments`](../toss-payments/README.md)의 안전한 결제 파사드를 NestJS 의존성 주입에 연결합니다. `TOSS_PAYMENTS` 토큰, `TossPaymentsModule.forRoot/forRootAsync`, 타입 보존 별칭(`TossPaymentsFor`), raw body를 강제하는 웹훅 헬퍼(`toNestWebhookHandler`)를 제공합니다.
+[`@gj-kit/toss-payments`](../toss-payments/README.md)의 안전한 결제 파사드를 NestJS 의존성 주입에 연결합니다. 단일 kit 호환 API(`TOSS_PAYMENTS`, `forRoot/forRootAsync`)와 여러 키 쌍을 분리하는 named API(`getTossPaymentsToken`, `register/registerAsync`), 타입 보존 별칭(`TossPaymentsFor`), raw body를 강제하는 웹훅 헬퍼(`toNestWebhookHandler`)를 제공합니다.
 
 처음 연동한다면 아래 **Nest 골든 패스**를 그대로 따라 하세요. 기존 DB provider를 `OrderStore`로 감싸 한 번만 배선하면, 주문 저장·금액 대조·승인에 필요한 `confirm` 플로우를 앱 전체에서 주입할 수 있습니다.
 
@@ -165,6 +165,58 @@ export class AppModule {}
 
 `forRoot`와 `forRootAsync` 모두 `global` 옵션을 받을 수 있으며 기본값은 `true`입니다.
 
+## 여러 Toss 키 쌍을 함께 쓴다면: named kit으로 분리
+
+`TOSS_PAYMENTS`와 `forRoot/forRootAsync`는 기존 단일-kit 호환 API입니다. 결제위젯
+`gsk`와 API/빌링 `sk`처럼 서로 다른 secret key를 함께 쓰면, 하나의 kit에 섞지 말고
+이름 있는 kit을 각각 등록하세요. **이름은 한 Nest application 안에서 유일해야 하며**,
+등록 이름과 `@InjectTossPayments(name)`은 정확히 같아야 합니다.
+
+```ts
+// payments/toss/toss.module.ts
+import { Module } from '@nestjs/common';
+import { TossPaymentsModule } from '@gj-kit/toss-payments-nestjs';
+import { TossStoresModule, TossOrderStore } from './toss-stores.module';
+import { buildBillingConfig, buildWidgetConfig } from './toss.config';
+
+@Module({
+  imports: [
+    TossPaymentsModule.registerAsync({
+      name: 'billing',
+      imports: [TossStoresModule],
+      inject: [TossOrderStore],
+      useFactory: (orders: TossOrderStore) => buildBillingConfig(orders), // API sk
+    }),
+    TossPaymentsModule.registerAsync({
+      name: 'widget',
+      imports: [TossStoresModule],
+      inject: [TossOrderStore],
+      useFactory: (orders: TossOrderStore) => buildWidgetConfig(orders), // widget gsk
+    }),
+  ],
+})
+export class TossModule {}
+```
+
+```ts
+import { Injectable } from '@nestjs/common';
+import { InjectTossPayments } from '@gj-kit/toss-payments-nestjs';
+import type { BillingToss, WidgetToss } from './toss.config';
+
+@Injectable()
+export class PaymentsService {
+  constructor(
+    @InjectTossPayments('billing') private readonly billing: BillingToss,
+    @InjectTossPayments('widget') private readonly widget: WidgetToss,
+  ) {}
+}
+```
+
+`getTossPaymentsToken('billing')`은 테스트에서 named kit을 직접 조회할 때만 쓰고,
+앱 서비스에서는 `@InjectTossPayments('billing')`을 사용하세요. 같은 이름을 두 번
+등록하면 같은 Nest provider token을 가리키므로, 등록 이름을 상수로 모아 중복을 막는
+것을 권장합니다.
+
 ## 웹훅을 추가한다면: rawBody부터
 
 Nest의 기본 body parser가 웹훅 body를 먼저 JSON으로 파싱하면 서명·secret 검증은 복구할 수 없습니다. 파싱한 객체를 다시 직렬화해도 원문 바이트와 다릅니다.
@@ -175,7 +227,7 @@ Nest의 기본 body parser가 웹훅 body를 먼저 JSON으로 파싱하면 서�
    const app = await NestFactory.create<NestExpressApplication>(AppModule, { rawBody: true });
    ```
 
-2. 컨트롤러는 `@Req() req: RawBodyRequest<Request>`로 `req.rawBody`를 받고, `toNestWebhookHandler`에 요청과 응답을 위임하세요.
+2. 컨트롤러는 `@Req() req: RawBodyRequest<Request>`로 `req.rawBody`를 받고, `toNestWebhookHandler`에 요청과 응답을 위임하세요. 이 헬퍼는 Node request의 `socket.remoteAddress`를 코어에 그대로 전달하므로, 일반 상태 웹훅의 source-IP 검증도 유지됩니다.
 
    ```ts
    import { Controller, Post, Req, Res } from '@nestjs/common';
@@ -208,7 +260,23 @@ Nest의 기본 body parser가 웹훅 body를 먼저 JSON으로 파싱하면 서�
    }
    ```
 
-3. 웹훅 경로에 별도 `express.json()` 또는 전역 body parser를 다시 붙이지 마세요. `toNestWebhookHandler`는 raw body가 없으면 핸들러를 실행하지 않고, 500과 설정 안내 로그를 남깁니다.
+3. TLS 종료 프록시 뒤에서 원본 IP를 검증해야 한다면, 신뢰하는 ingress가 재작성한 헤더만 읽는 `sourceIp` extractor를 **명시적으로** 넘기세요. `X-Forwarded-For`를 기본적으로 신뢰하지 않습니다.
+
+   ```ts
+   import type { NodeIncomingMessageLike } from '@gj-kit/toss-payments/webhook';
+
+   const sourceIpFromTrustedIngress = (request: NodeIncomingMessageLike) => {
+     const value = request.headers['x-platform-client-ip'];
+     // 이 헤더는 외부 요청에서 제거하고, 신뢰하는 ingress만 다시 설정해야 합니다.
+     return typeof value === 'string' ? value : undefined;
+   };
+
+   this.handle = toNestWebhookHandler(toss.webhook, handlers, {
+     sourceIp: sourceIpFromTrustedIngress,
+   });
+   ```
+
+4. 웹훅 경로에 별도 `express.json()` 또는 전역 body parser를 다시 붙이지 마세요. `toNestWebhookHandler`는 raw body가 없으면 핸들러를 실행하지 않고, 500과 설정 안내 로그를 남깁니다.
 
 Fastify도 `NestFactory.create(..., { rawBody: true })`로 raw body를 보존한 뒤 같은 방식으로 사용하세요.
 
@@ -217,10 +285,27 @@ Fastify도 `NestFactory.create(..., { rawBody: true })`로 raw body를 보존한
 | export | 설명 |
 |---|---|
 | `TOSS_PAYMENTS` | `Symbol.for` 기반 kit 바인딩 토큰 — ESM/CJS 이중 로드에도 동일 |
-| `InjectTossPayments()` | `@Inject(TOSS_PAYMENTS)` 명시 위임 데코레이터 |
+| `getTossPaymentsToken(name)` | named kit의 `Symbol.for` 토큰 — 이름은 Nest application 안에서 유일해야 함 |
+| `InjectTossPayments()` / `InjectTossPayments(name)` | legacy/default 또는 named kit의 명시적 `@Inject` 위임 데코레이터 |
 | `TossPaymentsModule.forRoot(config, { global? })` | 동기 조립 |
 | `TossPaymentsModule.forRootAsync({ imports?, inject?, useFactory, global? })` | Nest provider 기반 비동기 조립 |
+| `TossPaymentsModule.register({ name, config, global? })` | 이름 있는 동기 조립 — 여러 키 쌍 분리용 |
+| `TossPaymentsModule.registerAsync({ name, imports?, inject?, useFactory, global? })` | 이름 있는 비동기 조립 — 여러 키 쌍 분리용 |
 | `TossPaymentsFor<C>` | config 타입에서 kit 타입을 복원하는 별칭 |
-| `toNestWebhookHandler(verifier, handlers)` | raw body를 강제하는 Nest 웹훅 핸들러 |
+| `toNestWebhookHandler(verifier, handlers, { sourceIp? })` | raw body·socket을 보존하는 Nest 웹훅 핸들러 |
 
 플로우별 옵션·에러·브라우저 결제창 사용법은 [`@gj-kit/toss-payments` README](../toss-payments/README.md)를 참고하세요.
+
+## 배포 산출물 handoff
+
+이 패키지와 `@gj-kit/toss-payments`는 항상 같은 release handoff 단위입니다. source workspace
+link나 수정된 `node_modules`를 전달하지 말고, 깨끗한 source commit에서 `corepack pnpm run
+verify:release`를 실행한 뒤 두 `.tgz`를 소비 앱의 `vendor/`에 함께 고정하세요. release gate는
+두 tarball의 package-owned `dist/gj-kit-provenance.json`과 SHA-256을 확인하고, fresh Nest 10·11
+소비자에서 실제 DI application context와 ESM/CJS export를 검증합니다.
+
+handoff에는 package별 정확한 version, 전체 `sourceCommit`, tarball SHA-256, provenance JSON을
+기록하고 consumer의 `package.json`을 exact `file:vendor/...tgz` dependency로, lockfile까지 함께
+갱신합니다. 소비 앱은 tarball과 인접 provenance JSON을 재검증해야 하며, 자신의 Nest major 및
+rawBody/ingress·실제 provider callback 검증은 release gate와 별도로 수행해야 합니다. 자세한
+명령과 manifest 예시는 코어 README의 [배포 산출물과 소비 앱 handoff](../toss-payments/README.md#배포-산출물과-소비-앱-handoff)를 참고하세요.

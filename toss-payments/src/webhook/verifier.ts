@@ -168,14 +168,18 @@ export interface WebhookVerifier {
 
   /**
    * Fetch 표준 어댑터(Next.js Route Handler / Hono) — raw body 추출·검증·dedupe와
-   * 처리 완료/실패 claim 전이를 소유한다. 핸들러 완료 후에만 200을 반환한다.
+   * 처리 완료/실패 claim 전이를 소유한다. 핸들러 완료 후에만 200을 반환하며,
+   * options.maxBodyBytes를 넘는 수신 body는 검증 전에 413으로 거부한다.
    */
   fetchHandler(
     handlers: WebhookHandlers,
     options?: FetchHandlerOptions,
   ): (request: Request) => Promise<Response>;
 
-  /** Express/Node — 모든 content-type을 받는 `express.raw()` 뒤에 장착(JSON 파싱 미들웨어 금지). */
+  /**
+   * Express/Node — 모든 content-type을 받는 `express.raw()` 뒤에 장착(JSON 파싱 미들웨어 금지).
+   * options.maxBodyBytes를 넘는 수신 body는 검증 전에 413으로 거부한다.
+   */
   nodeHandler(
     handlers: WebhookHandlers,
     options?: NodeHandlerOptions,

@@ -11,6 +11,7 @@ import { orThrow } from '@gj-kit/toss-payments';
 import {
   defineTossPaymentsConfig,
   parseApiSecretKey,
+  parseWidgetSecretKey,
   type OrderStore,
   type StoredOrder,
 } from '@gj-kit/toss-payments/server';
@@ -45,6 +46,14 @@ const buildTossConfig = (orders: OrderStore) =>
 
 type AppToss = TossPaymentsFor<ReturnType<typeof buildTossConfig>>;
 
+const buildWidgetConfig = (orders: OrderStore) =>
+  defineTossPaymentsConfig({
+    secretKey: orThrow(parseWidgetSecretKey('test_gsk_docs-golden-path')),
+    orders,
+  });
+
+type WidgetToss = TossPaymentsFor<ReturnType<typeof buildWidgetConfig>>;
+
 @Injectable()
 class PaymentsService {
   constructor(@InjectTossPayments() readonly toss: AppToss) {}
@@ -52,6 +61,14 @@ class PaymentsService {
   createOrder() {
     return this.toss.confirm.createOrder({ amount: 9_900, orderName: 'Starter 플랜' });
   }
+}
+
+@Injectable()
+class NamedPaymentsService {
+  constructor(
+    @InjectTossPayments('billing') readonly billing: AppToss,
+    @InjectTossPayments('widget') readonly widget: WidgetToss,
+  ) {}
 }
 
 @Module({
@@ -66,12 +83,35 @@ class PaymentsService {
 })
 class AppModule {}
 
+@Module({
+  imports: [
+    TossPaymentsModule.registerAsync({
+      name: 'billing',
+      imports: [TossStoresModule],
+      inject: [TossOrderStore],
+      useFactory: (orders: TossOrderStore) => buildTossConfig(orders),
+    }),
+    TossPaymentsModule.registerAsync({
+      name: 'widget',
+      imports: [TossStoresModule],
+      inject: [TossOrderStore],
+      useFactory: (orders: TossOrderStore) => buildWidgetConfig(orders),
+    }),
+  ],
+  providers: [NamedPaymentsService],
+})
+class NamedAppModule {}
+
 describe('README Nest 골든 패스', () => {
   it('DynamicModule import를 통해 store를 주입하고 confirm 타입을 보존한다', () => {
     void AppModule;
+    void NamedAppModule;
 
     const service = null as unknown as PaymentsService;
+    const named = null as unknown as NamedPaymentsService;
     expectTypeOf(service.toss.confirm).toMatchTypeOf<object>();
     expectTypeOf(service.createOrder).returns.toMatchTypeOf<Promise<unknown>>();
+    expectTypeOf(named.billing.client.keyKind).toEqualTypeOf<'api'>();
+    expectTypeOf(named.widget.client.keyKind).toEqualTypeOf<'widget'>();
   });
 });

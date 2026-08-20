@@ -87,7 +87,12 @@ describe('createDeferredLocalUploads — presign → native PUT → domain attac
 
     expect('completeUpload' in api).toBe(false);
     expect(intents).toEqual([
-      { fileName: 'deferred.jpg', contentType: 'image/jpeg', sizeBytes: 1234 },
+      {
+        fileName: 'deferred.jpg',
+        contentType: 'image/jpeg',
+        sizeBytes: 1234,
+        collectionId: 'draft-42',
+      },
     ]);
     expect(recordingTransport.puts).toEqual([
       expect.objectContaining({

@@ -14,11 +14,12 @@ const esmUrl = new URL('../../dist/index.js', import.meta.url);
 const built = existsSync(cjsUrl) && existsSync(esmUrl);
 
 describe.skipIf(!built)('듀얼 빌드 스모크 — dist/index.{js,cjs}', () => {
-  it('CJS require — 공개 표면 4종이 노출된다', () => {
+  it('CJS require — legacy/named/webhook 공개 표면이 노출된다', () => {
     // eslint 없음 — 동적 require는 CJS 소비자 재현이 목적
     const mod = require(cjsUrl.pathname) as Record<string, unknown>;
     expect(typeof mod['TossPaymentsModule']).toBe('function');
     expect(typeof mod['InjectTossPayments']).toBe('function');
+    expect(typeof mod['getTossPaymentsToken']).toBe('function');
     expect(typeof mod['toNestWebhookHandler']).toBe('function');
     expect(mod['TOSS_PAYMENTS']).toBe(Symbol.for('@gj-kit/toss-payments-nestjs:facade'));
   });
@@ -28,6 +29,9 @@ describe.skipIf(!built)('듀얼 빌드 스모크 — dist/index.{js,cjs}', () =>
     const cjs = require(cjsUrl.pathname) as Record<string, unknown>;
     expect(typeof esm['TossPaymentsModule']).toBe('function');
     expect(esm['TOSS_PAYMENTS']).toBe(cjs['TOSS_PAYMENTS']);
+    expect(
+      (esm['getTossPaymentsToken'] as (name: string) => symbol)('billing'),
+    ).toBe((cjs['getTossPaymentsToken'] as (name: string) => symbol)('billing'));
   });
 
   it('CJS forRoot 산출물 — DynamicModule 형태(providers/exports/global)', () => {

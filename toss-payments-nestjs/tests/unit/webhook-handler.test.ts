@@ -6,7 +6,10 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { orThrow, orderId } from '@gj-kit/toss-payments';
 import { createWebhookVerifier } from '@gj-kit/toss-payments/webhook';
-import type { NodeServerResponseLike } from '@gj-kit/toss-payments/webhook';
+import type {
+  NodeIncomingMessageLike,
+  NodeServerResponseLike,
+} from '@gj-kit/toss-payments/webhook';
 import {
   memoryDedupeStore,
   memoryDepositSecretStore,
@@ -33,10 +36,12 @@ function makeRes(): NodeServerResponseLike & { ended: boolean } {
 function makeReq(input: {
   headers: Readonly<Record<string, string | readonly string[] | undefined>>;
   rawBody?: Buffer;
+  socket?: { readonly remoteAddress?: string | undefined };
 }): NestWebhookRequest {
   return {
     headers: input.headers,
     ...(input.rawBody !== undefined ? { rawBody: input.rawBody } : {}),
+    ...(input.socket === undefined ? {} : { socket: input.socket }),
     async *[Symbol.asyncIterator]() {
       // rawBody 경로만 검증 대상 — 스트림 소비는 일어나지 않아야 한다
       throw new Error('스트림을 소비하면 안 된다(rawBody/body 우선 계약 위반)');
@@ -128,5 +133,71 @@ describe('rawBody 존재 — 코어 nodeHandler 위임(검증→dedupe→200→�
 
     expect(res.statusCode).toBe(400);
     expect(onDepositCallback).not.toHaveBeenCalled();
+  });
+
+  it('일반 상태 웹훅은 Nest request의 socket.remoteAddress를 보존해 기본 IP 검증을 통과한다', async () => {
+    const verifier = createWebhookVerifier({
+      dedupe: memoryDedupeStore(),
+      allowedSourceIps: ['13.124.18.147'],
+    });
+    const onPaymentStatusChanged = vi.fn();
+    const handle = toNestWebhookHandler(verifier, { onPaymentStatusChanged });
+    const { rawBody, headers } = webhookFixture.paymentStatusChanged({
+      payment: {
+        paymentKey: 'payment-key-nest-socket',
+        orderId: OID,
+        status: 'DONE',
+      },
+    });
+    const res = makeRes();
+
+    await handle(
+      makeReq({
+        headers,
+        rawBody: Buffer.from(rawBody),
+        socket: { remoteAddress: '13.124.18.147' },
+      }),
+      res,
+    );
+
+    expect(res.statusCode).toBe(200);
+    expect(onPaymentStatusChanged).toHaveBeenCalledTimes(1);
+  });
+
+  it('trusted proxy 환경은 명시한 sourceIp extractor만 사용해 원본 IP를 전달한다', async () => {
+    const verifier = createWebhookVerifier({
+      dedupe: memoryDedupeStore(),
+      allowedSourceIps: ['13.124.18.147'],
+    });
+    const sourceIp = vi.fn((request: NodeIncomingMessageLike) => {
+      // 이 예제의 헤더는 app ingress가 인증·재작성한 전용 헤더라는 전제다.
+      // 일반 X-Forwarded-For를 무조건 신뢰하는 기본 동작은 제공하지 않는다.
+      expect(request.socket?.remoteAddress).toBe('10.0.0.8');
+      const forwarded = request.headers['x-trusted-client-ip'];
+      return typeof forwarded === 'string' ? forwarded : undefined;
+    });
+    const onPaymentStatusChanged = vi.fn();
+    const handle = toNestWebhookHandler(verifier, { onPaymentStatusChanged }, { sourceIp });
+    const fixture = webhookFixture.paymentStatusChanged({
+      payment: {
+        paymentKey: 'payment-key-nest-proxy',
+        orderId: 'order-nest-proxy-0001',
+        status: 'DONE',
+      },
+    });
+    const res = makeRes();
+
+    await handle(
+      makeReq({
+        headers: { ...fixture.headers, 'x-trusted-client-ip': '13.124.18.147' },
+        rawBody: Buffer.from(fixture.rawBody),
+        socket: { remoteAddress: '10.0.0.8' },
+      }),
+      res,
+    );
+
+    expect(sourceIp).toHaveBeenCalledTimes(1);
+    expect(res.statusCode).toBe(200);
+    expect(onPaymentStatusChanged).toHaveBeenCalledTimes(1);
   });
 });

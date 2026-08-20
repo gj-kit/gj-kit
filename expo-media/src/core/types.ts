@@ -46,11 +46,17 @@ export type MediaUploadIntent = {
   readonly objectName: string;
 };
 
-export type MediaUploadIntentRequest = {
+export type MediaUploadIntentRequest<TCollectionId extends string = string> = {
   readonly fileName: string;
   /** ⚠ 전신은 `string`이었다. 닫힌 8종 유니언으로 좁혀 서버 zod와 클라이언트가 어긋나지 않게 한다. */
   readonly contentType: MediaContentType;
   readonly sizeBytes: number;
+  /**
+   * 업로드를 시작하기 전에 백엔드가 권한·용량을 확인해야 하는 경우의 불투명 그룹 id.
+   * 완료 단계의 `collectionId`와 같은 값이며, 킷은 해석하거나 생성하지 않고 그대로 전달한다.
+   * 선택적 필드라 기존 presign-only 소비자는 변경 없이 동작한다.
+   */
+  readonly collectionId?: TCollectionId | undefined;
 };
 
 /**
@@ -139,8 +145,8 @@ export type UploadResult<TAsset> = {
  * `MediaUploadApi` extends this narrower contract for the usual
  * presign → PUT → complete flow.
  */
-export interface MediaUploadIntentApi {
-  createUploadIntent(input: MediaUploadIntentRequest): Promise<MediaUploadIntent>;
+export interface MediaUploadIntentApi<TCollectionId extends string = string> {
+  createUploadIntent(input: MediaUploadIntentRequest<TCollectionId>): Promise<MediaUploadIntent>;
 }
 
 /**
@@ -148,7 +154,7 @@ export interface MediaUploadIntentApi {
  * `TAsset`은 호스트 API가 저장된 자산으로 반환하는 무엇이든 된다.
  */
 export interface MediaUploadApi<TAsset, TCollectionId extends string = string>
-  extends MediaUploadIntentApi {
+  extends MediaUploadIntentApi<TCollectionId> {
   completeUpload(input: MediaUploadCompletion<TCollectionId>): Promise<UploadResult<TAsset>>;
 }
 

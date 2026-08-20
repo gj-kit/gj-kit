@@ -1,0 +1,18 @@
+{
+  "name": "@gj-kit/toss-payments-nest11-release-consumer",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "packageManager": "pnpm@10.10.0",
+  "dependencies": {
+    "@gj-kit/toss-payments": "__GJ_KIT_TOSS_PAYMENTS_TARBALL__",
+    "@gj-kit/toss-payments-nestjs": "__GJ_KIT_TOSS_PAYMENTS_NESTJS_TARBALL__",
+    "@nestjs/common": "11.1.29",
+    "@nestjs/core": "11.1.29",
+    "reflect-metadata": "0.2.2",
+    "rxjs": "7.8.2"
+  }
+}

@@ -39,6 +39,7 @@ import type {
   MediaTelemetry,
   MediaUploadCompletion,
   MediaUploadConfig,
+  MediaUploadIntentRequest,
   MediaUploadIntentApi,
   MediaUploadLimits,
   MediaUploadApi,
@@ -69,6 +70,17 @@ declare const localPoster: LocalPosterAdapter;
 declare const completionBase: MediaUploadCompletion;
 declare const telemetry: MediaTelemetry;
 declare const run: () => Promise<number>;
+
+describe('presign collection id — completion과 같은 불투명 id를 전달한다', () => {
+  it('선택적이라 기존 unscoped 어댑터는 계속 대입 가능하다', () => {
+    expectTypeOf<MediaUploadIntentRequest>().toMatchTypeOf<{
+      readonly fileName: string;
+      readonly contentType: MediaContentType;
+      readonly sizeBytes: number;
+      readonly collectionId?: string | undefined;
+    }>();
+  });
+});
 
 /** `createLocalUploads`가 요구하는 최소 조합 — 픽스처마다 스프레드로 재사용한다. */
 declare const localBase: MediaUploadConfig<StoredAsset> & {

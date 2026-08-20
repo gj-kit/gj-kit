@@ -2,11 +2,13 @@ import { describe, expectTypeOf, it } from 'vitest';
 
 import { createWebhookVerifier } from '../../src/webhook';
 import type {
+  FetchHandlerOptions,
   AcceptedWebhook,
   DepositCallbackEvent,
   IncomingHeaders,
   LookupError,
   NoPaymentReference,
+  NodeHandlerOptions,
   PaymentLookup,
   PaymentStatusChangedEvent,
   SecurityKey,
@@ -16,6 +18,7 @@ import type {
   WebhookVerdict,
   WebhookVerifier,
 } from '../../src/webhook';
+import { DEFAULT_WEBHOOK_MAX_BODY_BYTES } from '../../src/webhook';
 import type { Payment, Result } from '../../src/index';
 
 const forge = <T>(): T => undefined as T; // 타입 테스트 전용 헬퍼
@@ -90,6 +93,30 @@ describe('웹훅 오용 = 컴파일 에러 (설계 §3.4)', () => {
     expectTypeOf<PaymentStatusHandlerArg['event']>().toEqualTypeOf<PaymentStatusChangedEvent>();
     // Unverified에는 refetch가 있다 — payload 직접 신뢰 대신 재조회 유도
     expectTypeOf<PaymentStatusHandlerArg['refetch']>().toBeFunction();
+  });
+});
+
+describe('웹훅 ingress body 상한 — Fetch/Node 공통 공개 계약', () => {
+  it('maxBodyBytes는 옵션에서 양의 number로 받으며 기본 상수는 number다', () => {
+    const fetchOptions: FetchHandlerOptions = { maxBodyBytes: 256 * 1024 };
+    const nodeOptions: NodeHandlerOptions = { maxBodyBytes: 64 * 1024 };
+    void fetchOptions;
+    void nodeOptions;
+    expectTypeOf(DEFAULT_WEBHOOK_MAX_BODY_BYTES).toEqualTypeOf<number>();
+  });
+
+  it('문자열/비공개 config 필드로 body 상한을 우회할 수 없다', () => {
+    // @ts-expect-error runtime byte limit은 number여야 한다
+    const badFetch: FetchHandlerOptions = { maxBodyBytes: '65536' };
+    // @ts-expect-error runtime byte limit은 number여야 한다
+    const badNode: NodeHandlerOptions = { maxBodyBytes: '65536' };
+    void badFetch;
+    void badNode;
+
+    const verifier = forge<WebhookVerifier>();
+    // @ts-expect-error maxBodyBytes는 verifier config가 아닌 실제 ingress adapter 옵션이다
+    createWebhookVerifier({ dedupe: forge<WebhookDedupeStore>(), maxBodyBytes: 1024 });
+    void verifier;
   });
 });
 

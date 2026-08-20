@@ -1,5 +1,11 @@
 # @gj-kit/expo-media
 
+## 0.5.1
+
+### Patch Changes
+
+- 5def858: Forward the optional `collectionId` to presign requests as well as completion requests. This lets hosts enforce collection-scoped upload permission and quota checks before issuing an upload URL, while keeping existing unscoped adapters compatible.
+
 ## 0.5.0
 
 ### Minor Changes

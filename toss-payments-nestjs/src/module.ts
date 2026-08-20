@@ -2,7 +2,7 @@
  * TossPaymentsModule — createTossPayments 파사드를 Nest DI에 얹는 DynamicModule (설계 §4.2).
  *
  * 순수 조립층이다: kit 생성은 코어 파사드(createTossPayments)에 전량 위임하고,
- * 이 모듈은 `{ provide: TOSS_PAYMENTS, useValue/useFactory }` 바인딩만 소유한다 — 로직 중복 0.
+ * 이 모듈은 `{ provide: token, useValue/useFactory }` 바인딩만 소유한다 — 로직 중복 0.
  */
 import { Module } from '@nestjs/common';
 import type { DynamicModule, InjectionToken } from '@nestjs/common';
@@ -15,7 +15,7 @@ import type {
   TossPaymentsWidgetConfig,
 } from '@gj-kit/toss-payments/server';
 
-import { TOSS_PAYMENTS } from './inject';
+import { getTossPaymentsToken, TOSS_PAYMENTS, type TossPaymentsKitName } from './inject';
 
 /** forRoot/forRootAsync가 수용하는 config 합집합 — 코어 defineTossPaymentsConfig 산출물. */
 export type AnyTossPaymentsConfig = TossPaymentsApiConfig<Env> | TossPaymentsWidgetConfig<Env>;
@@ -51,6 +51,31 @@ export interface TossPaymentsModuleAsyncOptions<C extends AnyTossPaymentsConfig>
   readonly global?: boolean;
 }
 
+/** `forRoot`/`register`에서 공유하는 Nest module 옵션. */
+export interface TossPaymentsModuleOptions {
+  /** 기본 true. 모듈 경계를 엄격히 유지하려면 false를 명시한다. */
+  readonly global?: boolean;
+}
+
+/**
+ * 이름 있는 kit의 동기 조립 옵션.
+ *
+ * API `sk`와 결제위젯 `gsk`처럼 서로 다른 키 쌍을 동시에 써야 할 때 사용한다.
+ * `name`은 한 Nest application에서 유일해야 하며, 주입부의
+ * `@InjectTossPayments(name)`와 정확히 일치해야 한다.
+ */
+export interface TossPaymentsModuleRegisterOptions<C extends AnyTossPaymentsConfig>
+  extends TossPaymentsModuleOptions {
+  readonly name: TossPaymentsKitName;
+  readonly config: C;
+}
+
+/** 이름 있는 kit의 비동기 조립 옵션. */
+export interface TossPaymentsModuleRegisterAsyncOptions<C extends AnyTossPaymentsConfig>
+  extends TossPaymentsModuleAsyncOptions<C> {
+  readonly name: TossPaymentsKitName;
+}
+
 /**
  * 합집합 config 1인자 시그니처 — 파사드의 impl 시그니처와 동일한 형태다.
  *
@@ -74,34 +99,66 @@ export class TossPaymentsModule {
    */
   static forRoot<E extends Env, const C extends AnyTossPaymentsConfig>(
     config: C,
-    options?: { readonly global?: boolean }, // 기본 true
+    options?: TossPaymentsModuleOptions, // 기본 true
   ): DynamicModule {
-    return {
-      module: TossPaymentsModule,
-      global: options?.global ?? true,
-      providers: [{ provide: TOSS_PAYMENTS, useValue: buildKit(config) }],
-      exports: [TOSS_PAYMENTS],
-    };
+    return createStaticModule(TOSS_PAYMENTS, config, options);
   }
 
   /** 비동기 조립 — 스토어를 Nest 프로바이더(inject)로 받아 useFactory에서 config를 만든다. */
   static forRootAsync<C extends AnyTossPaymentsConfig>(
     options: TossPaymentsModuleAsyncOptions<C>,
   ): DynamicModule {
-    return {
-      module: TossPaymentsModule,
-      global: options.global ?? true,
-      // exactOptionalPropertyTypes — imports 미지정 시 프로퍼티 자체를 만들지 않는다
-      ...(options.imports !== undefined ? { imports: options.imports } : {}),
-      providers: [
-        {
-          provide: TOSS_PAYMENTS,
-          inject: options.inject === undefined ? [] : [...options.inject],
-          useFactory: async (...deps: readonly unknown[]) =>
-            buildKit(await options.useFactory(...deps)),
-        },
-      ],
-      exports: [TOSS_PAYMENTS],
-    };
+    return createAsyncModule(TOSS_PAYMENTS, options);
   }
+
+  /**
+   * 이름 있는 동기 조립. `forRoot`는 기존 단일 kit(`TOSS_PAYMENTS`) 호환 API로
+   * 유지하고, 여러 키 쌍은 이 메서드로 분리한다.
+   */
+  static register<const C extends AnyTossPaymentsConfig>(
+    options: TossPaymentsModuleRegisterOptions<C>,
+  ): DynamicModule {
+    return createStaticModule(getTossPaymentsToken(options.name), options.config, options);
+  }
+
+  /** 이름 있는 비동기 조립. provider별 config/store를 독립적으로 주입한다. */
+  static registerAsync<C extends AnyTossPaymentsConfig>(
+    options: TossPaymentsModuleRegisterAsyncOptions<C>,
+  ): DynamicModule {
+    return createAsyncModule(getTossPaymentsToken(options.name), options);
+  }
+}
+
+function createStaticModule<C extends AnyTossPaymentsConfig>(
+  token: InjectionToken,
+  config: C,
+  options?: TossPaymentsModuleOptions,
+): DynamicModule {
+  return {
+    module: TossPaymentsModule,
+    global: options?.global ?? true,
+    providers: [{ provide: token, useValue: buildKit(config) }],
+    exports: [token],
+  };
+}
+
+function createAsyncModule<C extends AnyTossPaymentsConfig>(
+  token: InjectionToken,
+  options: TossPaymentsModuleAsyncOptions<C>,
+): DynamicModule {
+  return {
+    module: TossPaymentsModule,
+    global: options.global ?? true,
+    // exactOptionalPropertyTypes — imports 미지정 시 프로퍼티 자체를 만들지 않는다
+    ...(options.imports !== undefined ? { imports: options.imports } : {}),
+    providers: [
+      {
+        provide: token,
+        inject: options.inject === undefined ? [] : [...options.inject],
+        useFactory: async (...deps: readonly unknown[]) =>
+          buildKit(await options.useFactory(...deps)),
+      },
+    ],
+    exports: [token],
+  };
 }

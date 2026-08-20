@@ -1,6 +1,6 @@
 {
   "name": "@gj-kit/toss-payments",
-  "version": "0.3.1",
+  "version": "0.4.0",
   "description": "토스페이먼츠 결제위젯·API v2 연동 라이브러리 — 검증(금액 대조·상태 확인·서명 검증)을 타입으로 강제한다",
   "homepage": "https://github.com/gj-kit/gj-kit/tree/main/toss-payments",
   "repository": {
@@ -51,8 +51,8 @@
     }
   },
   "scripts": {
-    "build": "tsup",
-    "prepack": "npm run build",
+    "build": "tsup && node scripts/stamp-provenance.mjs",
+    "prepack": "npm run build && node scripts/check-provenance.mjs --require-clean",
     "typecheck": "tsc --noEmit",
     "test": "vitest run --project unit",
     "test:types": "vitest run --project types",

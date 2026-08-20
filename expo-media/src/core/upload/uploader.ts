@@ -55,7 +55,7 @@ import { resolveUploadSize } from './resolveSize';
  * 업로드 팩토리 2종(`createLocalUploads`·`createBinaryUploads`)이 공유하는 설정.
  * 전신 `PhotoUploaderConfig`의 분해 결과다(§5.7.2-①).
  */
-type MediaUploadBaseConfig = {
+type MediaUploadBaseConfig<TCollectionId extends string = string> = {
   /**
    * ⚠ 생략 불가(§6.1-③). 무제한 업로드는 **명시된 결정**이어야 한다 —
    * 누락하면 2GB를 전부 PUT한 뒤 서버가 413을 준다(사용자 시간과 셀룰러 데이터를 통째로 버린다).
@@ -71,7 +71,7 @@ type MediaUploadBaseConfig = {
 };
 
 export type MediaUploadConfig<TAsset, TCollectionId extends string = string> =
-  MediaUploadBaseConfig & {
+  MediaUploadBaseConfig<TCollectionId> & {
     readonly api: MediaUploadApi<TAsset, TCollectionId>;
   };
 
@@ -285,14 +285,14 @@ type LocalUploadAdapters = LocalStreamingUploadAdapters & {
  * 반환된 `DeferredLocalUpload`은 서버 등록 요청처럼 보이게 만든 가짜 값이 아니다. 호출자가
  * 자기 도메인 트랜잭션에서 `objectName`과 메타데이터를 연결할 수 있는 완료 페이로드다.
  */
-export type DeferredLocalUploadConfig = MediaUploadBaseConfig &
+export type DeferredLocalUploadConfig<TCollectionId extends string = string> = MediaUploadBaseConfig<TCollectionId> &
   LocalStreamingUploadAdapters & {
-    readonly api: MediaUploadIntentApi;
+    readonly api: MediaUploadIntentApi<TCollectionId>;
   };
 
-type LocalUploadRuntimeConfig = MediaUploadBaseConfig &
+type LocalUploadRuntimeConfig<TCollectionId extends string = string> = MediaUploadBaseConfig<TCollectionId> &
   LocalUploadAdapters & {
-    readonly api: MediaUploadIntentApi;
+    readonly api: MediaUploadIntentApi<TCollectionId>;
   };
 
 type LocalUploadFinalizer<TOutput, TCollectionId extends string> = {
@@ -394,7 +394,7 @@ export function createLocalUploads<TAsset, TCollectionId extends string = string
  * `api`에는 `createUploadIntent`만 있으면 된다. 이 함수는 `completeUpload`를 흉내 내거나 호출하지 않는다.
  */
 export function createDeferredLocalUploads<TCollectionId extends string = string>(
-  config: DeferredLocalUploadConfig,
+  config: DeferredLocalUploadConfig<TCollectionId>,
 ): DeferredLocalUploads<TCollectionId> {
   const uploads = createLocalUploadPipeline<DeferredLocalUpload<TCollectionId>, TCollectionId>(
     config,
@@ -414,7 +414,7 @@ export function createDeferredLocalUploads<TCollectionId extends string = string
  * 검증·해시·포스터 정책이 완전히 같다. 마지막 단계만 `finalizer`로 갈라 가짜 complete API를 만들지 않는다.
  */
 function createLocalUploadPipeline<TOutput, TCollectionId extends string = string>(
-  config: LocalUploadRuntimeConfig,
+  config: LocalUploadRuntimeConfig<TCollectionId>,
   finalizer: LocalUploadFinalizer<TOutput, TCollectionId>,
 ): LocalUploadPipeline<TOutput, TCollectionId> {
   const { api, files, transport, platform } = config;
@@ -450,6 +450,7 @@ function createLocalUploadPipeline<TOutput, TCollectionId extends string = strin
   async function uploadPosterLocalFile(input: {
     readonly uri: string;
     readonly fileName: string;
+    readonly collectionId: TCollectionId | undefined;
     /** 본체가 이후 실패하면 호출자가 cleanup할 수 있게, 성공한 poster를 여기에 기록한다. */
     readonly orphanedObjects: MediaOrphanedUpload[];
   }): Promise<UploadedPoster | null> {
@@ -530,6 +531,7 @@ function createLocalUploadPipeline<TOutput, TCollectionId extends string = strin
         fileName: posterFileName(input.fileName),
         contentType: POSTER_CONTENT_TYPE,
         sizeBytes,
+        ...(input.collectionId ? { collectionId: input.collectionId } : {}),
       });
     } catch (error) {
       return failRequiredPosterUpload({
@@ -611,6 +613,7 @@ function createLocalUploadPipeline<TOutput, TCollectionId extends string = strin
     readonly uri: string;
     readonly fileName: string;
     readonly kind: MediaKind;
+    readonly collectionId: TCollectionId | undefined;
     readonly orphanedObjects: MediaOrphanedUpload[];
   }): Promise<UploadedPoster | null> {
     const adapter = config.poster;
@@ -639,6 +642,7 @@ function createLocalUploadPipeline<TOutput, TCollectionId extends string = strin
     const poster = await uploadPosterLocalFile({
       uri: posterUri,
       fileName: input.fileName,
+      collectionId: input.collectionId,
       orphanedObjects: input.orphanedObjects,
     });
     debug.log('video.poster.create.done', {
@@ -693,6 +697,7 @@ function createLocalUploadPipeline<TOutput, TCollectionId extends string = strin
         fileName: plan.fileName,
         contentType: plan.contentType,
         sizeBytes: plan.sizeBytes,
+        ...(plan.collectionId ? { collectionId: plan.collectionId } : {}),
       });
     } catch (error) {
       // API가 네트워크/HTTP 에러에 signed URL을 에코해도 debug만 sanitize해서 본다. public
@@ -835,6 +840,7 @@ function createLocalUploadPipeline<TOutput, TCollectionId extends string = strin
       uri: plan.uri,
       fileName: plan.fileName,
       kind: mediaKindOf(plan.contentType),
+      collectionId: plan.collectionId,
       orphanedObjects,
     });
     return trackMediaSafely({

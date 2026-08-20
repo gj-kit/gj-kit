@@ -1,5 +1,29 @@
 # @gj-kit/toss-payments
 
+## 0.4.0
+
+### Minor Changes
+
+- 1a23e37: Fetch/Node 웹훅 어댑터에 `maxBodyBytes`와 기본 256 KiB 수신 상한을 추가했습니다.
+  선언된 Content-Length가 상한을 넘거나 실제 stream/body가 상한을 넘으면 검증·dedupe·핸들러
+  실행 전에 413을 반환합니다. Express 사용자는 `express.raw({ limit })`를 같은 값으로 맞춰
+  라이브러리 진입 전 Buffer 할당도 제한하세요.
+- 2196cfe: 결제 응답을 base 필드, 취소 이력, 결제수단별 세부 객체까지 런타임에서 검증해 누락된 2xx
+  응답이 `Payment` 또는 가상계좌 secret 저장으로 통과하지 않게 합니다.
+
+  가상계좌 조회의 `VirtualAccountPayment.secret`은 `string | null`로 바로잡았습니다. 직접
+  `confirm`/`confirmCallback`이 성공한 가상계좌만 `ConfirmedPayment.secret: string`을
+  보장합니다. confirm 실패 뒤 조회에서 secret을 되살릴 수 없으면 `resolveFailure`는 새
+  `confirmed-without-deposit-secret` 분기를 반환하므로 주문을 보류해 운영 복구로 처리해야
+  합니다.
+
+  JavaScript 우회 설정도 안전하게 처리하도록 양의 안전한 정수 금액, 1~600,000ms 승인 창,
+  2~5회 재시도와 0~60,000ms 비어 있지 않은 retry delay를 런타임에서 검증합니다.
+
+### Patch Changes
+
+- 43a8a31: Ship a package-owned immutable provenance stamp in both Toss artifacts and reject packing from a dirty checkout. The release gate now installs the packed core and Nest tarballs into fresh Nest 10 and Nest 11 consumers, verifies their ESM/CJS public exports, and boots a named-kit DI context.
+
 ## 0.3.1
 
 ### Patch Changes

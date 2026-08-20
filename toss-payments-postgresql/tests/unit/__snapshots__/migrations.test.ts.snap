@@ -1,0 +1,161 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`§4 renderMigrationSql — 외부 도구용 전체 스크립트 > 스키마 이름이 반영된 전체 스크립트를 스냅샷으로 고정한다 > custom-schema 1`] = `
+"-- @gj-kit/toss-payments-postgresql — 전체 마이그레이션 스크립트
+-- schema: my_service
+-- 이 파일은 renderMigrationSql() 산출물이다. 버전 관리는 사용 중인 도구가 담당한다.
+
+-- ── 0001_init ───────────────────────────────────────────────────
+CREATE SCHEMA IF NOT EXISTS "my_service";
+
+CREATE TABLE "my_service".orders (
+  order_id    text PRIMARY KEY,
+  amount      bigint NOT NULL CHECK (amount >= 0),
+  currency    text NOT NULL CHECK (currency IN ('KRW','USD','JPY')),
+  order_name  text NOT NULL,
+  created_at  text NOT NULL,
+  recorded_at timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE TABLE "my_service".deposit_secrets (
+  order_id   text PRIMARY KEY,
+  secret     text NOT NULL,
+  updated_at timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE TABLE "my_service".billing_keys (
+  customer_key text PRIMARY KEY,
+  billing_key  text NOT NULL,
+  method       text NOT NULL,
+  issued_at    text NOT NULL,
+  card         jsonb,
+  transfers    jsonb,
+  updated_at   timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE TABLE "my_service".cancel_retries (
+  ticket_id   text PRIMARY KEY,
+  record_json text NOT NULL,
+  recorded_at timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE TABLE "my_service".webhook_dedupe (
+  dedupe_key       text PRIMARY KEY,
+  state            text NOT NULL CHECK (state IN ('processing','completed')),
+  lease_expires_at timestamptz,
+  completed_at     timestamptz
+);
+
+CREATE TABLE "my_service".audit_entries (
+  id              text PRIMARY KEY,
+  at              text NOT NULL,
+  env             text NOT NULL,
+  method          text NOT NULL,
+  path            text NOT NULL,
+  attempt         integer NOT NULL,
+  idempotency_key text,
+  trace_id        text,
+  duration_ms     integer NOT NULL,
+  outcome_kind    text NOT NULL,
+  entry           jsonb NOT NULL,
+  recorded_at     timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE INDEX audit_entries_trace_id_idx ON "my_service".audit_entries (trace_id) WHERE trace_id IS NOT NULL;
+
+CREATE INDEX audit_entries_recorded_at_idx ON "my_service".audit_entries (recorded_at);
+
+CREATE TABLE "my_service".webhook_inbox (
+  dedupe_key        text PRIMARY KEY,
+  transmission_id   text NOT NULL,
+  transmission_time text,
+  retried_count     integer NOT NULL,
+  trust             text NOT NULL,
+  event_type        text NOT NULL,
+  event             jsonb NOT NULL,
+  deliveries        integer NOT NULL DEFAULT 1,
+  first_received_at timestamptz NOT NULL DEFAULT now(),
+  last_received_at  timestamptz NOT NULL DEFAULT now()
+);
+"
+`;
+
+exports[`§4 renderMigrationSql — 외부 도구용 전체 스크립트 > 스키마 이름이 반영된 전체 스크립트를 스냅샷으로 고정한다 > default-schema 1`] = `
+"-- @gj-kit/toss-payments-postgresql — 전체 마이그레이션 스크립트
+-- schema: toss_payments
+-- 이 파일은 renderMigrationSql() 산출물이다. 버전 관리는 사용 중인 도구가 담당한다.
+
+-- ── 0001_init ───────────────────────────────────────────────────
+CREATE SCHEMA IF NOT EXISTS "toss_payments";
+
+CREATE TABLE "toss_payments".orders (
+  order_id    text PRIMARY KEY,
+  amount      bigint NOT NULL CHECK (amount >= 0),
+  currency    text NOT NULL CHECK (currency IN ('KRW','USD','JPY')),
+  order_name  text NOT NULL,
+  created_at  text NOT NULL,
+  recorded_at timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE TABLE "toss_payments".deposit_secrets (
+  order_id   text PRIMARY KEY,
+  secret     text NOT NULL,
+  updated_at timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE TABLE "toss_payments".billing_keys (
+  customer_key text PRIMARY KEY,
+  billing_key  text NOT NULL,
+  method       text NOT NULL,
+  issued_at    text NOT NULL,
+  card         jsonb,
+  transfers    jsonb,
+  updated_at   timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE TABLE "toss_payments".cancel_retries (
+  ticket_id   text PRIMARY KEY,
+  record_json text NOT NULL,
+  recorded_at timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE TABLE "toss_payments".webhook_dedupe (
+  dedupe_key       text PRIMARY KEY,
+  state            text NOT NULL CHECK (state IN ('processing','completed')),
+  lease_expires_at timestamptz,
+  completed_at     timestamptz
+);
+
+CREATE TABLE "toss_payments".audit_entries (
+  id              text PRIMARY KEY,
+  at              text NOT NULL,
+  env             text NOT NULL,
+  method          text NOT NULL,
+  path            text NOT NULL,
+  attempt         integer NOT NULL,
+  idempotency_key text,
+  trace_id        text,
+  duration_ms     integer NOT NULL,
+  outcome_kind    text NOT NULL,
+  entry           jsonb NOT NULL,
+  recorded_at     timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE INDEX audit_entries_trace_id_idx ON "toss_payments".audit_entries (trace_id) WHERE trace_id IS NOT NULL;
+
+CREATE INDEX audit_entries_recorded_at_idx ON "toss_payments".audit_entries (recorded_at);
+
+CREATE TABLE "toss_payments".webhook_inbox (
+  dedupe_key        text PRIMARY KEY,
+  transmission_id   text NOT NULL,
+  transmission_time text,
+  retried_count     integer NOT NULL,
+  trust             text NOT NULL,
+  event_type        text NOT NULL,
+  event             jsonb NOT NULL,
+  deliveries        integer NOT NULL DEFAULT 1,
+  first_received_at timestamptz NOT NULL DEFAULT now(),
+  last_received_at  timestamptz NOT NULL DEFAULT now()
+);
+"
+`;

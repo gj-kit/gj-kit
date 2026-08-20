@@ -1,0 +1,31 @@
+# 통합 테스트 전용 PostgreSQL (설계 §8 — docker 편의 동봉).
+#
+# 왜 55432인가: 로컬에 이미 떠 있는 PostgreSQL(기본 5432)과의 포트 충돌을 피한다.
+# 왜 tmpfs인가: 테스트 데이터는 1회용이다 — 디스크 볼륨을 남기지 않아 `down -v` 후
+# 잔존물이 없고, 메모리 파일시스템이라 테스트도 빠르다.
+#
+# 사용:
+#   docker compose -f toss-payments-postgresql/docker-compose.yml up -d --wait
+#   TOSS_PG_TEST_DATABASE_URL=postgres://toss_pg_test:toss_pg_test@localhost:55432/toss_pg_test
+#   docker compose -f toss-payments-postgresql/docker-compose.yml down -v
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: toss-pg-test
+    environment:
+      POSTGRES_DB: toss_pg_test
+      POSTGRES_USER: toss_pg_test
+      POSTGRES_PASSWORD: toss_pg_test
+    ports:
+      # 127.0.0.1 한정 바인딩 — 테스트 DB를 외부 인터페이스에 노출하지 않고,
+      # 다른 인터페이스의 임시(ephemeral) 포트 사용과의 와일드카드 바인딩 충돌도 피한다.
+      - "127.0.0.1:55432:5432"
+    # --wait가 이 healthcheck를 기준으로 준비 완료를 판정한다 — 테스트가
+    # "커넥션 거부" 플레이크 없이 시작할 수 있는 유일한 신호.
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U toss_pg_test -d toss_pg_test"]
+      interval: 2s
+      timeout: 3s
+      retries: 15
+    tmpfs:
+      - /var/lib/postgresql/data

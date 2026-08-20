@@ -1,0 +1,86 @@
+{
+  "name": "@gj-kit/toss-payments-postgresql",
+  "version": "0.0.0",
+  "description": "@gj-kit/toss-payments 저장소 seam의 PostgreSQL 구현 — 테이블·마이그레이션 소유와 단일 문 원자적 dedupe로, 검증 강제 플로우의 영속화를 '설계하는 일'이 아니라 '설정하는 일'로 만든다",
+  "homepage": "https://github.com/gj-kit/gj-kit/tree/main/toss-payments-postgresql",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/gj-kit/gj-kit.git",
+    "directory": "toss-payments-postgresql"
+  },
+  "bugs": {
+    "url": "https://github.com/gj-kit/gj-kit/issues"
+  },
+  "license": "MIT",
+  "type": "module",
+  "sideEffects": false,
+  "engines": {
+    "node": ">=20"
+  },
+  "files": [
+    "dist"
+  ],
+  "exports": {
+    ".": {
+      "import": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      },
+      "require": {
+        "types": "./dist/index.d.cts",
+        "default": "./dist/index.cjs"
+      }
+    },
+    "./nestjs": {
+      "import": {
+        "types": "./dist/nestjs.d.ts",
+        "default": "./dist/nestjs.js"
+      },
+      "require": {
+        "types": "./dist/nestjs.d.cts",
+        "default": "./dist/nestjs.cjs"
+      }
+    }
+  },
+  "scripts": {
+    "build": "tsup && node scripts/stamp-provenance.mjs",
+    "prepack": "npm run build && node scripts/check-provenance.mjs --require-clean",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run --project unit",
+    "test:types": "vitest run --project types",
+    "test:integration": "vitest run --config vitest.integration.config.ts",
+    "check:readme": "corepack pnpm run build && node scripts/check-readme.mjs",
+    "test:all": "pnpm run test && pnpm run test:types && pnpm run test:integration"
+  },
+  "peerDependencies": {
+    "@gj-kit/toss-payments": "^0.4.0",
+    "@nestjs/common": "^10 || ^11",
+    "reflect-metadata": "^0.1.13 || ^0.2",
+    "rxjs": "^7"
+  },
+  "peerDependenciesMeta": {
+    "@nestjs/common": {
+      "optional": true
+    },
+    "reflect-metadata": {
+      "optional": true
+    },
+    "rxjs": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@gj-kit/toss-payments": "workspace:*",
+    "@nestjs/common": "^11",
+    "@nestjs/core": "^11",
+    "@nestjs/testing": "^11",
+    "@types/node": "^24",
+    "@types/pg": "^8",
+    "pg": "^8",
+    "reflect-metadata": "^0.2",
+    "rxjs": "^7",
+    "tsup": "^8",
+    "typescript": "^5",
+    "vitest": "^3"
+  }
+}

@@ -57,6 +57,9 @@ const { asset, duplicate } = await media.uploadLocalFile({
 메서드인 `createUploadIntent`만 주면, 같은 크기 검증·해시·동영상 포스터·**네이티브 스트리밍** PUT을
 거친 뒤 `MediaUploadCompletion` 형태의 attachment를 돌려준다.
 
+컬렉션·앨범처럼 업로드 권한이나 용량을 presign 전에 확인하는 백엔드는 `collectionId`를
+`createUploadIntent`와 완료 payload 양쪽에서 받는다. 킷은 이 값을 해석하지 않고 같은 값으로 전달한다.
+
 ```ts
 import {
   createDeferredLocalUploads,

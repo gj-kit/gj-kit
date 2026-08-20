@@ -298,6 +298,7 @@ export function createBinaryUploads<TAsset, TCollectionId extends string = strin
   async function uploadPosterBinary(input: {
     readonly source: BinarySource;
     readonly fileName: string;
+    readonly collectionId: TCollectionId | undefined;
   }): Promise<UploadedPoster | null> {
     const sizeBytes = input.source.size;
     if (!sizeBytes) return null;
@@ -354,6 +355,7 @@ export function createBinaryUploads<TAsset, TCollectionId extends string = strin
         fileName: posterFileName(input.fileName),
         contentType: POSTER_CONTENT_TYPE,
         sizeBytes,
+        ...(input.collectionId ? { collectionId: input.collectionId } : {}),
       });
     } catch (error) {
       return failRequiredPosterUpload({ stage: 'intent', error, orphanedObjects: [] });
@@ -402,11 +404,16 @@ export function createBinaryUploads<TAsset, TCollectionId extends string = strin
   async function resolvePoster(input: {
     readonly source: BinarySource;
     readonly fileName: string;
+    readonly collectionId: TCollectionId | undefined;
     readonly requested: BinarySource | null | undefined;
   }): Promise<UploadedPoster | null> {
     if (input.requested !== undefined) {
       return input.requested
-        ? uploadPosterBinary({ source: input.requested, fileName: input.fileName })
+        ? uploadPosterBinary({
+            source: input.requested,
+            fileName: input.fileName,
+            collectionId: input.collectionId,
+          })
         : null;
     }
     const adapter = config.poster;
@@ -424,7 +431,11 @@ export function createBinaryUploads<TAsset, TCollectionId extends string = strin
       debug.error('binary.poster.failed', error, { fileName: input.fileName });
       return null;
     }
-    return uploadPosterBinary({ source: frame, fileName: input.fileName });
+    return uploadPosterBinary({
+      source: frame,
+      fileName: input.fileName,
+      collectionId: input.collectionId,
+    });
   }
 
   async function putAndComplete(input: {
@@ -462,6 +473,7 @@ export function createBinaryUploads<TAsset, TCollectionId extends string = strin
         fileName: input.fileName,
         contentType: input.contentType,
         sizeBytes: input.sizeBytes,
+        ...(input.collectionId ? { collectionId: input.collectionId } : {}),
       });
     } catch (error) {
       debug.error('binary.intent.failed', error, {
@@ -621,6 +633,7 @@ export function createBinaryUploads<TAsset, TCollectionId extends string = strin
     const poster = await resolvePoster({
       source: input.source,
       fileName: input.fileName,
+      collectionId: input.collectionId,
       requested: input.requestedPoster,
     });
     return putAndComplete({

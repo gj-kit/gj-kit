@@ -57,7 +57,7 @@
     "test": "vitest run --project unit",
     "test:types": "vitest run --project types",
     "test:integration": "vitest run --config vitest.integration.config.ts",
-    "check:readme": "pnpm run build && node scripts/check-readme.mjs",
+    "check:readme": "corepack pnpm run build && node scripts/check-readme.mjs",
     "test:all": "pnpm run test && pnpm run test:types && pnpm run test:integration"
   },
   "peerDependencies": {

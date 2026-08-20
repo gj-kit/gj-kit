@@ -139,7 +139,7 @@
     "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.tests.json",
     "test": "vitest run --project unit",
     "test:types": "vitest run --project types",
-    "check:readme": "pnpm run build && node scripts/check-readme.mjs",
+    "check:readme": "corepack pnpm run build && node scripts/check-readme.mjs",
     "test:all": "pnpm run test && pnpm run test:types"
   },
   "peerDependencies": {

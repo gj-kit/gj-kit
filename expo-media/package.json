@@ -177,7 +177,7 @@
     "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.core.json && tsc --noEmit -p tsconfig.tests.json",
     "test": "vitest run --project unit --project web",
     "test:types": "vitest run --project types",
-    "check:readme": "pnpm run build && node scripts/check-readme.mjs",
+    "check:readme": "corepack pnpm run build && node scripts/check-readme.mjs",
     "check:expo-sdk": "expo install --check",
     "test:all": "pnpm run test && pnpm run test:types"
   },

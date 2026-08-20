@@ -1057,6 +1057,56 @@ if (imported.ok) {
 
 ---
 
+## 배포 산출물과 소비 앱 handoff
+
+workspace link나 수정된 `node_modules`로 결제를 검증한 결과는 배포 증거가 아닙니다. 릴리스는
+**깨끗한 source commit**에서 아래 gate를 통과한 뒤, core와 Nest를 각각 immutable `.tgz`로
+전달합니다.
+
+```sh
+corepack pnpm run verify:release
+artifact_dir="$(mktemp -d)"
+npm pack ./toss-payments --pack-destination "$artifact_dir"
+npm pack ./toss-payments-nestjs --pack-destination "$artifact_dir"
+```
+
+`--pack-destination`은 repository 밖의 임시 디렉터리를 써야 합니다. 첫 번째 tarball이 source
+checkout에 untracked 파일로 남으면 두 번째 package의 `prepack` clean-check가 의도적으로 거부합니다.
+
+각 artifact의 provenance JSON을 tarball에서 꺼내 handoff 파일로 두고 SHA-256도 기록합니다.
+
+```sh
+for tarball in "$artifact_dir"/*.tgz; do
+  tar -xOf "$tarball" package/dist/gj-kit-provenance.json > "${tarball%.tgz}.provenance.json"
+  shasum -a 256 "$tarball"
+done
+```
+
+각 tarball에는 `dist/gj-kit-provenance.json`이 포함됩니다. 이 파일의
+`{ package, version, sourceCommit }`은 빌드한 Git commit을 가리키며, pack 직전에는 source가
+깨끗한지와 tarball 내부 stamp가 다시 검증됩니다. handoff에는 두 package의 **정확한 version,
+전체 source commit, tarball SHA-256, provenance JSON**을 함께 기록하세요. SHA-256은 같은
+version의 다른 파일을 바꿔치기하지 않았다는 artifact 식별자입니다.
+
+소비 앱에는 두 `.tgz`를 version control 대상 `vendor/`에 고정하고 `package.json`과 lockfile을
+함께 갱신합니다.
+
+```json
+{
+  "dependencies": {
+    "@gj-kit/toss-payments": "file:vendor/gj-kit-toss-payments-<version>.tgz",
+    "@gj-kit/toss-payments-nestjs": "file:vendor/gj-kit-toss-payments-nestjs-<version>.tgz"
+  }
+}
+```
+
+consumer는 vendor tarball의 SHA-256과 인접 provenance JSON을 재확인한 뒤 설치해야 합니다.
+registry의 느슨한 range, workspace symlink, 수동 편집한 `node_modules`는 승인·웹훅 경로의
+release handoff로 쓰지 마세요. Nest 소비자는 자신의 `@nestjs/common`/`@nestjs/core` major,
+실제 raw-body ingress, device/production callback도 별도로 검증해야 합니다.
+
+---
+
 ## 라이선스
 
 MIT

@@ -295,3 +295,17 @@ Fastify도 `NestFactory.create(..., { rawBody: true })`로 raw body를 보존한
 | `toNestWebhookHandler(verifier, handlers, { sourceIp? })` | raw body·socket을 보존하는 Nest 웹훅 핸들러 |
 
 플로우별 옵션·에러·브라우저 결제창 사용법은 [`@gj-kit/toss-payments` README](../toss-payments/README.md)를 참고하세요.
+
+## 배포 산출물 handoff
+
+이 패키지와 `@gj-kit/toss-payments`는 항상 같은 release handoff 단위입니다. source workspace
+link나 수정된 `node_modules`를 전달하지 말고, 깨끗한 source commit에서 `corepack pnpm run
+verify:release`를 실행한 뒤 두 `.tgz`를 소비 앱의 `vendor/`에 함께 고정하세요. release gate는
+두 tarball의 package-owned `dist/gj-kit-provenance.json`과 SHA-256을 확인하고, fresh Nest 10·11
+소비자에서 실제 DI application context와 ESM/CJS export를 검증합니다.
+
+handoff에는 package별 정확한 version, 전체 `sourceCommit`, tarball SHA-256, provenance JSON을
+기록하고 consumer의 `package.json`을 exact `file:vendor/...tgz` dependency로, lockfile까지 함께
+갱신합니다. 소비 앱은 tarball과 인접 provenance JSON을 재검증해야 하며, 자신의 Nest major 및
+rawBody/ingress·실제 provider callback 검증은 release gate와 별도로 수행해야 합니다. 자세한
+명령과 manifest 예시는 코어 README의 [배포 산출물과 소비 앱 handoff](../toss-payments/README.md#배포-산출물과-소비-앱-handoff)를 참고하세요.

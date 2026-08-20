@@ -18,8 +18,8 @@ const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const packages = [
   { directory: 'expo-ui', requirePrepack: true, requireProvenance: true },
   { directory: 'expo-media', requirePrepack: true, requireProvenance: true },
-  { directory: 'toss-payments', requirePrepack: true },
-  { directory: 'toss-payments-nestjs', requirePrepack: true },
+  { directory: 'toss-payments', requirePrepack: true, requireProvenance: true },
+  { directory: 'toss-payments-nestjs', requirePrepack: true, requireProvenance: true },
 ];
 
 function collectExportTargets(value, targets) {

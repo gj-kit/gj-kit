@@ -51,8 +51,8 @@
     }
   },
   "scripts": {
-    "build": "tsup",
-    "prepack": "npm run build",
+    "build": "tsup && node scripts/stamp-provenance.mjs",
+    "prepack": "npm run build && node scripts/check-provenance.mjs --require-clean",
     "typecheck": "tsc --noEmit",
     "test": "vitest run --project unit",
     "test:types": "vitest run --project types",

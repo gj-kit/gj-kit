@@ -1,5 +1,11 @@
 # @gj-kit/expo-media
 
+## 0.5.0
+
+### Minor Changes
+
+- f6041e5: Add `useModalSafeAreaInsets` for full-screen translucent Android Modals and add explicit Expo image processing adapters for orientation normalization, bounded resizing, rotation, and display-coordinate crop.
+
 ## 0.4.1
 
 ### Patch Changes

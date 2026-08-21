@@ -8,6 +8,7 @@ Reusable TypeScript libraries for Expo, React Native, and Toss Payments.
 | [`@gj-kit/expo-media`](./expo-media) | Expo and React Native media pipeline utilities. |
 | [`@gj-kit/toss-payments`](./toss-payments) | Type-safe Toss Payments widget and API v2 integration. |
 | [`@gj-kit/toss-payments-nestjs`](./toss-payments-nestjs) | NestJS integration for `@gj-kit/toss-payments`. |
+| [`@gj-kit/toss-payments-postgresql`](./toss-payments-postgresql) | PostgreSQL stores, migrations, and webhook inbox for `@gj-kit/toss-payments`. |
 
 ## Installation
 
@@ -15,6 +16,13 @@ Packages published to npm install normally:
 
 ```bash
 npm install @gj-kit/expo-ui
+```
+
+For a PostgreSQL-backed Toss Payments server, install the core and adapter
+together. Your application owns its chosen PostgreSQL driver:
+
+```bash
+npm install @gj-kit/toss-payments @gj-kit/toss-payments-postgresql pg
 ```
 
 To install from GitHub Packages, authenticate with a GitHub token that has the

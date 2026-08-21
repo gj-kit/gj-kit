@@ -20,6 +20,7 @@ const packages = [
   { directory: 'expo-media', requirePrepack: true, requireProvenance: true },
   { directory: 'toss-payments', requirePrepack: true, requireProvenance: true },
   { directory: 'toss-payments-nestjs', requirePrepack: true, requireProvenance: true },
+  { directory: 'toss-payments-postgresql', requirePrepack: true, requireProvenance: true },
 ];
 
 function collectExportTargets(value, targets) {

@@ -51,6 +51,7 @@
       .card::after { position: absolute; right: -55px; bottom: -68px; width: 220px; height: 220px; border-radius: 50%; content: ""; filter: blur(2px); opacity: .8; }
       .core::after { background: radial-gradient(circle, rgba(77, 231, 255, .6), rgba(77, 231, 255, 0)); }
       .nest::after { background: radial-gradient(circle, rgba(167, 139, 250, .63), rgba(167, 139, 250, 0)); }
+      .postgres::after { background: radial-gradient(circle, rgba(100, 210, 155, .6), rgba(100, 210, 155, 0)); }
       .package { position: relative; z-index: 1; color: var(--cyan); font-size: 13px; font-weight: 800; letter-spacing: .03em; }
       .nest .package { color: #c4b5fd; }
       h2 { position: relative; z-index: 1; margin: 27px 0 13px; font-size: 30px; line-height: 1.1; letter-spacing: -.04em; }
@@ -72,7 +73,7 @@
       <p class="eyebrow">Choose your integration</p>
       <h1>결제는 흐름이고,<br />안전은 기본값이어야 합니다.</h1>
       <p class="lede">토스페이먼츠의 중요한 규칙을 타입과 프레임워크 경계에 새깁니다. 앱 구조에 맞는 시작점을 골라 첫 승인까지 바로 연결하세요.</p>
-      <div class="choice-guide" aria-label="패키지 선택 안내"><b>어떤 앱인가요?</b><span>Next.js·Express·Hono·일반 TypeScript 서버라면 코어 패키지부터, Nest 앱이라면 코어와 NestJS 통합 패키지를 함께 사용합니다.</span></div>
+      <div class="choice-guide" aria-label="패키지 선택 안내"><b>어떤 앱인가요?</b><span>Next.js·Express·Hono·일반 TypeScript 서버라면 코어 패키지부터, Nest 앱이라면 NestJS 통합 패키지를, PostgreSQL 영속화가 필요하면 PostgreSQL 어댑터를 함께 사용합니다.</span></div>
       <section class="grid" aria-label="토스페이먼츠 패키지 선택">
         <a class="card core" href="./toss-payments/">
           <span class="package">@gj-kit/toss-payments</span>
@@ -89,6 +90,14 @@
           <p class="fit">NestJS 10·11 — 코어 패키지와 함께 설치</p>
           <code class="install-hint">pnpm add @gj-kit/toss-payments @gj-kit/toss-payments-nestjs</code>
           <span class="go">NestJS 통합 살펴보기 <span aria-hidden="true">→</span></span>
+        </a>
+        <a class="card postgres" href="https://github.com/gj-kit/gj-kit/tree/main/toss-payments-postgresql" target="_blank" rel="noreferrer">
+          <span class="package">@gj-kit/toss-payments-postgresql</span>
+          <h2>결제 저장소를<br />PostgreSQL에 고정하다.</h2>
+          <p>주문·빌링키·웹훅 dedupe와 inbox, 명시적 마이그레이션을 검증된 저장소 구현으로 연결합니다.</p>
+          <p class="fit">PostgreSQL · NestJS 또는 일반 Node.js 서버</p>
+          <code class="install-hint">pnpm add @gj-kit/toss-payments @gj-kit/toss-payments-postgresql pg</code>
+          <span class="go">PostgreSQL 어댑터 살펴보기 <span aria-hidden="true">↗</span></span>
         </a>
       </section>
       <footer>Open source under the MIT License · Not affiliated with Toss Payments</footer>

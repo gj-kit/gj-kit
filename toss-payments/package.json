@@ -22,32 +22,55 @@
   ],
   "exports": {
     ".": {
-      "types": "./dist/index.d.ts",
-      "import": "./dist/index.js",
-      "require": "./dist/index.cjs"
+      "import": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      },
+      "require": {
+        "types": "./dist/index.d.cts",
+        "default": "./dist/index.cjs"
+      }
     },
     "./server": {
-      "types": "./dist/server.d.ts",
-      "node": {
-        "import": "./dist/server.js",
-        "require": "./dist/server.cjs"
+      "import": {
+        "types": "./dist/server.d.ts",
+        "node": "./dist/server.js"
+      },
+      "require": {
+        "types": "./dist/server.d.cts",
+        "node": "./dist/server.cjs"
       }
     },
     "./webhook": {
-      "types": "./dist/webhook.d.ts",
-      "import": "./dist/webhook.js",
-      "require": "./dist/webhook.cjs"
+      "import": {
+        "types": "./dist/webhook.d.ts",
+        "default": "./dist/webhook.js"
+      },
+      "require": {
+        "types": "./dist/webhook.d.cts",
+        "default": "./dist/webhook.cjs"
+      }
     },
     "./browser": {
-      "types": "./dist/browser.d.ts",
       "browser": "./dist/browser.js",
-      "import": "./dist/browser.js",
-      "require": "./dist/browser.cjs"
+      "import": {
+        "types": "./dist/browser.d.ts",
+        "default": "./dist/browser.js"
+      },
+      "require": {
+        "types": "./dist/browser.d.cts",
+        "default": "./dist/browser.cjs"
+      }
     },
     "./testing": {
-      "types": "./dist/testing.d.ts",
-      "import": "./dist/testing.js",
-      "require": "./dist/testing.cjs"
+      "import": {
+        "types": "./dist/testing.d.ts",
+        "default": "./dist/testing.js"
+      },
+      "require": {
+        "types": "./dist/testing.d.cts",
+        "default": "./dist/testing.cjs"
+      }
     }
   },
   "scripts": {

@@ -12,6 +12,7 @@ export type {
 } from './nestjs/module';
 // 주입부 타이핑 편의 — 집합체 타입을 루트 엔트리 없이도 가져올 수 있게 재export
 export type { TossPaymentsPostgres, TossPaymentsPostgresOptions } from './factory';
+export type { PgBillingKeyMutation, PgBillingKeySnapshot, PgBillingKeyStore } from './stores/billing-keys';
 // Nest forRoot/forRootAsync 옵션에 필요한 보호기 타입도 루트 엔트리 없이 가져올 수 있게 재export
 export type {
   PgSensitiveStoreOptions,

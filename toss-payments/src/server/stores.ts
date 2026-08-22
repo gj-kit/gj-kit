@@ -71,9 +71,47 @@ export interface BillingKeyRecord {
     | null;
 }
 
+/**
+ * 현재 billing key를 조건부로 제거하는 요청.
+ *
+ * 두 raw 문자열을 별도 인자로 받지 않고 한 객체로 묶어, 예전의
+ * `delete(customerKey)` 구현이 TypeScript 구조 타이핑에서 우연히 호환되는 일을 막는다.
+ * 이 객체는 billing key 영속화 경계에서만 만들고 로그/telemetry에 통째로 남기지 않는다.
+ */
+export interface BillingKeyDeleteRequest {
+  readonly customerKey: BillingKeyRecord['customerKey'];
+  readonly expectedBillingKey: BillingKeyRecord['billingKey'];
+}
+
 /** 저장소 필수 주입 — 토스에 빌링키 조회 API가 없다: 저장이 유일한 보관 수단. */
 export interface BillingKeyStore {
-  save(record: BillingKeyRecord): Promise<void>;
+  /**
+   * record를 upsert한다. `operationId`는 발급 뒤 별도 projection을 같은 customerKey
+   * fence 안에서 마무리해야 하는 소비자를 위한 비밀이 아닌 상관관계 식별자다.
+   *
+   * 구현은 값을 로그에 남기지 말고, 지원한다면 현재 row와 원자적으로 대조할 수 있는
+   * fingerprint/receipt만 보관해야 한다. 일반 save만 필요한 소비자는 생략할 수 있다.
+   */
+  save(record: BillingKeyRecord, options?: BillingKeySaveOptions): Promise<void>;
   find(customerKey: CustomerKey): Promise<BillingKeyRecord | null>;
-  delete(customerKey: CustomerKey): Promise<void>;
+  /**
+   * 현재 저장된 billing key가 `expectedBillingKey`일 때만 원자적으로 삭제한다.
+   *
+   * `false`는 행이 없거나 더 새 키로 교체되어 아무 것도 지우지 않았다는 안전한 결과다.
+   * `find()` 후 일반 delete로 흉내 내면 재발급과 경합해 새 키를 지울 수 있으므로,
+   * 프로덕션 구현은 하나의 DB 조건문/CAS 또는 잠금 transaction으로 비교와 삭제를
+   * 함께 수행해야 한다. 저장소 실패만 throw한다.
+   */
+  delete(request: BillingKeyDeleteRequest): Promise<boolean>;
+}
+
+/**
+ * billing key 저장의 비밀 아닌 lifecycle 상관관계 값.
+ *
+ * `operationId`는 동일 customerKey의 서로 다른 발급 시도마다 달라야 한다. core
+ * `billing.issue`는 `CallOptions.idempotencyKey`가 있으면 이 값으로 자동 전달한다.
+ * raw billing key, auth key, 카드/계좌 정보는 절대 넣지 않는다.
+ */
+export interface BillingKeySaveOptions {
+  readonly operationId?: string;
 }

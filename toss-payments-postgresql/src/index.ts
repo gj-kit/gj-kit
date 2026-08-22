@@ -48,6 +48,7 @@ export { createPgOrderStore } from './stores/orders';
 export type { PgStoreOptions } from './stores/orders';
 export { createPgDepositSecretStore } from './stores/deposit-secrets';
 export { createPgBillingKeyStore } from './stores/billing-keys';
+export type { PgBillingKeyMutation, PgBillingKeySnapshot, PgBillingKeyStore } from './stores/billing-keys';
 export { createPgCancelRetryStore } from './stores/cancel-retries';
 export { createPgWebhookDedupeStore } from './stores/webhook-dedupe';
 export type { PgWebhookDedupeStoreOptions } from './stores/webhook-dedupe';

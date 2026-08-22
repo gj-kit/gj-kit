@@ -15,6 +15,8 @@ import { advisoryLockKey, createTossPaymentsPostgres, migrate, renderMigrationSq
 import type {
   CleanupResult,
   MigrationResult,
+  PgBillingKeyStore,
+  PgBillingKeyMutation,
   SensitiveValueProtector,
   SqlClient,
   SqlExecutor,
@@ -63,6 +65,13 @@ describe('§5 createTossPaymentsPostgres — 옵션 표면', () => {
     const pg = createTossPaymentsPostgres({ sql, sensitiveValueProtector });
     expectTypeOf(pg.migrate).toEqualTypeOf<() => Promise<MigrationResult>>();
     expectTypeOf(pg.cleanup).toEqualTypeOf<() => Promise<CleanupResult>>();
+    expectTypeOf(pg.billingKeys).toEqualTypeOf<PgBillingKeyStore>();
+    void pg.billingKeys.withMutationLock(
+      forge<import('@gj-kit/toss-payments/server').BillingKeyRecord['customerKey']>(),
+      (mutation) => {
+        expectTypeOf(mutation).toEqualTypeOf<PgBillingKeyMutation>();
+      },
+    );
   });
 });
 

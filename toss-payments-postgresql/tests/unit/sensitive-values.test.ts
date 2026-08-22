@@ -32,12 +32,14 @@ describe('민감 스토어 — 보호기와 AAD context', () => {
 
     await store.save(record);
 
-    const stored = fake.calls[0]?.params;
+    // BillingKeyStore의 SqlClient save는 customerKey advisory lock + transaction 안에서
+    // 실행된다. 실제 INSERT는 BEGIN/lock/SELECT FOR UPDATE 뒤의 네 번째 query다.
+    const stored = fake.calls[3]?.params;
     expect(stored?.[1]).toBe('sealed-1');
     expect(String(stored?.[1])).not.toContain(record.billingKey);
     expect(String(stored?.[1])).not.toContain('100012345678');
     // card/transfers JSONB에도 raw metadata를 복사하지 않는다.
-    expect(stored?.slice(4)).toEqual([null, null]);
+    expect(stored?.slice(4)).toEqual([null, null, null]);
     expect(probe.calls).toEqual([
       {
         operation: 'encrypt',

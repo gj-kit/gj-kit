@@ -72,12 +72,21 @@ describe('memoryBillingKeyStore', () => {
     expect(await store.find(orThrow(customerKey('cust-none')))).toBeNull();
   });
 
-  it('delete 후에는 find가 null — 재발급 플로우 시뮬레이션 가능', async () => {
+  it('현재 billingKey와 일치하는 delete 후에는 find가 null', async () => {
     const store = memoryBillingKeyStore();
     const ck = orThrow(customerKey('cust-0001'));
-    await store.save(billingRecord('cust-0001'));
-    await store.delete(ck);
+    const record = billingRecord('cust-0001');
+    await store.save(record);
+    expect(await store.delete({ customerKey: ck, expectedBillingKey: record.billingKey })).toBe(true);
     expect(await store.find(ck)).toBeNull();
+  });
+
+  it('오래된 billingKey로 delete하면 재발급된 현재 행을 보존한다', async () => {
+    const store = memoryBillingKeyStore();
+    const ck = orThrow(customerKey('cust-0001'));
+    await store.save({ ...billingRecord('cust-0001'), billingKey: 'bill_new' });
+    expect(await store.delete({ customerKey: ck, expectedBillingKey: 'bill_old' })).toBe(false);
+    expect((await store.find(ck))?.billingKey).toBe('bill_new');
   });
 
   it('같은 customerKey 재저장은 upsert', async () => {

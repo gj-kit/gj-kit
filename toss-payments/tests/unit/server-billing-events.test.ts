@@ -34,15 +34,19 @@ function apiClient(fetchImpl: typeof fetch) {
   return createTossClient(orThrow(parseApiSecretKey('test_sk_abcdef')), { fetch: fetchImpl });
 }
 
-function memoryBillingStore(): BillingKeyStore {
+function memoryBillingStore(): BillingKeyStore & { readonly records: Map<string, BillingKeyRecord> } {
   const map = new Map<string, BillingKeyRecord>();
   return {
+    records: map,
     save: async (record) => {
       map.set(record.customerKey, record);
     },
     find: async (ck) => map.get(ck) ?? null,
-    delete: async (ck) => {
-      map.delete(ck);
+    delete: async ({ customerKey, expectedBillingKey }) => {
+      const current = map.get(customerKey);
+      if (current === undefined || current.billingKey !== expectedBillingKey) return false;
+      map.delete(customerKey);
+      return true;
     },
   };
 }
@@ -139,7 +143,7 @@ describe('§3.3 billing 이벤트 — Result 확정 후 발화, billingKey 미�
     expect(seen).toEqual(['failed:NOT_MATCHES_CUSTOMER_KEY']);
   });
 
-  it('revoke Ok → billing.revoked(customerKey만)', async () => {
+  it('현재 key revoke Ok → billing.revoked(customerKey만)', async () => {
     const { fetch } = sequencedFetch([
       { status: 200, body: issueResponse },
       { status: 200, body: {} },
@@ -149,13 +153,46 @@ describe('§3.3 billing 이벤트 — Result 확정 후 발화, billingKey 미�
     events.on('billing.revoked', (e) => {
       revoked.push(e);
     });
-    const flow = createBillingFlow(apiClient(fetch), memoryBillingStore(), { events });
+    const store = memoryBillingStore();
+    const flow = createBillingFlow(apiClient(fetch), store, { events });
 
     const profile = orThrow(await flow.issue(receivedAuth()));
-    expect(isOk(await flow.revoke(profile))).toBe(true);
+    const result = await flow.revoke(profile);
+    expect(isOk(result)).toBe(true);
+    if (isOk(result)) expect(result.value.currentStoredKeyDeleted).toBe(true);
     expect(revoked).toHaveLength(1);
     expect((revoked[0] as { customerKey: string }).customerKey).toBe(CK);
     expect(JSON.stringify(revoked)).not.toContain(BILLING_KEY);
+  });
+
+  it('stale profile revoke의 false 결과는 billing.revoked를 발화하지 않는다', async () => {
+    const { fetch } = sequencedFetch([
+      { status: 200, body: issueResponse },
+      { status: 200, body: {} },
+    ]);
+    const events = createTossEvents();
+    const revoked: unknown[] = [];
+    events.on('billing.revoked', (event) => {
+      revoked.push(event);
+    });
+    const store = memoryBillingStore();
+    const flow = createBillingFlow(apiClient(fetch), store, { events });
+    const staleProfile = orThrow(await flow.issue(receivedAuth()));
+    await store.save({
+      customerKey: CK,
+      billingKey: 'bill_reissued_newer',
+      method: '카드',
+      issuedAt: '2026-08-10T12:00:00+09:00',
+      card: { issuerCode: '21', number: '941000******890', cardType: '신용', ownerType: '개인' },
+      transfers: null,
+    });
+
+    const result = await flow.revoke(staleProfile);
+
+    expect(isOk(result)).toBe(true);
+    if (isOk(result)) expect(result.value.currentStoredKeyDeleted).toBe(false);
+    expect(revoked).toEqual([]);
+    expect(store.records.get(CK)?.billingKey).toBe('bill_reissued_newer');
   });
 
   it('events 미주입 = 발행 지점 no-op(현행 동작 동일)', async () => {

@@ -1,5 +1,6 @@
 /**
- * §8 type — 스토어 6종 구현이 코어 계약 인터페이스에 그대로 대입된다 (설계 §3·§5).
+ * §8 type — 스토어 6종 구현이 코어 계약에 대입되고, PostgreSQL 고유 hardening 표면도
+ * 타입으로 고정한다 (설계 §3·§5).
  *
  * 이 패키지는 코어 공개 계약을 **구현만** 한다(재정의·확장 금지 — 설계 §0 불변 제약).
  * 반환 타입을 코어 인터페이스로 회귀 고정해 두면, 코어 마이너 업데이트로 계약이
@@ -9,6 +10,9 @@ import { describe, expectTypeOf, it } from 'vitest';
 
 import type { AuditEntry, AuditSink } from '@gj-kit/toss-payments';
 import type {
+  BillingKeyDeleteRequest,
+  BillingKeyRecord,
+  BillingKeySaveOptions,
   BillingKeyStore,
   CancelRetryStore,
   DepositSecretStore,
@@ -34,6 +38,9 @@ import {
 } from '../../src/index';
 import type {
   PgAuditSink,
+  PgBillingKeyStore,
+  PgBillingKeyMutation,
+  PgBillingKeySnapshot,
   PgSensitiveStoreOptions,
   SensitiveValueProtector,
   SqlClient,
@@ -49,7 +56,7 @@ const sql = forge<SqlClient>();
 const sensitiveValueProtector = forge<SensitiveValueProtector>();
 const sensitiveStoreOptions: PgSensitiveStoreOptions = { sensitiveValueProtector };
 
-describe('§3 개별 팩토리 — 반환 타입이 코어 계약 그 자체다', () => {
+describe('§3 개별 팩토리 — 코어 계약 + PostgreSQL 고유 hardening 표면', () => {
   it('스토어 5종 + AuditSink가 코어 인터페이스에 어노테이션 대입된다', () => {
     // 어노테이션 대입 = 구조 호환의 컴파일 증거("구현만 한다" 계약의 회귀 고정)
     const orders: OrderStore = createPgOrderStore(sql);
@@ -60,18 +67,52 @@ describe('§3 개별 팩토리 — 반환 타입이 코어 계약 그 자체다'
     const audit: AuditSink = createPgAuditSink(sql);
     void [orders, depositSecrets, billingKeys, cancelRetries, webhookDedupe, audit];
 
-    // 반환 타입이 코어 인터페이스와 **동일**하다 — 확장 표면이 새지 않는다는 증거
+    // 일반 스토어는 코어 계약과 동일하다. BillingKeyStore는 raw key 조건부 삭제와
+    // lifecycle fingerprint를 안전하게 구현하려 SqlClient에서만 PostgreSQL 확장을 제공한다.
     expectTypeOf(createPgOrderStore).returns.toEqualTypeOf<OrderStore>();
     expectTypeOf(createPgDepositSecretStore).returns.toEqualTypeOf<DepositSecretStore>();
-    expectTypeOf(createPgBillingKeyStore).returns.toEqualTypeOf<BillingKeyStore>();
     expectTypeOf(createPgCancelRetryStore).returns.toEqualTypeOf<CancelRetryStore>();
     expectTypeOf(createPgWebhookDedupeStore).returns.toEqualTypeOf<WebhookDedupeStore>();
+
+    const pgBillingKeys: PgBillingKeyStore = createPgBillingKeyStore(sql, sensitiveStoreOptions);
+    expectTypeOf(pgBillingKeys).toExtend<BillingKeyStore>();
+    expectTypeOf(pgBillingKeys.replaceAndGetPrevious).toEqualTypeOf<
+      (
+        record: import('@gj-kit/toss-payments/server').BillingKeyRecord,
+        options?: import('@gj-kit/toss-payments/server').BillingKeySaveOptions,
+      ) => Promise<
+        PgBillingKeySnapshot | null
+      >
+    >();
+    expectTypeOf(pgBillingKeys.delete).returns.toEqualTypeOf<Promise<boolean>>();
+    expectTypeOf(pgBillingKeys.deleteIfBillingKeyMatches).returns.toEqualTypeOf<Promise<boolean>>();
+    expectTypeOf(pgBillingKeys.replaceIfBillingKeyMatches).returns.toEqualTypeOf<Promise<boolean>>();
+
+    const record = forge<BillingKeyRecord>();
+    const deleteRequest = forge<BillingKeyDeleteRequest>();
+    const saveOptions = forge<BillingKeySaveOptions>();
+    void pgBillingKeys.delete(deleteRequest);
+    void pgBillingKeys.deleteIfBillingKeyMatches(deleteRequest);
+    // @ts-expect-error old positional delete must not let an adapter omit expectedBillingKey
+    void pgBillingKeys.delete(record.customerKey, record.billingKey);
+    void pgBillingKeys.withMutationLock(record.customerKey, async (mutation) => {
+      expectTypeOf(mutation).toEqualTypeOf<PgBillingKeyMutation>();
+      expectTypeOf(mutation.customerKey).toEqualTypeOf<
+        import('@gj-kit/toss-payments/server').BillingKeyRecord['customerKey']
+      >();
+      const previous = await mutation.replaceAndGetPrevious(record, saveOptions);
+      await mutation.replaceIfBillingKeyMatches(record.billingKey, previous);
+      await mutation.save(record, saveOptions);
+      expectTypeOf(mutation.isCurrentOperationId).returns.toEqualTypeOf<Promise<boolean>>();
+      return mutation.deleteIfBillingKeyMatches(record.billingKey);
+    });
   });
 
-  it('스토어는 SqlExecutor로 충분하다 — 민감 스토어는 별도 required protector를 받는다', () => {
+  it('일반 스토어는 SqlExecutor로 충분하지만 billing store는 SqlClient가 필수다', () => {
     const executor = forge<SqlExecutor>();
     void createPgOrderStore(executor);
     void createPgDepositSecretStore(executor, sensitiveStoreOptions);
+    // @ts-expect-error protected raw-key compare/delete + callback fence는 단일 connection transaction이 필요하다
     void createPgBillingKeyStore(executor, sensitiveStoreOptions);
     void createPgCancelRetryStore(executor, sensitiveStoreOptions);
     void createPgWebhookDedupeStore(executor);

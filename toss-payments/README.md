@@ -73,9 +73,11 @@ const toss = createTossPayments({
     getSecret: (id) => db.deposits.secretOf(id),
   },
   billingKeys: {                               // billing 플로우 배선 — 미지정 시 kit에 billing 부재
-    save: (r) => db.billingKeys.upsert(r),
+    save: (r, options) => db.billingKeys.upsert(r, options), // operationId fence를 지원하면 반드시 전달
     find: (ck) => db.billingKeys.find(ck),
-    delete: (ck) => db.billingKeys.remove(ck),
+    // 반드시 한 SQL CAS/transaction: find 후 remove를 따로 하면 재발급된 키를 지울 수 있다.
+    delete: ({ customerKey, expectedBillingKey }) =>
+      db.billingKeys.deleteIfCurrentKey(customerKey, expectedBillingKey),
   },
   cancelRetries: {                             // exact body는 반드시 암호화 at-rest 저장
     save: (record) => db.cancelRetries.saveEncrypted(record),
@@ -293,9 +295,10 @@ import { createTossPayments, parseApiSecretKey } from '@gj-kit/toss-payments/ser
 const strict = createTossPayments({
   secretKey: orThrow(parseApiSecretKey(process.env.TOSS_SECRET_KEY!)),
   billingKeys: {
-    save: (r) => db.billingKeys.upsert(r),
+    save: (r, options) => db.billingKeys.upsert(r, options),
     find: (ck) => db.billingKeys.find(ck),
-    delete: (ck) => db.billingKeys.remove(ck),
+    delete: ({ customerKey, expectedBillingKey }) =>
+      db.billingKeys.deleteIfCurrentKey(customerKey, expectedBillingKey),
   },
 });
 
@@ -750,9 +753,11 @@ import {
 } from '@gj-kit/toss-payments/server';
 
 const billingFlow = createBillingFlow(client, {              // client는 API 시크릿 키('api') 클라이언트만
-  save: (r) => db.billingKeys.upsert(r),                     // 저장이 유일한 보관 수단 — 조회 API 없음
+  save: (r, options) => db.billingKeys.upsert(r, options),   // 저장이 유일한 보관 수단 — operationId도 전달
   find: (ck) => db.billingKeys.find(ck),
-  delete: (ck) => db.billingKeys.remove(ck),
+  // 조건부 delete를 DB 안에서 끝낸다. find() 뒤 remove() 두 호출은 TOCTOU 취약점이다.
+  delete: ({ customerKey, expectedBillingKey }) =>
+    db.billingKeys.deleteIfCurrentKey(customerKey, expectedBillingKey),
 });
 
 app.get('/billing/callback', async (c) => {
@@ -802,8 +807,11 @@ async function chargeMonthly(rawCk: string, amount: number) {
 >
 > - **`NOT_MATCHES_CUSTOMER_KEY`(실측 400)** — 콜백 쿼리로 돌아온 customerKey는 위변조 가능한 값입니다. `confirmPendingAuth`가 세션에 저장된 값과 대조를 통과해야만 발급 가능한 `AuthKeyReceived`가 됩니다. 승인 단계에서도 `BillingOrder`에는 customerKey 필드 자체가 없고 `BillingProfile` 봉인 쌍으로만 승인하므로, 다른 고객 키로 승인하는 사고가 구조적으로 불가능합니다.
 > - **토스에는 빌링키 조회 API가 없다** — 저장 실패 = 영구 유실입니다. 그래서 `createBillingFlow`는 `BillingKeyStore` 없이 생성할 수 없고, `issue`는 `store.save` 성공 후에만 Ok이며, 저장 실패 시 발급된 record를 에러에 동봉해 수동 복구 여지를 남깁니다.
+> - **삭제는 현재 키 조건부 CAS입니다** — `BillingKeyStore.delete({ customerKey, expectedBillingKey })`는 저장소 안에서 비교와 삭제를 원자적으로 끝내 `stale BillingProfile`이 재발급된 더 새 키를 지우지 않게 해야 합니다. 필수 request 객체라 예전 `delete(customerKey)` 구현이 구조적으로 호환되는 실수도 막습니다. `billing.revoke()`의 Ok 값 `{ currentStoredKeyDeleted }`가 `false`이면 원격의 오래된 키 처리는 성공했어도 현재 로컬 credential은 건드리지 않았다는 뜻입니다. 이때 `billing.revoked` 이벤트도 발행되지 않습니다.
 > - **빌링키 갱신 API도 없다** — `refresh` 류 메서드는 의도적으로 없습니다. `ALREADY_REMOVED_BILLING_KEY`를 만나면 revoke 후 새 인증부터 다시입니다.
 > - **billingKey는 어디에도 노출되지 않는다** — `BillingProfile`의 공개 필드·JSON 직렬화에 billingKey가 없습니다. 스프레드/직렬화로 봉인이 소실된 복제본은 `approve`에서 `profile-detached` Err — `billing.load(customerKey)`로 재수화하세요.
+
+발급 뒤 앱 자신의 subscription/intent projection을 별도 DB에 완료해야 한다면, `billing.issue(..., { idempotencyKey })`가 같은 값을 `store.save(record, { operationId })`로 전달합니다. 이것은 **post-persistence fence용 상관관계 값**이며 provider 호출 순서를 직렬화하지는 않습니다. 해당 기능을 지원하는 저장소에서는 고유한 intent-derived idempotency key로 현재 operation을 잠금 transaction 안에서 다시 확인하고, 불일치면 finalization을 fail-closed 하세요. raw billing/auth key·카드/계좌 정보는 `operationId`에 넣지 않습니다.
 
 ### 4.4 웹훅 수신: raw body → verify → prefetched
 

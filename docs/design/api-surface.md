@@ -521,9 +521,25 @@ export interface AuthKeyReceived extends Brand<'AuthKeyReceived'> {
 
 /** 저장소 필수 주입 — 토스에 빌링키 조회 API가 없다: 저장 실패 = 복구 불가 */
 export interface BillingKeyStore {
-  save(record: BillingKeyRecord): Promise<void>;
+  /** issue의 idempotencyKey는 operationId로 자동 전달된다. raw credential을 넣지 말 것. */
+  save(record: BillingKeyRecord, options?: BillingKeySaveOptions): Promise<void>;
   find(customerKey: CustomerKey): Promise<BillingKeyRecord | null>;
-  delete(customerKey: CustomerKey): Promise<void>;
+  /**
+   * 현재 key가 expected와 같을 때만 DB CAS/transaction 안에서 삭제한다.
+   * false = missing/stale이며, find 후 delete 두 호출 구현은 금지.
+   */
+  delete(request: BillingKeyDeleteRequest): Promise<boolean>;
+}
+
+/** Required object shape prevents a legacy delete(customerKey) implementation from structurally matching. */
+export interface BillingKeyDeleteRequest {
+  readonly customerKey: BillingKeyRecord['customerKey'];
+  readonly expectedBillingKey: BillingKeyRecord['billingKey'];
+}
+
+export interface BillingKeySaveOptions {
+  /** 고객별 발급 시도마다 고유한, 비밀 아닌 lifecycle correlation id. */
+  readonly operationId?: string;
 }
 /** 영속화 경계 — 여기만 raw 쌍이 보인다. billingKey와 customerKey를 같은 로그에 남기지 말 것(TSDoc 경고) */
 export interface BillingKeyRecord {
@@ -560,8 +576,15 @@ export interface BillingFlowBase<E extends Env> {
   /** BillingOrder에는 customerKey 필드가 없다 — 봉인 쌍으로만 승인 → NOT_MATCHES_CUSTOMER_KEY 구조적 방지.
    *  봉인이 소실된 profile(스프레드 복제본 등)은 런타임 Err('profile-detached') — billing.load로 재수화 안내. */
   approve(profile: BillingProfile, order: BillingOrder, options?: CallOptions<E>): Promise<Result<BillingPayment, BillingApproveError>>;
-  /** DELETE /v1/billing/{billingKey} + store.delete. 갱신 API는 존재하지 않는다 — refresh류 메서드 없음. 재발급 = 새 인증부터 */
-  revoke(profile: BillingProfile, options?: CallOptions<E>): Promise<Result<void, RevokeBillingKeyError>>;
+  /**
+   * DELETE /v1/billing/{billingKey} + 조건부 store.delete.
+   * false면 remote stale key 처리는 성공했지만 현재 local credential은 건드리지 않았다.
+   */
+  revoke(profile: BillingProfile, options?: CallOptions<E>): Promise<Result<RevokeBillingKeyOutcome, RevokeBillingKeyError>>;
+}
+
+export interface RevokeBillingKeyOutcome {
+  readonly currentStoredKeyDeleted: boolean;
 }
 
 /** billingKey는 공개 필드·JSON 직렬화·열거 어디에도 노출되지 않는다(비공개 심볼, 비열거).
@@ -624,9 +647,11 @@ import { isErr, customerKey, orderName, generateOrderId, generateIdempotencyKey 
 import { parseBillingAuthCallback, confirmPendingAuth, createBillingFlow } from '@gj-kit/toss-payments/server';
 
 const billing = createBillingFlow(client, {
-  save: (r) => db.billingKeys.upsert(r),          // 저장이 유일한 보관 수단 (조회 API 없음)
+  save: (r, options) => db.billingKeys.upsert(r, options), // 저장이 유일한 보관 수단; operationId도 전달
   find: (ck) => db.billingKeys.find(ck),
-  delete: (ck) => db.billingKeys.remove(ck),
+  // 반드시 DB 한 문/CAS 또는 잠금 transaction — stale profile이 새 키를 지우지 않게 한다.
+  delete: ({ customerKey, expectedBillingKey }) =>
+    db.billingKeys.deleteIfCurrentKey(customerKey, expectedBillingKey),
 });
 
 // (A) successUrl 콜백: 파싱 → 세션 대조 → 발급(저장까지 보장)

@@ -7,6 +7,7 @@
  * 실 DB에서 의도대로 동작하는가.
  */
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { createHash } from 'node:crypto';
 
 import type { AuditEntry } from '@gj-kit/toss-payments';
 import { generateCustomerKey, generateOrderId } from '@gj-kit/toss-payments/server';
@@ -146,20 +147,26 @@ describe('BillingKeyStore', () => {
       },
       transfers: null,
     };
-    await pg.billingKeys.save(cardRecord);
+    const operationId = 'integration-billing-intent-card';
+    await pg.billingKeys.save(cardRecord, { operationId });
     const persisted = await ctx.pool.query(
-      `SELECT billing_key, card, transfers FROM "${ctx.schema}".billing_keys WHERE customer_key = $1`,
+      `SELECT billing_key, card, transfers, operation_fingerprint FROM "${ctx.schema}".billing_keys WHERE customer_key = $1`,
       [customerKey],
     );
     const persistedRow = persisted.rows[0] as {
       billing_key: string;
       card: unknown;
       transfers: unknown;
+      operation_fingerprint: string | null;
     };
     expect(persistedRow.billing_key).not.toContain(cardRecord.billingKey);
     expect(persistedRow.billing_key).not.toContain('12345678****789*');
     expect(persistedRow.card).toBeNull();
     expect(persistedRow.transfers).toBeNull();
+    expect(persistedRow.operation_fingerprint).toBe(
+      createHash('sha256').update(operationId).digest('hex'),
+    );
+    expect(persistedRow.operation_fingerprint).not.toContain(operationId);
     expect(await pg.billingKeys.find(customerKey)).toEqual(cardRecord);
 
     // 재발급 시나리오 — 최신 발급본 유지(upsert), jsonb null↔비null 양방향 왕복
@@ -175,7 +182,9 @@ describe('BillingKeyStore', () => {
     expect(await pg.billingKeys.find(customerKey)).toEqual(transferRecord);
     expect(await countRows(ctx.pool, ctx.schema, 'billing_keys')).toBe(1);
 
-    await pg.billingKeys.delete(customerKey);
+    await expect(
+      pg.billingKeys.delete({ customerKey, expectedBillingKey: transferRecord.billingKey }),
+    ).resolves.toBe(true);
     expect(await pg.billingKeys.find(customerKey)).toBeNull();
   });
 
@@ -199,7 +208,9 @@ describe('BillingKeyStore', () => {
     await pg.billingKeys.save(record);
     const found = await pg.billingKeys.find(customerKey);
     expect(found?.card?.number).toBe('NUL\u0000중\ud800간');
-    await pg.billingKeys.delete(customerKey);
+    await expect(
+      pg.billingKeys.delete({ customerKey, expectedBillingKey: record.billingKey }),
+    ).resolves.toBe(true);
   });
 });
 

@@ -1,5 +1,26 @@
 # @gj-kit/toss-payments
 
+## 0.5.0
+
+### Minor Changes
+
+- Harden billing-key lifecycle persistence against stale revocation and concurrent
+  projection races. `BillingKeyStore.delete` now requires the atomic request
+  `{ customerKey, expectedBillingKey }` and `billing.revoke` returns the explicit
+  `{ currentStoredKeyDeleted }` outcome, emitting `billing.revoked` only when the
+  current stored credential was removed. `save` accepts an optional nonsecret
+  `operationId` correlation value.
+
+  PostgreSQL billing-key storage now requires `SqlClient`, encrypts the full
+  record through the required protector, persists only a SHA-256 operation
+  fingerprint, and adds migration `0002_billing_key_operation_fingerprint`.
+  `PgBillingKeyStore` provides locked compare/delete, compare/replace, opaque
+  previous snapshots, and `withMutationLock` / `isCurrentOperationId` for a
+  customer-scoped host projection fence. The fence does not serialize provider
+  network calls; applications still need their own durable pre-provider gate.
+
+  Update the Nest peer range so applications can consume core 0.5.
+
 ## 0.4.1
 
 ### Patch Changes

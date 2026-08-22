@@ -150,7 +150,10 @@ describe('§5 migrate 위임', () => {
 
     const result = await pg.migrate();
 
-    expect(result).toEqual({ applied: ['0001_init'], skipped: [] });
+    expect(result).toEqual({
+      applied: ['0001_init', '0002_billing_key_operation_fingerprint'],
+      skipped: [],
+    });
     expect(fake.connections).toBe(1);
   });
 });

@@ -7,7 +7,6 @@
  */
 import type { AuditSink } from '@gj-kit/toss-payments';
 import type {
-  BillingKeyStore,
   CancelRetryStore,
   DepositSecretStore,
   OrderStore,
@@ -22,6 +21,7 @@ import type { SensitiveValueProtector } from './sensitive-values';
 import type { SqlClient } from './sql';
 import { createPgAuditSink } from './stores/audit';
 import { createPgBillingKeyStore } from './stores/billing-keys';
+import type { PgBillingKeyStore } from './stores/billing-keys';
 import { createPgCancelRetryStore } from './stores/cancel-retries';
 import { createPgDepositSecretStore } from './stores/deposit-secrets';
 import { createPgOrderStore } from './stores/orders';
@@ -70,7 +70,13 @@ export interface CleanupResult {
 export interface TossPaymentsPostgres {
   readonly orders: OrderStore;
   readonly depositSecrets: DepositSecretStore;
-  readonly billingKeys: BillingKeyStore;
+  /**
+   * 코어 BillingKeyStore + PostgreSQL conditional compare-and-mutate 확장.
+   *
+   * `deleteIfBillingKeyMatches`/`replaceIfBillingKeyMatches`는 stale BILLING_DELETED와
+   * projection 보상 경합에서 무조건 delete/save 대신 사용하는 원자적 API다.
+   */
+  readonly billingKeys: PgBillingKeyStore;
   readonly cancelRetries: CancelRetryStore;
   readonly webhookDedupe: WebhookDedupeStore;
   readonly audit: AuditSink & { flush(): Promise<void> };

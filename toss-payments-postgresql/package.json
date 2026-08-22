@@ -1,6 +1,6 @@
 {
   "name": "@gj-kit/toss-payments-postgresql",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "@gj-kit/toss-payments 저장소 seam의 PostgreSQL 구현 — 테이블·마이그레이션 소유와 단일 문 원자적 dedupe로, 검증 강제 플로우의 영속화를 '설계하는 일'이 아니라 '설정하는 일'로 만든다",
   "homepage": "https://github.com/gj-kit/gj-kit/tree/main/toss-payments-postgresql",
   "repository": {
@@ -53,7 +53,7 @@
     "test:all": "pnpm run test && pnpm run test:types && pnpm run test:integration"
   },
   "peerDependencies": {
-    "@gj-kit/toss-payments": "^0.4.0",
+    "@gj-kit/toss-payments": "^0.5.0",
     "@nestjs/common": "^10 || ^11",
     "reflect-metadata": "^0.1.13 || ^0.2",
     "rxjs": "^7"

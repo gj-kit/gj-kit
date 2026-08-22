@@ -14,7 +14,12 @@ import { createTossPaymentsPostgres } from '../factory';
 import type { TossPaymentsPostgresOptions } from '../factory';
 import { TOSS_PAYMENTS_POSTGRES } from './inject';
 
-/** forRoot 옵션 — 팩토리 옵션 + Nest 모듈 스코프. */
+/**
+ * forRoot 옵션 — 팩토리 옵션 + Nest 모듈 스코프.
+ *
+ * `sensitiveValueProtector`는 팩토리에서 상속한 필수 값이다. Nest 배선도 raw billing
+ * key·deposit secret·cancel retry를 평문 기본값으로 만들 수 없다.
+ */
 export interface TossPaymentsPostgresModuleOptions extends TossPaymentsPostgresOptions {
   /** 기본 true — 영속화 집합체는 전역 싱글턴이 자연스러운 단위다(모듈마다 재조립 금지). */
   readonly global?: boolean;
@@ -25,6 +30,7 @@ export interface TossPaymentsPostgresModuleAsyncOptions {
   readonly imports?: DynamicModule['imports'];
   /** useFactory 파라미터로 주입할 프로바이더 토큰. 예: [ConfigService, PG_POOL] */
   readonly inject?: readonly InjectionToken[];
+  /** 반환값에는 필수 `sensitiveValueProtector`를 포함한다. */
   readonly useFactory: (
     ...deps: readonly any[]
   ) => TossPaymentsPostgresOptions | Promise<TossPaymentsPostgresOptions>;

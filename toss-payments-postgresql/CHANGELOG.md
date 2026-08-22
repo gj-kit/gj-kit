@@ -1,5 +1,20 @@
 # @gj-kit/toss-payments-postgresql
 
+## 0.2.0
+
+### Minor Changes
+
+- **Breaking (0.x minor):** `createTossPaymentsPostgres`, Nest `forRoot`/`forRootAsync`, and the
+  three direct sensitive-store factories now require an async `sensitiveValueProtector`. Billing key
+  records, deposit secrets, and cancel retry records are persisted only through that protector with
+  purpose + record-id context for AEAD AAD binding; there is no raw-storage default. Development-only
+  plaintext requires the explicit `unsafePlaintextSensitiveValueProtector` opt-in.
+
+  Webhook inbox persistence now recursively redacts credential, key, token, password, card, and
+  account fields without mutating the webhook object delivered to handlers. Existing 0.1.x plaintext
+  rows need an explicit export/rewrite cutover (or a development schema reset); `0001_init` remains
+  unchanged.
+
 ## 0.1.1
 
 ### Patch Changes

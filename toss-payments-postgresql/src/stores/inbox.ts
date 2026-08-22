@@ -9,11 +9,10 @@
  * - record 실패 기본 동작은 **삼키고 onRecordError 통지**다(AuditSink 선례 — 관측
  *   계층이 웹훅 가용성을 볼모로 잡지 않는다). `failOnRecordError: true`면 throw →
  *   어댑터 500 → 토스 재전송(inbox를 내구 계약으로 쓰는 소비자용).
- * - 저장 전 이벤트의 모든 깊이 `secret` 키를 마스킹한다 — DEPOSIT_CALLBACK은 코어가
- *   secret을 이미 제거하지만, PAYMENT_STATUS_CHANGED의 data는 코어 Payment 통짜라
- *   가상계좌 결제면 `secret`(과 `raw.secret`)이 실려 온다. 유출된 secret으로 입금
- *   웹훅 위조가 가능하고 이 테이블은 cleanup() 대상이 아니라 무기한 보존되므로,
- *   핸들러에는 원본을 그대로 주되 저장본만 마스킹한다.
+ * - 저장 전 이벤트의 모든 깊이 credential/secret/billingKey/authKey/token/password/card/
+ *   account 계열 키를 마스킹한다 — provider payload는 새 필드와 중첩 raw를 포함할 수
+ *   있고 이 테이블은 cleanup() 대상이 아니라 무기한 보존된다. 핸들러에는 원본을
+ *   그대로 주되 저장본만 별도 객체로 마스킹한다.
  */
 import type { AcceptedWebhook, WebhookHandlers, WebhookMeta } from '@gj-kit/toss-payments/webhook';
 
@@ -52,10 +51,11 @@ ON CONFLICT (dedupe_key) DO UPDATE
         webhook.trust,
         webhook.event.eventType,
         // 이벤트는 순수 데이터다(refetch 클로저는 래퍼(webhook) 쪽에 있다).
-        // redactSecrets: 가상계좌 secret이 무기한 보존 테이블에 평문으로 남지 않게 마스킹.
+        // redactSensitiveValues: credential/secret/key/token/card/account 등이 무기한
+        // 보존 테이블에 평문으로 남지 않게 재귀적으로 마스킹(원본 webhook은 불변).
         // serializeJsonb: jsonb가 거부하는 U+0000·비페어 서로게이트를 정화해
         // poison message(영구 재전송 실패 루프)를 차단한다.
-        serializeJsonb(webhook.event, { redactSecrets: true }),
+        serializeJsonb(webhook.event, { redactSensitiveValues: true }),
       ]);
     },
   };

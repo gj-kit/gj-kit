@@ -13,17 +13,26 @@ import {
   TossPaymentsPostgresModule,
 } from '../../src/nestjs';
 import type { TossPaymentsPostgres } from '../../src/nestjs';
-import type { SqlClient, SqlExecutor, TossPaymentsPostgres as RootAggregate } from '../../src/index';
+import type {
+  SensitiveValueProtector,
+  SqlClient,
+  SqlExecutor,
+  TossPaymentsPostgres as RootAggregate,
+} from '../../src/index';
 
 const forge = <T>(): T => undefined as T; // 타입 테스트 전용 헬퍼
 
 const sql = forge<SqlClient>();
+const sensitiveValueProtector = forge<SensitiveValueProtector>();
 
 describe('§7 forRoot — 팩토리 옵션 + Nest 모듈 스코프', () => {
   it('정상 경로가 DynamicModule로 컴파일된다', () => {
-    expectTypeOf(TossPaymentsPostgresModule.forRoot({ sql })).toEqualTypeOf<DynamicModule>();
+    expectTypeOf(
+      TossPaymentsPostgresModule.forRoot({ sql, sensitiveValueProtector }),
+    ).toEqualTypeOf<DynamicModule>();
     void TossPaymentsPostgresModule.forRoot({
       sql,
+      sensitiveValueProtector,
       schema: 'payments',
       dedupe: { leaseSeconds: 30 },
       retention: { cancelRetryDays: 15 },
@@ -34,21 +43,25 @@ describe('§7 forRoot — 팩토리 옵션 + Nest 모듈 스코프', () => {
   it('오용 = 컴파일 에러', () => {
     // @ts-expect-error sql 누락 — SqlClient 없이는 모듈 조립이 성립하지 않는다
     TossPaymentsPostgresModule.forRoot({});
+    // @ts-expect-error protector 누락 — Nest 경로도 raw fallback이 없다
+    TossPaymentsPostgresModule.forRoot({ sql });
     // @ts-expect-error global은 boolean
-    TossPaymentsPostgresModule.forRoot({ sql, global: 'yes' });
+    TossPaymentsPostgresModule.forRoot({ sql, sensitiveValueProtector, global: 'yes' });
     // @ts-expect-error 잘못된 옵션 키 — 부팅 시 자동 DDL 옵션 같은 것은 존재하지 않는다(설계 §0)
-    TossPaymentsPostgresModule.forRoot({ sql, migrateOnBoot: true });
+    TossPaymentsPostgresModule.forRoot({ sql, sensitiveValueProtector, migrateOnBoot: true });
   });
 });
 
 describe('§7 forRootAsync — useFactory 반환 계약', () => {
   it('sync/async 반환 모두 TossPaymentsPostgresOptions면 통과한다', () => {
     expectTypeOf(
-      TossPaymentsPostgresModule.forRootAsync({ useFactory: () => ({ sql }) }),
+      TossPaymentsPostgresModule.forRootAsync({
+        useFactory: () => ({ sql, sensitiveValueProtector }),
+      }),
     ).toEqualTypeOf<DynamicModule>();
     void TossPaymentsPostgresModule.forRootAsync({
       inject: ['PG_POOL', TOSS_PAYMENTS_POSTGRES],
-      useFactory: async () => ({ sql, schema: 'payments' }),
+      useFactory: async () => ({ sql, sensitiveValueProtector, schema: 'payments' }),
       global: false,
     });
   });
@@ -59,11 +72,13 @@ describe('§7 forRootAsync — useFactory 반환 계약', () => {
     // @ts-expect-error 반환에 sql 누락
     TossPaymentsPostgresModule.forRootAsync({ useFactory: () => ({}) });
     // @ts-expect-error 반환의 sql이 SqlExecutor — withConnection(migrate 요건) 없는 실행기는 거부
-    TossPaymentsPostgresModule.forRootAsync({ useFactory: () => ({ sql: forge<SqlExecutor>() }) });
+    TossPaymentsPostgresModule.forRootAsync({ useFactory: () => ({ sql: forge<SqlExecutor>(), sensitiveValueProtector }) });
     // @ts-expect-error 옵션이 아닌 값 반환 불가
     TossPaymentsPostgresModule.forRootAsync({ useFactory: () => 42 });
     // @ts-expect-error inject 토큰은 InjectionToken(string | symbol | Type 등) — number 불가
-    TossPaymentsPostgresModule.forRootAsync({ inject: [123], useFactory: () => ({ sql }) });
+    TossPaymentsPostgresModule.forRootAsync({ inject: [123], useFactory: () => ({ sql, sensitiveValueProtector }) });
+    // @ts-expect-error async factory result에도 protector가 필수다
+    TossPaymentsPostgresModule.forRootAsync({ useFactory: () => ({ sql }) });
   });
 });
 

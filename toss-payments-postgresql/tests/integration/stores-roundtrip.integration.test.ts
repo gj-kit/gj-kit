@@ -13,16 +13,45 @@ import { generateCustomerKey, generateOrderId } from '@gj-kit/toss-payments/serv
 import type { BillingKeyRecord, CancelRetryRecord, StoredOrder } from '@gj-kit/toss-payments/server';
 
 import { createTossPaymentsPostgres, isTossPostgresError } from '../../src/index';
-import type { TossPaymentsPostgres } from '../../src/index';
+import type { SensitiveValueContext, SensitiveValueProtector, TossPaymentsPostgres } from '../../src/index';
 import { countRows, createTestContext, dropSchema } from './helpers';
 import type { PgTestContext } from './helpers';
 
 let ctx: PgTestContext;
 let pg: TossPaymentsPostgres;
 
+/** 실 DB에는 평문 대신 opaque string만 들어가는지 확인하는 테스트용 보호기. */
+const protectedValues = new Map<
+  string,
+  { readonly plaintext: string; readonly context: SensitiveValueContext }
+>();
+let protectedSequence = 0;
+const integrationSensitiveValueProtector: SensitiveValueProtector = {
+  async encrypt(plaintext, context) {
+    const ciphertext = `integration-sealed-${++protectedSequence}`;
+    protectedValues.set(ciphertext, { plaintext, context: { ...context } });
+    return ciphertext;
+  },
+  async decrypt(ciphertext, context) {
+    const stored = protectedValues.get(ciphertext);
+    if (
+      stored === undefined ||
+      stored.context.purpose !== context.purpose ||
+      stored.context.recordId !== context.recordId
+    ) {
+      throw new Error('integration test protector context mismatch');
+    }
+    return stored.plaintext;
+  },
+};
+
 beforeAll(async () => {
   ctx = createTestContext();
-  pg = createTossPaymentsPostgres({ sql: ctx.sql, schema: ctx.schema });
+  pg = createTossPaymentsPostgres({
+    sql: ctx.sql,
+    schema: ctx.schema,
+    sensitiveValueProtector: integrationSensitiveValueProtector,
+  });
   await pg.migrate();
 });
 
@@ -83,6 +112,12 @@ describe('DepositSecretStore', () => {
   it('saveSecret → getSecret 왕복 + upsert(재저장이 최신값으로 교체)', async () => {
     const orderId = generateOrderId('dep');
     await pg.depositSecrets.saveSecret(orderId, 'secret-v1');
+    const persisted = await ctx.pool.query(
+      `SELECT secret FROM "${ctx.schema}".deposit_secrets WHERE order_id = $1`,
+      [orderId],
+    );
+    expect((persisted.rows[0] as { secret: string }).secret).not.toContain('secret-v1');
+    expect((persisted.rows[0] as { secret: string }).secret).toMatch(/^integration-sealed-/);
     expect(await pg.depositSecrets.getSecret(orderId)).toBe('secret-v1');
 
     // upsert 시맨틱 계약 — 이중 저장 무해 + 최신값 유지
@@ -112,6 +147,19 @@ describe('BillingKeyStore', () => {
       transfers: null,
     };
     await pg.billingKeys.save(cardRecord);
+    const persisted = await ctx.pool.query(
+      `SELECT billing_key, card, transfers FROM "${ctx.schema}".billing_keys WHERE customer_key = $1`,
+      [customerKey],
+    );
+    const persistedRow = persisted.rows[0] as {
+      billing_key: string;
+      card: unknown;
+      transfers: unknown;
+    };
+    expect(persistedRow.billing_key).not.toContain(cardRecord.billingKey);
+    expect(persistedRow.billing_key).not.toContain('12345678****789*');
+    expect(persistedRow.card).toBeNull();
+    expect(persistedRow.transfers).toBeNull();
     expect(await pg.billingKeys.find(customerKey)).toEqual(cardRecord);
 
     // 재발급 시나리오 — 최신 발급본 유지(upsert), jsonb null↔비null 양방향 왕복
@@ -131,7 +179,7 @@ describe('BillingKeyStore', () => {
     expect(await pg.billingKeys.find(customerKey)).toBeNull();
   });
 
-  it('jsonb가 거부하는 U+0000·비페어 서로게이트가 섞인 card도 저장에 성공한다(U+FFFD 정화) — 저장 실패 = 복구 불가 방지', async () => {
+  it('보호된 text payload는 U+0000·비페어 서로게이트가 섞인 card metadata도 JSONB 정화 없이 정확히 복원한다', async () => {
     const customerKey = generateCustomerKey();
     const record: BillingKeyRecord = {
       customerKey,
@@ -140,7 +188,8 @@ describe('BillingKeyStore', () => {
       issuedAt: '2026-08-20T10:00:00+09:00',
       card: {
         issuerCode: '61',
-        // 실 PostgreSQL jsonb 파서가 정화본을 수용하는지가 이 테스트의 증명 대상이다
+        // billing key record 전체는 text 보호 payload에 들어가므로 jsonb 파서 정화가
+        // body를 바꾸지 않는다. protector가 opaque DB-safe 문자열을 반환하는 것이 전제다.
         number: 'NUL\u0000중\ud800간',
         cardType: '신용',
         ownerType: '개인',
@@ -149,7 +198,7 @@ describe('BillingKeyStore', () => {
     };
     await pg.billingKeys.save(record);
     const found = await pg.billingKeys.find(customerKey);
-    expect(found?.card?.number).toBe('NUL�중�간'); // U+0000·비페어 서로게이트 → U+FFFD 치환본이 왕복된다
+    expect(found?.card?.number).toBe('NUL\u0000중\ud800간');
     await pg.billingKeys.delete(customerKey);
   });
 });
@@ -176,6 +225,16 @@ describe('CancelRetryStore', () => {
       previousBalanceAmount: 15_000,
     };
     await pg.cancelRetries.save(record);
+    const persisted = await ctx.pool.query(
+      `SELECT record_json FROM "${ctx.schema}".cancel_retries WHERE ticket_id = $1`,
+      [record.ticketId],
+    );
+    expect((persisted.rows[0] as { record_json: string }).record_json).not.toContain(
+      '고객 변심',
+    );
+    expect((persisted.rows[0] as { record_json: string }).record_json).toMatch(
+      /^integration-sealed-/,
+    );
     const loaded = await pg.cancelRetries.load(record.ticketId);
     expect(loaded).toEqual(record);
 

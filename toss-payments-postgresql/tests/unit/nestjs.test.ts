@@ -16,8 +16,11 @@ import {
   TossPaymentsPostgresModule,
 } from '../../src/nestjs';
 import type { TossPaymentsPostgres } from '../../src/nestjs';
+import { unsafePlaintextSensitiveValueProtector } from '../../src/sensitive-values';
 import { createFakeSql } from './helpers/fake-sql';
 import type { FakeSql } from './helpers/fake-sql';
+
+const DEVELOPMENT_SENSITIVE_VALUES = { sensitiveValueProtector: unsafePlaintextSensitiveValueProtector } as const;
 
 @Injectable()
 class PaymentsPersistenceService {
@@ -29,7 +32,7 @@ describe('§7 forRoot — 모듈 컴파일과 집합체 주입 해석', () => {
   it('TOSS_PAYMENTS_POSTGRES 토큰으로 집합체가 해석된다(공개 표면 전부 보유)', async () => {
     const fake = createFakeSql();
     const moduleRef = await Test.createTestingModule({
-      imports: [TossPaymentsPostgresModule.forRoot({ sql: fake })],
+      imports: [TossPaymentsPostgresModule.forRoot({ sql: fake, ...DEVELOPMENT_SENSITIVE_VALUES })],
     }).compile();
 
     const pg = moduleRef.get<TossPaymentsPostgres>(TOSS_PAYMENTS_POSTGRES);
@@ -50,7 +53,12 @@ describe('§7 forRoot — 모듈 컴파일과 집합체 주입 해석', () => {
 
   it('@InjectTossPaymentsPostgres() 생성자 주입 — 토큰 해석 값과 동일 인스턴스(useValue 싱글턴)', async () => {
     const moduleRef = await Test.createTestingModule({
-      imports: [TossPaymentsPostgresModule.forRoot({ sql: createFakeSql() })],
+      imports: [
+        TossPaymentsPostgresModule.forRoot({
+          sql: createFakeSql(),
+          ...DEVELOPMENT_SENSITIVE_VALUES,
+        }),
+      ],
       providers: [PaymentsPersistenceService],
     }).compile();
 
@@ -62,7 +70,13 @@ describe('§7 forRoot — 모듈 컴파일과 집합체 주입 해석', () => {
   it('주입된 집합체의 쿼리는 forRoot에 준 SqlClient로 흐른다(schema 옵션 반영)', async () => {
     const fake = createFakeSql();
     const moduleRef = await Test.createTestingModule({
-      imports: [TossPaymentsPostgresModule.forRoot({ sql: fake, schema: 'custom_schema' })],
+      imports: [
+        TossPaymentsPostgresModule.forRoot({
+          sql: fake,
+          ...DEVELOPMENT_SENSITIVE_VALUES,
+          schema: 'custom_schema',
+        }),
+      ],
       providers: [PaymentsPersistenceService],
     }).compile();
 
@@ -79,7 +93,13 @@ describe('§7 forRoot — 모듈 컴파일과 집합체 주입 해석', () => {
     class FeatureModule {}
 
     const moduleRef = await Test.createTestingModule({
-      imports: [TossPaymentsPostgresModule.forRoot({ sql: createFakeSql() }), FeatureModule],
+      imports: [
+        TossPaymentsPostgresModule.forRoot({
+          sql: createFakeSql(),
+          ...DEVELOPMENT_SENSITIVE_VALUES,
+        }),
+        FeatureModule,
+      ],
     }).compile();
 
     expect(moduleRef.get(PaymentsPersistenceService).pg).toBe(
@@ -95,7 +115,11 @@ describe('§7 forRoot — 모듈 컴파일과 집합체 주입 해석', () => {
     await expect(
       Test.createTestingModule({
         imports: [
-          TossPaymentsPostgresModule.forRoot({ sql: createFakeSql(), global: false }),
+          TossPaymentsPostgresModule.forRoot({
+            sql: createFakeSql(),
+            ...DEVELOPMENT_SENSITIVE_VALUES,
+            global: false,
+          }),
           IsolatedModule,
         ],
       }).compile(),
@@ -104,7 +128,11 @@ describe('§7 forRoot — 모듈 컴파일과 집합체 주입 해석', () => {
 
   it('잘못된 옵션은 모듈 조립 시점에 그대로 드러난다(fail-fast — 팩토리 검증 위임)', () => {
     expect(() =>
-      TossPaymentsPostgresModule.forRoot({ sql: createFakeSql(), schema: 'Bad Schema' }),
+      TossPaymentsPostgresModule.forRoot({
+        sql: createFakeSql(),
+        ...DEVELOPMENT_SENSITIVE_VALUES,
+        schema: 'Bad Schema',
+      }),
     ).toThrow(/invalid|허용 형식/);
   });
 });
@@ -126,7 +154,11 @@ describe('§7 forRootAsync — SqlClient를 Nest 프로바이더로 받아 조�
         TossPaymentsPostgresModule.forRootAsync({
           imports: [SqlModule],
           inject: [SQL_CLIENT],
-          useFactory: (sql: FakeSql) => ({ sql, schema: 'async_schema' }),
+          useFactory: (sql: FakeSql) => ({
+            sql,
+            ...DEVELOPMENT_SENSITIVE_VALUES,
+            schema: 'async_schema',
+          }),
         }),
       ],
       providers: [PaymentsPersistenceService],
@@ -143,7 +175,7 @@ describe('§7 forRootAsync — SqlClient를 Nest 프로바이더로 받아 조�
     const moduleRef = await Test.createTestingModule({
       imports: [
         TossPaymentsPostgresModule.forRootAsync({
-          useFactory: async () => ({ sql: createFakeSql() }),
+          useFactory: async () => ({ sql: createFakeSql(), ...DEVELOPMENT_SENSITIVE_VALUES }),
         }),
       ],
     }).compile();
@@ -159,7 +191,9 @@ describe('§7 forRootAsync — SqlClient를 Nest 프로바이더로 받아 조�
 
     const globalRef = await Test.createTestingModule({
       imports: [
-        TossPaymentsPostgresModule.forRootAsync({ useFactory: () => ({ sql: createFakeSql() }) }),
+        TossPaymentsPostgresModule.forRootAsync({
+          useFactory: () => ({ sql: createFakeSql(), ...DEVELOPMENT_SENSITIVE_VALUES }),
+        }),
         FeatureModule,
       ],
     }).compile();
@@ -173,7 +207,7 @@ describe('§7 forRootAsync — SqlClient를 Nest 프로바이더로 받아 조�
       Test.createTestingModule({
         imports: [
           TossPaymentsPostgresModule.forRootAsync({
-            useFactory: () => ({ sql: createFakeSql() }),
+            useFactory: () => ({ sql: createFakeSql(), ...DEVELOPMENT_SENSITIVE_VALUES }),
             global: false,
           }),
           IsolatedModule,

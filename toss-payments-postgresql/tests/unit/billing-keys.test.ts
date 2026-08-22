@@ -10,12 +10,16 @@ import { describe, expect, it } from 'vitest';
 import { isTossPostgresError } from '../../src/errors';
 import { createPgBillingKeyStore } from '../../src/stores/billing-keys';
 import { createFakeSql, norm } from './helpers/fake-sql';
-import { CUSTOMER_KEY, makeBillingKeyRecord } from './helpers/fixtures';
+import {
+  CUSTOMER_KEY,
+  TEST_UNSAFE_SENSITIVE_STORE_OPTIONS,
+  makeBillingKeyRecord,
+} from './helpers/fixtures';
 
 describe('§3.3 save — upsert(customer_key)', () => {
   it('INSERT ... ON CONFLICT (customer_key) DO UPDATE로 최신 발급본을 유지한다', async () => {
     const fake = createFakeSql();
-    const store = createPgBillingKeyStore(fake);
+    const store = createPgBillingKeyStore(fake, TEST_UNSAFE_SENSITIVE_STORE_OPTIONS);
     const record = makeBillingKeyRecord();
 
     await store.save(record);
@@ -25,98 +29,67 @@ describe('§3.3 save — upsert(customer_key)', () => {
     expect(text).toContain('INSERT INTO "toss_payments".billing_keys');
     expect(text).toContain('ON CONFLICT (customer_key) DO UPDATE');
     expect(text).toContain('billing_key = excluded.billing_key');
-    // jsonb 파라미터는 드라이버 중립을 위해 스토어가 직접 직렬화한다
+    // unsafe opt-in 테스트에서는 record JSON이 그대로 보이지만, 실제 protector에서는
+    // 이 자리에 ciphertext가 온다(전용 sensitive-values.test.ts가 암호문 경계를 검증).
     expect(fake.calls[0]?.params).toEqual([
       record.customerKey,
-      record.billingKey,
+      JSON.stringify(record),
       record.method,
       record.issuedAt,
-      JSON.stringify(record.card),
-      null, // transfers null → SQL NULL (JSON 문자열 'null'이 아니다)
+      null,
+      null,
     ]);
   });
 
-  it('card null / transfers 존재 조합도 각각 NULL·직렬화로 보낸다', async () => {
+  it('card/transfers는 보호된 record payload 밖의 JSONB 컬럼에 복사하지 않는다', async () => {
     const fake = createFakeSql();
-    const store = createPgBillingKeyStore(fake);
+    const store = createPgBillingKeyStore(fake, TEST_UNSAFE_SENSITIVE_STORE_OPTIONS);
     const transfers = [{ bankName: '토스뱅크', bankAccountNumber: '100012345678' }];
     const record = makeBillingKeyRecord({ method: '계좌이체', card: null, transfers });
 
     await store.save(record);
 
+    expect(fake.calls[0]?.params?.[1]).toBe(JSON.stringify(record));
     expect(fake.calls[0]?.params?.[4]).toBeNull();
-    expect(fake.calls[0]?.params?.[5]).toBe(JSON.stringify(transfers));
+    expect(fake.calls[0]?.params?.[5]).toBeNull();
   });
 });
 
 describe('§3.3 find — 복원과 null', () => {
   it('행이 없으면 null을 반환한다', async () => {
     const fake = createFakeSql();
-    const store = createPgBillingKeyStore(fake);
+    const store = createPgBillingKeyStore(fake, TEST_UNSAFE_SENSITIVE_STORE_OPTIONS);
 
     await expect(store.find(CUSTOMER_KEY)).resolves.toBeNull();
     expect(fake.calls[0]?.params).toEqual([CUSTOMER_KEY]);
   });
 
-  it('pg 스타일(jsonb → 객체) 행을 BillingKeyRecord로 복원한다 — card/transfers 왕복', async () => {
+  it('보호된 JSON payload를 BillingKeyRecord로 복원한다 — card/transfers까지 같은 경계', async () => {
     const fake = createFakeSql();
     const record = makeBillingKeyRecord();
     fake.enqueueRows([
-      {
-        billing_key: record.billingKey,
-        method: record.method,
-        issued_at: record.issuedAt,
-        card: record.card, // pg는 jsonb를 파싱된 객체로 내려준다
-        transfers: null,
-      },
+      { billing_key: JSON.stringify(record) },
     ]);
-    const store = createPgBillingKeyStore(fake);
+    const store = createPgBillingKeyStore(fake, TEST_UNSAFE_SENSITIVE_STORE_OPTIONS);
 
     await expect(store.find(CUSTOMER_KEY)).resolves.toEqual(record);
   });
 
-  it('커스텀 SqlClient 스타일(jsonb → JSON 문자열)도 동일하게 복원한다', async () => {
+  it('customerKey가 payload와 다르면 invalid-row — AAD 구현 누락/행 교체도 조용히 수용하지 않는다', async () => {
     const fake = createFakeSql();
     const record = makeBillingKeyRecord();
-    fake.enqueueRows([
-      {
-        billing_key: record.billingKey,
-        method: record.method,
-        issued_at: record.issuedAt,
-        card: JSON.stringify(record.card),
-        transfers: null,
-      },
-    ]);
-    const store = createPgBillingKeyStore(fake);
+    fake.enqueueRows([{ billing_key: JSON.stringify({ ...record, customerKey: 'other-customer' }) }]);
+    const store = createPgBillingKeyStore(fake, TEST_UNSAFE_SENSITIVE_STORE_OPTIONS);
 
-    await expect(store.find(CUSTOMER_KEY)).resolves.toEqual(record);
-  });
-
-  it('card/transfers 컬럼 undefined도 null로 정규화한다(커스텀 드라이버 수용)', async () => {
-    const fake = createFakeSql();
-    const record = makeBillingKeyRecord({ card: null, transfers: null });
-    fake.enqueueRows([
-      { billing_key: record.billingKey, method: record.method, issued_at: record.issuedAt },
-    ]);
-    const store = createPgBillingKeyStore(fake);
-
-    const found = await store.find(CUSTOMER_KEY);
-    expect(found?.card).toBeNull();
-    expect(found?.transfers).toBeNull();
+    await expect(store.find(CUSTOMER_KEY)).rejects.toMatchObject({ code: 'invalid-row' });
   });
 
   it('계약 위반 행은 invalid-row — 메시지에 billingKey·customerKey 어느 쪽도 없다', async () => {
     const fake = createFakeSql();
     fake.enqueueRows([
-      {
-        billing_key: 'bkey_leak_canary',
-        method: 'CARD', // 응답 원문은 한글 리터럴이어야 한다 — 유니언 위반
-        issued_at: '2026-08-20T12:00:00+09:00',
-        card: null,
-        transfers: null,
-      },
+      { billing_key: JSON.stringify({ ...makeBillingKeyRecord(), method: 'CARD' }) },
     ]);
-    const store = createPgBillingKeyStore(fake);
+    const store = createPgBillingKeyStore(fake, TEST_UNSAFE_SENSITIVE_STORE_OPTIONS);
 
     let thrown: unknown;
     try {
@@ -134,18 +107,12 @@ describe('§3.3 find — 복원과 null', () => {
     }
   });
 
-  it('jsonb 문자열이 손상되면 invalid-row(cause 보존) — 값은 메시지에 없다', async () => {
+  it('보호된 JSON payload가 손상되면 invalid-row — 복호화 평문 cause도 보존하지 않는다', async () => {
     const fake = createFakeSql();
     fake.enqueueRows([
-      {
-        billing_key: 'bkey_leak_canary',
-        method: '카드',
-        issued_at: '2026-08-20T12:00:00+09:00',
-        card: '{broken json',
-        transfers: null,
-      },
+      { billing_key: '{"billingKey":"bkey_leak_canary", broken' },
     ]);
-    const store = createPgBillingKeyStore(fake);
+    const store = createPgBillingKeyStore(fake, TEST_UNSAFE_SENSITIVE_STORE_OPTIONS);
 
     let thrown: unknown;
     try {
@@ -157,7 +124,7 @@ describe('§3.3 find — 복원과 null', () => {
     expect(isTossPostgresError(thrown)).toBe(true);
     if (isTossPostgresError(thrown)) {
       expect(thrown.code).toBe('invalid-row');
-      expect(thrown.cause).toBeInstanceOf(SyntaxError);
+      expect(thrown.cause).toBeUndefined();
       expect(thrown.message).not.toContain('bkey_leak_canary');
     }
   });
@@ -166,7 +133,7 @@ describe('§3.3 find — 복원과 null', () => {
 describe('§3.3 delete', () => {
   it('customer_key 기준 DELETE를 실행한다', async () => {
     const fake = createFakeSql();
-    const store = createPgBillingKeyStore(fake);
+    const store = createPgBillingKeyStore(fake, TEST_UNSAFE_SENSITIVE_STORE_OPTIONS);
 
     await store.delete(CUSTOMER_KEY);
 

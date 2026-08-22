@@ -16,8 +16,15 @@ import type {
   WebhookMeta,
 } from '@gj-kit/toss-payments/webhook';
 
+import { unsafePlaintextSensitiveValueProtector } from '../../../src/sensitive-values';
+
 export const ORDER_ID = 'order_20260820_0001' as OrderId;
 export const CUSTOMER_KEY = 'cust_20260820_0001' as CustomerKey;
+
+/** 기존 저장소 계약 테스트용 명시적 개발 DB opt-in — 프로덕션 protector 대체 금지. */
+export const TEST_UNSAFE_SENSITIVE_STORE_OPTIONS = {
+  sensitiveValueProtector: unsafePlaintextSensitiveValueProtector,
+} as const;
 
 export function makeStoredOrder(overrides?: Partial<StoredOrder>): StoredOrder {
   return {

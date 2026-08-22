@@ -7,7 +7,7 @@
  */
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
-import { createTossPaymentsPostgres } from '../../src/index';
+import { createTossPaymentsPostgres, unsafePlaintextSensitiveValueProtector } from '../../src/index';
 import type { TossPaymentsPostgres } from '../../src/index';
 import { countRows, createTestContext, dropSchema } from './helpers';
 import type { PgTestContext } from './helpers';
@@ -17,7 +17,12 @@ let pg: TossPaymentsPostgres;
 
 beforeAll(async () => {
   ctx = createTestContext();
-  pg = createTossPaymentsPostgres({ sql: ctx.sql, schema: ctx.schema });
+  pg = createTossPaymentsPostgres({
+    sql: ctx.sql,
+    schema: ctx.schema,
+    // cleanup 범위만 검증하는 개발 DB 테스트 — 평문은 반드시 명시 opt-in이어야 한다.
+    sensitiveValueProtector: unsafePlaintextSensitiveValueProtector,
+  });
   await pg.migrate();
 });
 

@@ -34,6 +34,8 @@ import {
 } from '../../src/index';
 import type {
   PgAuditSink,
+  PgSensitiveStoreOptions,
+  SensitiveValueProtector,
   SqlClient,
   SqlExecutor,
   TossPostgresError,
@@ -44,14 +46,16 @@ import type {
 const forge = <T>(): T => undefined as T; // 타입 테스트 전용 헬퍼
 
 const sql = forge<SqlClient>();
+const sensitiveValueProtector = forge<SensitiveValueProtector>();
+const sensitiveStoreOptions: PgSensitiveStoreOptions = { sensitiveValueProtector };
 
 describe('§3 개별 팩토리 — 반환 타입이 코어 계약 그 자체다', () => {
   it('스토어 5종 + AuditSink가 코어 인터페이스에 어노테이션 대입된다', () => {
     // 어노테이션 대입 = 구조 호환의 컴파일 증거("구현만 한다" 계약의 회귀 고정)
     const orders: OrderStore = createPgOrderStore(sql);
-    const depositSecrets: DepositSecretStore = createPgDepositSecretStore(sql);
-    const billingKeys: BillingKeyStore = createPgBillingKeyStore(sql);
-    const cancelRetries: CancelRetryStore = createPgCancelRetryStore(sql);
+    const depositSecrets: DepositSecretStore = createPgDepositSecretStore(sql, sensitiveStoreOptions);
+    const billingKeys: BillingKeyStore = createPgBillingKeyStore(sql, sensitiveStoreOptions);
+    const cancelRetries: CancelRetryStore = createPgCancelRetryStore(sql, sensitiveStoreOptions);
     const webhookDedupe: WebhookDedupeStore = createPgWebhookDedupeStore(sql);
     const audit: AuditSink = createPgAuditSink(sql);
     void [orders, depositSecrets, billingKeys, cancelRetries, webhookDedupe, audit];
@@ -64,12 +68,12 @@ describe('§3 개별 팩토리 — 반환 타입이 코어 계약 그 자체다'
     expectTypeOf(createPgWebhookDedupeStore).returns.toEqualTypeOf<WebhookDedupeStore>();
   });
 
-  it('스토어는 SqlExecutor로 충분하다 — withConnection은 migrate 전용 요구(설계 §2)', () => {
+  it('스토어는 SqlExecutor로 충분하다 — 민감 스토어는 별도 required protector를 받는다', () => {
     const executor = forge<SqlExecutor>();
     void createPgOrderStore(executor);
-    void createPgDepositSecretStore(executor);
-    void createPgBillingKeyStore(executor);
-    void createPgCancelRetryStore(executor);
+    void createPgDepositSecretStore(executor, sensitiveStoreOptions);
+    void createPgBillingKeyStore(executor, sensitiveStoreOptions);
+    void createPgCancelRetryStore(executor, sensitiveStoreOptions);
     void createPgWebhookDedupeStore(executor);
     void createPgAuditSink(executor);
     void createPgWebhookInboxStore(executor);
@@ -89,6 +93,10 @@ describe('§3 개별 팩토리 — 반환 타입이 코어 계약 그 자체다'
     createPgOrderStore(sql, { schema: 123 });
     // @ts-expect-error leaseSeconds에 string — 숫자만
     createPgWebhookDedupeStore(sql, { leaseSeconds: '60' });
+    // @ts-expect-error sensitiveValueProtector 누락 — direct store도 raw fallback이 없다
+    createPgDepositSecretStore(sql);
+    // @ts-expect-error incomplete protector — encrypt/decrypt 양쪽 async 메서드가 필요하다
+    createPgBillingKeyStore(sql, { sensitiveValueProtector: { encrypt: async () => 'x' } });
   });
 });
 

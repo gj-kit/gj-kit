@@ -1,6 +1,6 @@
 # @gj-kit/toss-payments-postgresql
 
-[`@gj-kit/toss-payments`](../toss-payments/README.md)가 공개한 저장소 주입 seam 6종 — 주문 금액 원본(`OrderStore`), 가상계좌 secret(`DepositSecretStore`), 빌링키(`BillingKeyStore`), 취소 재시도 티켓(`CancelRetryStore`), 웹훅 중복 제거(`WebhookDedupeStore`), 감사 로그(`AuditSink`) — 의 PostgreSQL 구현입니다. 테이블 7종과 마이그레이션을 이 패키지가 소유하므로 프로덕션 채택이 "테이블을 설계하는 일"이 아니라 "설정하는 일"이 됩니다. 웹훅 dedupe의 `claim`은 단일 문 CTE로 원자적으로 전이해 동시 재전송 N건 중 정확히 1건만 처리권을 얻고, 코어에 seam이 없는 이벤트 원문 보존은 웹훅 inbox 헬퍼(`withWebhookInbox`)로 제공합니다.
+[`@gj-kit/toss-payments`](../toss-payments/README.md)가 공개한 저장소 주입 seam 6종 — 주문 금액 원본(`OrderStore`), 가상계좌 secret(`DepositSecretStore`), 빌링키(`BillingKeyStore`), 취소 재시도 티켓(`CancelRetryStore`), 웹훅 중복 제거(`WebhookDedupeStore`), 감사 로그(`AuditSink`) — 의 PostgreSQL 구현입니다. 테이블 7종과 마이그레이션을 이 패키지가 소유하므로 프로덕션 채택이 "테이블을 설계하는 일"이 아니라 "설정하는 일"이 됩니다. billing key 레코드 전체·deposit secret·cancel retry 레코드는 앱이 제공한 비동기 `SensitiveValueProtector`를 거쳐서만 저장됩니다. 즉, 암호 알고리즘/KMS는 앱이 소유하되 평문 저장은 기본값으로 존재하지 않습니다. 웹훅 dedupe의 `claim`은 단일 문 CTE로 원자적으로 전이해 동시 재전송 N건 중 정확히 1건만 처리권을 얻고, 코어에 seam이 없는 이벤트 원문 보존은 웹훅 inbox 헬퍼(`withWebhookInbox`)로 제공합니다.
 
 > **원칙 경계**: direct runtime dependency 0 — **`pg`조차 peer가 아닙니다.** `fromPgPool`은 구조적 타입 `PgPoolLike`만 소비하므로 `pg.Pool`이 그대로 대입되고, TypeORM 등 다른 드라이버 사용자는 `SqlClient`를 직접 구현하면 됩니다. `@nestjs/common`·`reflect-metadata`·`rxjs`는 `./nestjs` 서브패스 전용 optional peer이며, 루트 엔트리 `.`는 Nest 없이 동작합니다. 코어 공개 계약은 **구현만** 하고 재정의·확장하지 않습니다.
 
@@ -27,12 +27,31 @@ import {
   parseApiSecretKey,
 } from '@gj-kit/toss-payments/server';
 import { createTossPaymentsPostgres, fromPgPool } from '@gj-kit/toss-payments-postgresql';
+import type {
+  SensitiveValueContext,
+  SensitiveValueProtector,
+} from '@gj-kit/toss-payments-postgresql';
 
 const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+// 앱의 실제 KMS/AEAD 어댑터를 주입한다. 이 패키지는 crypto dependency를 소유하지 않는다.
+const paymentEnvelopeCrypto = undefined as unknown as {
+  encrypt(plaintext: string, options: { aad: string }): Promise<string>;
+  decrypt(ciphertext: string, options: { aad: string }): Promise<string>;
+};
+
+// 앱이 키 관리·알고리즘을 소유한다. encrypt/decrypt 양쪽에서 purpose + recordId를
+// 같은 AAD로 결속해야, 암호문 행 교체/다른 용도 재사용을 AEAD가 거부한다.
+const aad = ({ purpose, recordId }: SensitiveValueContext) =>
+  `gj-kit/toss-payments-postgresql:v1:${purpose}:${recordId}`;
+const sensitiveValueProtector: SensitiveValueProtector = {
+  encrypt: (plaintext, context) => paymentEnvelopeCrypto.encrypt(plaintext, { aad: aad(context) }),
+  decrypt: (ciphertext, context) => paymentEnvelopeCrypto.decrypt(ciphertext, { aad: aad(context) }),
+};
 
 // 순수 조립 — 즉시 DB 접속 없음, 자동 DDL 없음, 자동 cleanup 타이머 없음.
 export const pg = createTossPaymentsPostgres({
   sql: fromPgPool(pool),
+  sensitiveValueProtector, // 필수 — billing/deposit/cancel 평문 fallback 없음
   // schema: 'toss_payments',                                  // 기본값
   // dedupe: { leaseSeconds: 60, completedTtlSeconds: 432_000 }, // 기본값 (5일)
   // retention: { cancelRetryDays: 15 },                       // 기본값 — 토스 멱등키 유효기간
@@ -50,6 +69,77 @@ export const tossConfig = defineTossPaymentsConfig({
 
 export const toss = createTossPayments(tossConfig);
 ```
+
+## 민감값 보호 — 필수 설정, AAD binding, 개발 DB opt-in
+
+`createTossPaymentsPostgres`와 세 개의 개별 스토어 팩토리(`createPgBillingKeyStore`,
+`createPgDepositSecretStore`, `createPgCancelRetryStore`)는 모두
+`sensitiveValueProtector`를 **필수**로 받습니다. 이 패키지는 Node `crypto`·특정 KMS에
+의존하지 않습니다. 대신 앱의 AEAD/envelope-encryption/KMS 어댑터가 아래 contract를
+구현합니다.
+
+```ts
+import type {
+  SensitiveValueContext,
+  SensitiveValueProtector,
+} from '@gj-kit/toss-payments-postgresql';
+
+const appKeyService = undefined as unknown as {
+  encrypt(plaintext: string, options: { aad: string }): Promise<string>;
+  decrypt(ciphertext: string, options: { aad: string }): Promise<string>;
+};
+
+const sensitiveValueProtector: SensitiveValueProtector = {
+  async encrypt(plaintext, context) {
+    // random nonce/IV + authenticated encryption. context 두 필드를 AAD에 모두 넣는다.
+    return appKeyService.encrypt(plaintext, {
+      aad: `toss-pg:v1:${context.purpose}:${context.recordId}`,
+    });
+  },
+  async decrypt(ciphertext, context) {
+    return appKeyService.decrypt(ciphertext, {
+      aad: `toss-pg:v1:${context.purpose}:${context.recordId}`,
+    });
+  },
+};
+```
+
+스토어가 전달하는 고정 context는 다음과 같습니다. `purpose`와 DB lookup key를 AAD에
+함께 넣어야 동일 암호문을 다른 행/용도로 옮기는 공격을 막을 수 있습니다.
+
+| 저장소 | 보호 범위 | context |
+|---|---|---|
+| `billing_keys` | `BillingKeyRecord` 전체 (billing key·card/account metadata 포함) | `{ purpose: 'billing-key', recordId: customerKey }` |
+| `deposit_secrets` | secret 문자열 | `{ purpose: 'deposit-secret', recordId: orderId }` |
+| `cancel_retries` | JSON 직렬화된 `CancelRetryRecord` 전체 | `{ purpose: 'cancel-retry-record', recordId: ticketId }` |
+
+`encrypt`/`decrypt` 실패는 숨기거나 평문으로 재시도하지 않고 그대로 호출자에게 전달됩니다.
+보호기 구현도 오류 메시지·telemetry에 입력값을 넣지 않아야 합니다. `cancelRetries`의
+`bodyJson`은 여전히 코드 유닛 단위로 무손실 복원되므로 동일 멱등키+동일 요청 바이트
+재생 계약이 유지됩니다.
+
+로컬 테스트/일회성 개발 DB에서만 아래처럼 의도적으로 평문으로 열 수 있습니다. 이
+상수는 이름대로 unsafe이며 프로덕션 설정에 두지 마세요.
+
+```ts
+import {
+  createTossPaymentsPostgres,
+  unsafePlaintextSensitiveValueProtector,
+} from '@gj-kit/toss-payments-postgresql';
+
+const sql = undefined as never;
+
+const pg = createTossPaymentsPostgres({
+  sql,
+  sensitiveValueProtector: unsafePlaintextSensitiveValueProtector,
+});
+```
+
+이전 `0.1.x`가 만든 평문 행은 새 안전 모드에서 자동으로 읽거나 재암호화하지 않습니다.
+배포 전 서비스라면 해당 개발 schema를 비우고 다시 만들고, 이미 운영 중인 소비자는
+이전 버전으로 레코드를 안전하게 export한 뒤 새 보호기를 통해 다시 저장하는 명시적
+cutover를 수행하세요. `0001_init`은 변경하지 않았으며 이 보안 변경은 런타임 저장
+형식 변경이므로 release notes의 breaking migration 안내를 따릅니다.
 
 부팅 시퀀스는 항상 **migrate → listen** 순서입니다. 이 패키지는 부팅 시 자동 DDL을 실행하지 않습니다 — `migrate()`는 명시 호출 전용입니다.
 
@@ -119,6 +209,9 @@ import {
 import type { TossPaymentsPostgres } from '@gj-kit/toss-payments-postgresql/nestjs';
 import { buildTossConfig } from '@/payments/toss.config';
 
+// 앱의 실제 KMS/AEAD protector provider를 import해 사용한다.
+const sensitiveValueProtector = undefined as never;
+
 @Module({
   imports: [
     TossPaymentsModule.forRootAsync({
@@ -127,6 +220,7 @@ import { buildTossConfig } from '@/payments/toss.config';
         TossPaymentsPostgresModule.forRootAsync({
           useFactory: () => ({
             sql: fromPgPool(new Pool({ connectionString: process.env.DATABASE_URL })),
+            sensitiveValueProtector,
           }),
         }),
       ],
@@ -163,7 +257,7 @@ await app.listen(3000);
 - 처리 중 크래시에 대비한 lease(기본 60초)가 만료되면 다음 수신이 재점유합니다.
 - `completed` 행은 기본 5일(코어 권장 — 토스 최장 재전송 기간보다 길게) 보존되어 재전송을 계속 걸러내고, 삭제는 `cleanup()` 호출 시에만 일어납니다.
 
-웹훅 **inbox**는 스토어 seam이 아니라 `WebhookHandlers`를 감싸는 헬퍼입니다(코어 `claim`에는 이벤트 메타가 전달되지 않으므로 — 코어 계약 무변경). 사업 이벤트 1건 = 1행(`dedupe_key` PK)이고 재전송은 `deliveries` 증가로 관측됩니다. record는 핸들러 **앞**에서 실행되어 핸들러가 실패해도 수신 사실은 남습니다(감사·재처리 목적). 저장본에는 두 가지 정화가 적용됩니다: ① 모든 깊이의 `secret` 키는 `'[REDACTED]'`로 마스킹됩니다 — `PAYMENT_STATUS_CHANGED`의 `data`는 코어 `Payment` 통짜라 가상계좌 결제면 입금 웹훅 위조에 쓰일 수 있는 secret이 실려 오는데, 이 테이블은 무기한 보존되기 때문입니다(핸들러가 받는 이벤트는 원본 그대로입니다). ② jsonb가 저장을 거부하는 U+0000·비페어 서로게이트는 U+FFFD로 치환됩니다 — `failOnRecordError: true`에서 특정 웹훅이 영구 재전송 실패 루프(poison message)가 되는 것을 막습니다.
+웹훅 **inbox**는 스토어 seam이 아니라 `WebhookHandlers`를 감싸는 헬퍼입니다(코어 `claim`에는 이벤트 메타가 전달되지 않으므로 — 코어 계약 무변경). 사업 이벤트 1건 = 1행(`dedupe_key` PK)이고 재전송은 `deliveries` 증가로 관측됩니다. record는 핸들러 **앞**에서 실행되어 핸들러가 실패해도 수신 사실은 남습니다(감사·재처리 목적). 저장본에는 두 가지 정화가 적용됩니다: ① 모든 깊이의 `secret`, `billingKey`, `authKey`, token, password, credential, API/private/security key, card/account number 계열 키는 `'[REDACTED]'`로 마스킹됩니다. 새 provider 필드·중첩 `raw`에도 같은 규칙이 재귀 적용되고, **핸들러가 받는 이벤트 객체는 절대 변형하지 않습니다.** ② jsonb가 저장을 거부하는 U+0000·비페어 서로게이트는 U+FFFD로 치환됩니다 — `failOnRecordError: true`에서 특정 웹훅이 영구 재전송 실패 루프(poison message)가 되는 것을 막습니다.
 
 ```ts
 // app/api/webhooks/toss/route.ts — Next.js Route Handler (Fetch 표준 어댑터)
@@ -302,9 +396,11 @@ await pg.audit.flush(); // 시작된 모든 audit insert의 정착 대기 — �
 
 `audit_entries`, `webhook_inbox`, `orders`, `deposit_secrets`는 **어떤 경로로도 이 패키지가 삭제하지 않습니다.** `billing_keys`도 `cleanup()`은 지우지 않습니다 — 단 코어 계약 메서드 `BillingKeyStore.delete(customerKey)`(빌링키 삭제 플로우)가 호출되면 해당 고객의 행 1건은 삭제됩니다. 보관 기간·아카이빙·접근 통제는 소비자 책임입니다 — 특히 `audit_entries`(요청/응답 증거)와 `webhook_inbox`(이벤트 원문)는 분쟁 대응 근거이므로 조직의 감사 보존 정책에 따라 관리하세요.
 
-### cancel_retries는 평문이다 — DB 레벨 암호화를 켜라
+### cancel_retries는 보호된 text다 — DB 경계도 계속 방어하라
 
-`cancel_retries.record_json`에는 취소 요청 본문이 그대로 들어가며, 가상계좌 환불이면 **환불 계좌 정보가 평문으로 포함될 수 있습니다.** v1에는 at-rest 암호화 seam이 없으므로 TDE·디스크/백업 암호화 등 DB 레벨 암호화와 테이블 접근 통제를 반드시 적용하세요. 컬럼이 jsonb가 아닌 text인 것은 의도입니다 — `bodyJson`은 멱등 재생의 바이트 계약이라 jsonb 정규화(NUL 거부, 이스케이프/키 정렬)로 원문이 변형될 위험을 원천 배제합니다.
+`cancel_retries.record_json`에는 `SensitiveValueProtector`가 만든 opaque 문자열만 저장됩니다. 복호화 뒤의 `CancelRetryRecord.bodyJson`은 멱등 재생의 바이트 계약 때문에 text → JSON parse 경로로 코드 유닛 단위 복원됩니다. jsonb 정규화(NUL 거부, 이스케이프/키 정렬)로 원문이 변형될 위험을 원천 배제합니다.
+
+앱 보호기 외에도 DB 접속 권한 최소화, TLS, 디스크/백업 암호화, KMS 키 회전과 테이블 감사는 계속 필요합니다. 이 패키지는 key material·KMS 권한·retention policy를 소유하지 않으며, `unsafePlaintextSensitiveValueProtector`는 이 방어를 대체하지 못하는 개발 전용 escape hatch입니다.
 
 ### 스토어는 반드시 primary를 본다 — 리드 레플리카 금지
 
@@ -356,11 +452,13 @@ export function fromTypeOrmDataSource(dataSource: DataSource): SqlClient {
 | `fromPgPool(pool)` | `pg.Pool` → `SqlClient` 구조적 어댑터 — fn throw 시 `release(err)`로 커넥션 폐기 |
 | `SqlClient` / `SqlExecutor` / `SqlResult` / `SqlRow` | 드라이버 중립 seam — `$1` 위치 파라미터, `rowCount` 미의존 |
 | `PgPoolLike` / `PgPoolClientLike` / `PgQueryResultLike` | `pg`를 import하지 않고 `pg.Pool`이 대입되는 구조적 타입 |
-| `createTossPaymentsPostgres(options)` | 스토어 집합체 팩토리 — 순수 조립, 즉시 DB 접속 없음 (`TossPaymentsPostgres` / `TossPaymentsPostgresOptions` / `CleanupResult`) |
+| `SensitiveValueProtector` / `SensitiveValueContext` / `SENSITIVE_VALUE_PURPOSE` | 앱 소유 async at-rest 보호 seam + billing/deposit/cancel AAD context 값 |
+| `unsafePlaintextSensitiveValueProtector` | **개발 DB 전용** 명시적 평문 opt-in — 기본값이 아니며 프로덕션 금지 |
+| `createTossPaymentsPostgres(options)` | 스토어 집합체 팩토리 — 순수 조립, 즉시 DB 접속 없음. `sensitiveValueProtector` 필수 (`TossPaymentsPostgres` / `TossPaymentsPostgresOptions` / `CleanupResult`) |
 | `migrate(sql, { schema? })` | 명시 호출 마이그레이션 — advisory lock 직렬화 + 단일 트랜잭션 + 멱등 (`MigrateOptions` / `MigrationResult`) |
 | `renderMigrationSql({ schema? })` | 동일 SQL 전체 스크립트(버전 테이블 관리 문 제외) — Flyway/dbmate 사용자용 |
 | `advisoryLockKey(schema)` | migrate가 잡는 FNV-1a 64bit advisory lock 키 재계산 |
-| `createPgOrderStore` / `createPgDepositSecretStore` / `createPgBillingKeyStore` / `createPgCancelRetryStore` / `createPgWebhookDedupeStore` / `createPgAuditSink` | 집합체 없이 개별 스토어만 조립할 때 (`PgStoreOptions` / `PgWebhookDedupeStoreOptions` / `PgAuditSink`) |
+| `createPgOrderStore` / `createPgDepositSecretStore` / `createPgBillingKeyStore` / `createPgCancelRetryStore` / `createPgWebhookDedupeStore` / `createPgAuditSink` | 집합체 없이 개별 스토어만 조립할 때. 세 민감 스토어에는 `PgSensitiveStoreOptions`의 필수 `sensitiveValueProtector`가 필요함 |
 | `createPgWebhookInboxStore(sql, options?)` / `withWebhookInbox(inbox, handlers, options?)` | 웹훅 이벤트 원문 보존 (`WebhookInboxStore` / `WithWebhookInboxOptions`) |
 | `TossPostgresError` / `isTossPostgresError` / `TossPostgresErrorCode` | 이 패키지가 직접 판정한 실패 전용 — code가 공개 계약 |
 | `DEFAULT_SCHEMA` / `IDENTIFIER_PATTERN` | 기본 스키마 이름(`'toss_payments'`)과 식별자 허용 패턴 |
@@ -371,9 +469,9 @@ export function fromTypeOrmDataSource(dataSource: DataSource): SqlClient {
 |---|---|
 | `TOSS_PAYMENTS_POSTGRES` | `Symbol.for` 기반 단일 토큰 — 집합체 전체가 바인딩 (ESM/CJS 이중 로드에도 동일) |
 | `InjectTossPaymentsPostgres()` | 명시적 `@Inject(토큰)` 위임 데코레이터 — `design:paramtypes` 미사용 |
-| `TossPaymentsPostgresModule.forRoot(options)` | 동기 조립 — `global` 기본 true |
-| `TossPaymentsPostgresModule.forRootAsync({ imports?, inject?, useFactory, global? })` | Nest provider 기반 비동기 조립 |
-| `TossPaymentsPostgres` / `TossPaymentsPostgresOptions` (type 재export) | 주입부 타이핑 — 루트 엔트리 없이 사용 가능 |
+| `TossPaymentsPostgresModule.forRoot(options)` | 동기 조립 — `global` 기본 true, 필수 `sensitiveValueProtector` 포함 |
+| `TossPaymentsPostgresModule.forRootAsync({ imports?, inject?, useFactory, global? })` | Nest provider 기반 비동기 조립 — `useFactory` 반환값에 `sensitiveValueProtector` 필수 |
+| `TossPaymentsPostgres` / `TossPaymentsPostgresOptions` / `SensitiveValueProtector` (type 재export) | 주입부 타이핑 — 루트 엔트리 없이 사용 가능 |
 
 에러 모델: `TossPostgresError.code`는 `'invalid-identifier'`(스키마 식별자 위반) · `'order-conflict'`(saveOrder가 다른 값으로 재저장 시도 — 금액 대조 원본 보호) · `'unsafe-amount'`(bigint가 `Number.isSafeInteger` 범위 밖) · `'invalid-row'`(DB 행이 코어 계약 형태로 복원 불가) · `'migration-failed'` 5종입니다. 메시지가 아니라 **code가 공개 계약**이고, 드라이버 에러는 감싸지 않고 그대로 통과합니다(SQLSTATE 등 cause 체인 보존). 어떤 에러 메시지에도 secret·billingKey 값은 포함되지 않습니다.
 

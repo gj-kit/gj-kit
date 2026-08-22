@@ -12,14 +12,21 @@ import type { DepositSecretStore } from '@gj-kit/toss-payments/server';
 
 import { TossPostgresError } from '../errors';
 import { schemaRef } from '../identifiers';
+import {
+  SENSITIVE_VALUE_PURPOSE,
+  createSensitiveValueContext,
+  requireProtectedString,
+  requireSensitiveValueProtector,
+} from '../sensitive-values';
+import type { PgSensitiveStoreOptions } from '../sensitive-values';
 import type { SqlExecutor } from '../sql';
-import type { PgStoreOptions } from './orders';
 
 export function createPgDepositSecretStore(
   sql: SqlExecutor,
-  options?: PgStoreOptions,
+  options: PgSensitiveStoreOptions,
 ): DepositSecretStore {
-  const qs = schemaRef(options?.schema);
+  const qs = schemaRef(options.schema);
+  const sensitiveValueProtector = requireSensitiveValueProtector(options.sensitiveValueProtector);
 
   const upsertSql = `INSERT INTO ${qs}.deposit_secrets (order_id, secret)
 VALUES ($1, $2)
@@ -30,21 +37,34 @@ ON CONFLICT (order_id) DO UPDATE
 
   return {
     async saveSecret(orderId, secret) {
-      await sql.query(upsertSql, [orderId, secret]);
+      const protectedSecret = requireProtectedString(
+        await sensitiveValueProtector.encrypt(
+          secret,
+          createSensitiveValueContext(SENSITIVE_VALUE_PURPOSE.depositSecret, orderId),
+        ),
+        'encrypt',
+      );
+      await sql.query(upsertSql, [orderId, protectedSecret]);
     },
     async getSecret(orderId) {
       const result = await sql.query(selectSql, [orderId]);
       const row = result.rows[0];
       if (row === undefined) return null;
-      const secret = row['secret'];
-      if (typeof secret !== 'string') {
+      const protectedSecret = row['secret'];
+      if (typeof protectedSecret !== 'string') {
         // secret 값 자체는 절대 메시지에 싣지 않는다 — 형태 위반 사실만 보고.
         throw new TossPostgresError(
           'invalid-row',
           `deposit_secrets.secret 컬럼이 문자열이 아닙니다(orderId: ${orderId}).`,
         );
       }
-      return secret;
+      return requireProtectedString(
+        await sensitiveValueProtector.decrypt(
+          protectedSecret,
+          createSensitiveValueContext(SENSITIVE_VALUE_PURPOSE.depositSecret, orderId),
+        ),
+        'decrypt',
+      );
     },
   };
 }

@@ -15,6 +15,7 @@ import { advisoryLockKey, createTossPaymentsPostgres, migrate, renderMigrationSq
 import type {
   CleanupResult,
   MigrationResult,
+  SensitiveValueProtector,
   SqlClient,
   SqlExecutor,
   TossPaymentsPostgres,
@@ -23,12 +24,14 @@ import type {
 const forge = <T>(): T => undefined as T; // 타입 테스트 전용 헬퍼
 
 const sql = forge<SqlClient>();
+const sensitiveValueProtector = forge<SensitiveValueProtector>();
 
 describe('§5 createTossPaymentsPostgres — 옵션 표면', () => {
   it('정상 옵션 전부 지정이 컴파일된다', () => {
-    void createTossPaymentsPostgres({ sql });
+    void createTossPaymentsPostgres({ sql, sensitiveValueProtector });
     void createTossPaymentsPostgres({
       sql,
+      sensitiveValueProtector,
       schema: 'payments_prod',
       dedupe: { leaseSeconds: 60, completedTtlSeconds: 432_000 },
       retention: { cancelRetryDays: 15 },
@@ -36,26 +39,28 @@ describe('§5 createTossPaymentsPostgres — 옵션 표면', () => {
   });
 
   it('오용 = 컴파일 에러 — sql 누락·오타 키·타입 위반', () => {
-    // @ts-expect-error sql 누락 — SqlClient 없이는 조립 자체가 성립하지 않는다
+    // @ts-expect-error sql·sensitiveValueProtector 누락 — secure-by-default 조립은 성립하지 않는다
     createTossPaymentsPostgres({});
+    // @ts-expect-error protector 누락 — raw 저장 fallback은 공개 타입에서 차단한다
+    createTossPaymentsPostgres({ sql });
     // @ts-expect-error sql은 SqlClient여야 한다 — SqlExecutor에는 withConnection(migrate 단일 세션 요건)이 없다
-    createTossPaymentsPostgres({ sql: forge<SqlExecutor>() });
+    createTossPaymentsPostgres({ sql: forge<SqlExecutor>(), sensitiveValueProtector });
     // @ts-expect-error 잘못된 옵션 키(schemas) — 오타가 침묵으로 기본값이 되는 사고 차단
-    createTossPaymentsPostgres({ sql, schemas: 'toss_payments' });
+    createTossPaymentsPostgres({ sql, sensitiveValueProtector, schemas: 'toss_payments' });
     // @ts-expect-error schema는 string
-    createTossPaymentsPostgres({ sql, schema: 123 });
+    createTossPaymentsPostgres({ sql, sensitiveValueProtector, schema: 123 });
     // @ts-expect-error leaseSeconds에 string — 숫자만
-    createTossPaymentsPostgres({ sql, dedupe: { leaseSeconds: '60' } });
+    createTossPaymentsPostgres({ sql, sensitiveValueProtector, dedupe: { leaseSeconds: '60' } });
     // @ts-expect-error completedTtlSeconds에 string — 숫자만
-    createTossPaymentsPostgres({ sql, dedupe: { completedTtlSeconds: '5d' } });
+    createTossPaymentsPostgres({ sql, sensitiveValueProtector, dedupe: { completedTtlSeconds: '5d' } });
     // @ts-expect-error dedupe 내부 오타 키(leaseSecond)
-    createTossPaymentsPostgres({ sql, dedupe: { leaseSecond: 60 } });
+    createTossPaymentsPostgres({ sql, sensitiveValueProtector, dedupe: { leaseSecond: 60 } });
     // @ts-expect-error cancelRetryDays에 string — 숫자만
-    createTossPaymentsPostgres({ sql, retention: { cancelRetryDays: '15' } });
+    createTossPaymentsPostgres({ sql, sensitiveValueProtector, retention: { cancelRetryDays: '15' } });
   });
 
   it('migrate/cleanup — 결과 타입 고정(운영 스크립트가 의존하는 표면)', () => {
-    const pg = createTossPaymentsPostgres({ sql });
+    const pg = createTossPaymentsPostgres({ sql, sensitiveValueProtector });
     expectTypeOf(pg.migrate).toEqualTypeOf<() => Promise<MigrationResult>>();
     expectTypeOf(pg.cleanup).toEqualTypeOf<() => Promise<CleanupResult>>();
   });
@@ -77,7 +82,7 @@ describe('§4 migrate — SqlClient 필수(트랜잭션·advisory lock의 단일
 
 describe('§5 골든 패스 — 반환 집합체가 defineTossPaymentsConfig에 그대로 배선된다', () => {
   const sk = forge<ApiSecretKey<'test'>>();
-  const pg: TossPaymentsPostgres = createTossPaymentsPostgres({ sql });
+  const pg: TossPaymentsPostgres = createTossPaymentsPostgres({ sql, sensitiveValueProtector });
 
   it('6개 seam 전부 배선한 실제 코어 config 호출이 컴파일된다 — 캐스팅 0', () => {
     const config = defineTossPaymentsConfig({

@@ -11,12 +11,20 @@ import { createTossPayments, defineTossPaymentsConfig } from '@gj-kit/toss-payme
 import type { ApiSecretKey, BillingFlow, ConfirmFlow } from '@gj-kit/toss-payments/server';
 import type { WebhookVerifier } from '@gj-kit/toss-payments/webhook';
 
-import { advisoryLockKey, createTossPaymentsPostgres, migrate, renderMigrationSql } from '../../src/index';
+import {
+  advisoryLockKey,
+  createOpaqueAdvisoryLockKey,
+  createPgOpaqueAdvisoryLocks,
+  createTossPaymentsPostgres,
+  migrate,
+  renderMigrationSql,
+} from '../../src/index';
 import type {
   CleanupResult,
   MigrationResult,
   PgBillingKeyStore,
   PgBillingKeyMutation,
+  PgOpaqueAdvisoryLocks,
   SensitiveValueProtector,
   SqlClient,
   SqlExecutor,
@@ -66,12 +74,34 @@ describe('§5 createTossPaymentsPostgres — 옵션 표면', () => {
     expectTypeOf(pg.migrate).toEqualTypeOf<() => Promise<MigrationResult>>();
     expectTypeOf(pg.cleanup).toEqualTypeOf<() => Promise<CleanupResult>>();
     expectTypeOf(pg.billingKeys).toEqualTypeOf<PgBillingKeyStore>();
+    expectTypeOf(pg.opaqueLocks).toEqualTypeOf<PgOpaqueAdvisoryLocks>();
+    const opaqueKey = createOpaqueAdvisoryLockKey('v1:app-derived-hmac-or-blind-index');
+    void pg.opaqueLocks.withLock(opaqueKey, () => ({ finalized: true }));
+    void pg.billingKeys.withOpaqueMutationLock(
+      opaqueKey,
+      forge<import('@gj-kit/toss-payments/server').BillingKeyRecord['customerKey']>(),
+      (mutation) => mutation.find(),
+    );
+    // @ts-expect-error raw string은 명시적으로 createOpaqueAdvisoryLockKey로 래핑해야 한다
+    void pg.opaqueLocks.withLock('raw-customer-id', () => undefined);
     void pg.billingKeys.withMutationLock(
       forge<import('@gj-kit/toss-payments/server').BillingKeyRecord['customerKey']>(),
       (mutation) => {
         expectTypeOf(mutation).toEqualTypeOf<PgBillingKeyMutation>();
       },
     );
+  });
+});
+
+describe('opaque advisory lifecycle lock — aggregate 밖 factory도 같은 타입 계약을 제공한다', () => {
+  it('SqlClient 단일 connection requirement와 branded key가 컴파일에 고정된다', () => {
+    const locks = createPgOpaqueAdvisoryLocks(sql, { schema: 'app_lifecycle' });
+    expectTypeOf(locks).toEqualTypeOf<PgOpaqueAdvisoryLocks>();
+    void locks.withLock(createOpaqueAdvisoryLockKey('v1:subscription:blind-index'), async () => 1);
+    // @ts-expect-error SqlExecutor에는 withConnection이 없어 transaction-scoped advisory lock을 안전하게 못 잡는다
+    createPgOpaqueAdvisoryLocks(forge<SqlExecutor>());
+    // @ts-expect-error raw string을 무심코 lock key로 전달할 수 없다
+    void locks.withLock('customer_123', () => undefined);
   });
 });
 

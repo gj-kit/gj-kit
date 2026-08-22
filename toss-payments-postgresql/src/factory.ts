@@ -16,6 +16,8 @@ import type { WebhookDedupeStore } from '@gj-kit/toss-payments/webhook';
 import { DEFAULT_SCHEMA, assertSqlIdentifier, schemaRef } from './identifiers';
 import { migrate } from './migrations';
 import type { MigrationResult } from './migrations';
+import { createPgOpaqueAdvisoryLocks } from './opaque-advisory-locks';
+import type { PgOpaqueAdvisoryLocks } from './opaque-advisory-locks';
 import { requireSensitiveValueProtector } from './sensitive-values';
 import type { SensitiveValueProtector } from './sensitive-values';
 import type { SqlClient } from './sql';
@@ -81,6 +83,14 @@ export interface TossPaymentsPostgres {
   readonly webhookDedupe: WebhookDedupeStore;
   readonly audit: AuditSink & { flush(): Promise<void> };
   readonly inbox: WebhookInboxStore;
+  /**
+   * 앱이 만든 nonsecret HMAC/blind-index key로 짧은 host lifecycle을 인스턴스 간
+   * 순서화하는 PostgreSQL advisory transaction lock facility.
+   *
+   * 이 API는 다른 ORM connection의 transaction과 2PC 원자성을 만들지 않는다. provider
+   * network I/O가 아니라 local durable finalization만 callback에 넣어야 한다.
+   */
+  readonly opaqueLocks: PgOpaqueAdvisoryLocks;
   /** 명시 호출 전용 — 부팅 시 자동 실행 없음. `app.listen` 전에 await하는 것이 골든 패스. */
   migrate(): Promise<MigrationResult>;
   /**
@@ -131,6 +141,7 @@ RETURNING 1 AS deleted`;
     }),
     audit: createPgAuditSink(sql, storeOptions),
     inbox: createPgWebhookInboxStore(sql, storeOptions),
+    opaqueLocks: createPgOpaqueAdvisoryLocks(sql, { schema }),
 
     migrate() {
       return migrate(sql, { schema });

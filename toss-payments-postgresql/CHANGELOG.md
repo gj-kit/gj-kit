@@ -1,5 +1,25 @@
 # @gj-kit/toss-payments-postgresql
 
+## 0.4.0
+
+### Minor Changes
+
+- Add `TossPaymentsPostgres.opaqueLocks` for cross-process serialization of short
+  application lifecycle finalization. Applications explicitly wrap a nonsecret
+  HMAC/blind-index with `createOpaqueAdvisoryLockKey()` and call
+  `withLock(key, callback)`. The PostgreSQL adapter holds a transaction-scoped
+  advisory lock on one connection, passes only a domain-separated SHA-256
+  fingerprint to SQL, and rolls back on failures. This is ordering only: provider
+  network I/O and cross-connection atomicity remain application responsibilities.
+
+  Add `PgBillingKeyStore.withOpaqueMutationLock(opaqueKey, customerKey, callback)`
+  for lifecycle paths that also mutate a billing key. It acquires the opaque lock
+  and the customer mutation lock in the fixed opaque-to-customer order on the
+  same connection and transaction, then exposes the existing customer-bound
+  mutation handle. Applications must use this combined API instead of nesting
+  `opaqueLocks.withLock` with `withMutationLock`, which can self-deadlock on a
+  pool of one and splits the lock lifecycle across connections.
+
 ## 0.3.0
 
 ### Minor Changes

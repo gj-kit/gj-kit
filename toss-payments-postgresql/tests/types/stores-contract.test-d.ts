@@ -26,6 +26,7 @@ import type {
 } from '@gj-kit/toss-payments/webhook';
 
 import {
+  createOpaqueAdvisoryLockKey,
   createPgAuditSink,
   createPgBillingKeyStore,
   createPgCancelRetryStore,
@@ -106,6 +107,13 @@ describe('§3 개별 팩토리 — 코어 계약 + PostgreSQL 고유 hardening �
       expectTypeOf(mutation.isCurrentOperationId).returns.toEqualTypeOf<Promise<boolean>>();
       return mutation.deleteIfBillingKeyMatches(record.billingKey);
     });
+    void pgBillingKeys.withOpaqueMutationLock(
+      createOpaqueAdvisoryLockKey('v1:billing-credential:blind-index'),
+      record.customerKey,
+      async (mutation) => mutation.replaceAndGetPrevious(record, saveOptions),
+    );
+    // @ts-expect-error raw string으로 opaque + customer locks를 임의 조합할 수 없다
+    void pgBillingKeys.withOpaqueMutationLock('raw-customer-id', record.customerKey, () => undefined);
   });
 
   it('일반 스토어는 SqlExecutor로 충분하지만 billing store는 SqlClient가 필수다', () => {

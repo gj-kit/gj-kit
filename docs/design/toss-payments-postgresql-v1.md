@@ -9,7 +9,9 @@
 **목적**: 결제 도메인의 영속화 할일은 명확하다 — 주문 금액 원본, 빌링키, 가상계좌 secret,
 취소 재시도 티켓, 웹훅 중복 제거, 감사 로그. 이 패키지는 `@gj-kit/toss-payments`가 이미
 공개한 저장소 주입 seam 6종의 **PostgreSQL 구현 + 테이블/마이그레이션 소유 + NestJS 배선**을
-제공해, 프로덕션 채택이 "테이블을 설계하는 일"이 아니라 "설정하는 일"이 되게 한다.
+제공해, 프로덕션 채택이 "테이블을 설계하는 일"이 아니라 "설정하는 일"이 되게 한다. 또한
+aggregate에는 앱이 만든 nonsecret HMAC/blind-index로 짧은 host lifecycle을 순서화할 수 있는
+opaque advisory-lock facility를 제공한다.
 
 | 불변 제약 | 근거 |
 |---|---|
@@ -30,7 +32,8 @@
 
 - 폴더 `toss-payments-postgresql/` = npm `@gj-kit/toss-payments-postgresql`, MIT, `engines.node >= 20`.
 - exports 2종:
-  - `.` — SqlClient seam · `fromPgPool` · 스토어 6종 · migrate · inbox · cleanup · 에러.
+  - `.` — SqlClient seam · `fromPgPool` · 스토어 6종 · migrate · inbox · cleanup · opaque
+    advisory-lock · 에러.
   - `./nestjs` — `TossPaymentsPostgresModule` · DI 토큰 · 데코레이터.
 - peerDependencies:
   - `@gj-kit/toss-payments: ^0.5.0` — **required**. 대부분 `import type`이나, 계약상 이 패키지는
@@ -56,9 +59,9 @@ export interface SqlExecutor {
 }
 export interface SqlClient extends SqlExecutor {
   /**
-   * 단일 세션에 고정된 실행기로 fn을 실행한다 — migrate()와 PostgreSQL billing-key
-   * lifecycle fence의 트랜잭션·advisory lock이 풀의 서로 다른 커넥션으로 흩어지지
-   * 않기 위한 요구다.
+  * 단일 세션에 고정된 실행기로 fn을 실행한다 — migrate()·PostgreSQL billing-key
+  * lifecycle fence·opaque lifecycle advisory lock의 transaction이 풀의 서로 다른
+  * 커넥션으로 흩어지지 않기 위한 요구다.
    */
   withConnection<T>(fn: (session: SqlExecutor) => Promise<T>): Promise<T>;
 }
@@ -69,8 +72,9 @@ export interface SqlClient extends SqlExecutor {
   `connect()`(→ `query` + `release(err?)`)만 요구하는 구조적 타입. `pg.Pool`이 그대로 대입된다.
   `withConnection`은 connect → try fn → finally release. fn throw 시 `release(err)`로 커넥션 폐기.
 - TypeORM/Prisma/postgres.js 사용자는 `SqlClient`를 직접 구현한다(README에 TypeORM DataSource
-  예시 1개 수록). `withConnection`은 migration뿐 아니라 `PgBillingKeyStore.withMutationLock`
-  callback 전체를 한 세션에 유지해야 한다. 이 seam이 이 패키지의 유일한 드라이버 접점이다.
+  예시 1개 수록). `withConnection`은 migration·`PgBillingKeyStore.withMutationLock`·
+  `withOpaqueMutationLock`·standalone opaque lifecycle lock callback 전체를 한 세션에 유지해야
+  한다. 이 seam이 이 패키지의 유일한 드라이버 접점이다.
 
 ## 3. 스키마 — 테이블 7종
 
@@ -162,6 +166,13 @@ ALTER TABLE billing_keys ADD COLUMN operation_fingerprint text;
     host projection lifecycle 전체**를 PostgreSQL advisory transaction lock으로 serialise한다.
     callback에는 해당 customerKey에 고정된 mutation handle만 전달하며 outer store 재호출은
     deadlock이다. callback throw는 generic billing mutation을 rollback한다.
+  - `withOpaqueMutationLock(opaqueKey, customerKey, callback)` — app이 만든 nonsecret
+    HMAC/blind-index lifecycle gate와 customer mutation을 함께 써야 하는 issuance/revocation/
+    compensation 전용 combined API. 하나의 `SqlClient.withConnection`/transaction에서 **opaque →
+    customer** advisory lock 순서를 강제한 뒤 기존 customer-bound mutation handle을 callback에
+    전달한다. raw opaque value는 SQL에 전달하지 않고 fingerprint만 전달한다. standalone
+    `opaqueLocks.withLock`과 `withMutationLock`을 중첩하면 pool max=1 self-deadlock 및
+    multi-connection transaction 분리가 생기므로 금지한다.
   - conditional compare는 `SELECT … FOR UPDATE` → decrypt → `timingSafeEqual` → UPDATE/DELETE를
     같은 transaction에서 실행한다. missing/mismatch는 false, payload 손상·decrypt 실패는 throw.
   - `save(record, { operationId? })`는 raw operationId 대신 SHA-256 fingerprint만 `0002` column에
@@ -353,6 +364,7 @@ export interface TossPaymentsPostgres {
   readonly webhookDedupe: WebhookDedupeStore;
   readonly audit: AuditSink & { flush(): Promise<void> };
   readonly inbox: WebhookInboxStore;              // record(webhook): Promise<void>
+  readonly opaqueLocks: PgOpaqueAdvisoryLocks;    // app HMAC/blind-index lifecycle serialization
   migrate(): Promise<MigrationResult>;
   cleanup(): Promise<CleanupResult>;              // { dedupeDeleted, cancelRetriesDeleted }
 }
@@ -379,6 +391,59 @@ const toss = createTossPayments(defineTossPaymentsConfig({
   'unsafe-amount' | 'invalid-row' | 'migration-failed'`) + `isTossPostgresError` 타입 가드.
   드라이버 에러는 감싸지 않고 그대로 통과(cause 체인 보존 — 코어가 cause로 동봉).
   **어떤 에러 메시지에도 secret·billingKey 값 미포함.**
+
+### 5.2 Opaque advisory lifecycle lock — 순서화만, 정책/2PC 없음
+
+```ts
+type OpaqueAdvisoryLockKey = string & { readonly [brand]: 'OpaqueAdvisoryLockKey' };
+
+createOpaqueAdvisoryLockKey(value: string): OpaqueAdvisoryLockKey;
+
+interface PgOpaqueAdvisoryLocks {
+  withLock<T>(
+    key: OpaqueAdvisoryLockKey,
+    operation: () => T | Promise<T>,
+  ): Promise<T>;
+}
+
+interface PgBillingKeyStore {
+  withOpaqueMutationLock<T>(
+    opaqueKey: OpaqueAdvisoryLockKey,
+    customerKey: BillingKeyRecord['customerKey'],
+    operation: (mutation: PgBillingKeyMutation) => T | Promise<T>,
+  ): Promise<T>;
+}
+
+createPgOpaqueAdvisoryLocks(
+  sql: SqlClient,
+  options?: { schema?: string },
+): PgOpaqueAdvisoryLocks;
+```
+
+- 호출 앱은 raw customer ID/email/billing key/authorization secret이 아니라, 자신의 key
+  management와 canonicalization으로 만든 **nonsecret HMAC/blind-index**만
+  `createOpaqueAdvisoryLockKey()`에 넘긴다. factory는 1~512 UTF-8 byte를 fail-fast 검사하고
+  branded type으로 raw string의 우발적 전달을 컴파일에서 막는다. HMAC 생성 자체는 앱 소유다.
+- aggregate는 `opaqueLocks`로 이 factory를 schema namespace와 함께 노출한다. raw opaque 값도
+  SQL parameter에는 전달하지 않고 package namespace로 domain-separate한 SHA-256 hex를 써서
+  `pg_advisory_xact_lock(hashtext($1), hashtext($2))`을 획득한다. hash collision은 unrelated work를
+  추가 직렬화할 뿐 mutual exclusion 안전성을 약화하지 않는다. table/migration은 없고 schema는
+  lock namespace 분리용이므로 migration 전에도 사용 가능하다.
+- 한 `SqlClient.withConnection` 안에서 `BEGIN → lock → callback → COMMIT`하고, callback/lock/
+  commit 실패 시 best-effort `ROLLBACK` 뒤 원래 오류를 rethrow한다. xact lock은 commit/rollback
+  시 자동 해제되므로 session lock을 쓰지 않는다.
+- callback에는 short local durable finalization(conditional write, outbox enqueue)만 둔다.
+  provider/HTTP/긴 network I/O는 금지한다. ORM이 다른 connection을 쓰면 lock이 **순서화**만
+  제공하며 2PC 원자성은 제공하지 않는다. durable idempotency/fencing/outbox/reconciliation은
+  여전히 앱 책임이고, app commit 뒤 library COMMIT 실패는 fail-closed + reconciliation으로 처리한다.
+- callback에서 같은 opaque key로 facility를 재진입하면 다른 connection이 바깥 xact lock을
+  기다리는 self-deadlock이 된다. 연관 work는 하나의 callback에 넣고, 여러 key가 필요하면 앱이
+  전역으로 일관된 획득 순서를 정한다.
+- billing-key mutation도 필요한 path는 standalone `opaqueLocks.withLock`과
+  `billingKeys.withMutationLock`을 어느 방향으로도 중첩하지 않는다. 대신
+  `billingKeys.withOpaqueMutationLock`이 동일 connection/transaction에서 opaque → customer
+  순서를 강제한다. candidate-null webhook처럼 billing mutation handle이 없는 host-only path만
+  standalone API를 사용한다.
 
 ### 5.1 SensitiveValueProtector와 0.1.x cutover
 
@@ -440,7 +505,10 @@ toss-payments-nestjs 선례를 그대로 미러링:
   NestJS 모듈 주입 왕복(Nest Testing Module + fake SqlClient), secure protector purpose/AAD context,
   billing conditional delete/replace의 BEGIN→advisory lock→FOR UPDATE→decrypt→constant-time compare
   sequence, operation fingerprint가 raw operationId를 저장하지 않는지와 locked current-operation
-  guard, wrong-customer handle 거부와 callback throw rollback.
+  guard, wrong-customer handle 거부와 callback throw rollback, opaque lifecycle lock의
+  BEGIN→domain-separated fingerprint lock→callback→COMMIT/ROLLBACK와 raw key non-disclosure,
+  max-1 fake pool에서 combined opaque → customer lock이 nested connection 없이 하나의
+  transaction으로 실행되는지.
 - **type** (`tests/types/**/*.test-d.ts`): 스토어 6종이 코어 인터페이스에 대입 가능
   (`expectTypeOf`), `pg.Pool`이 `PgPoolLike`에 구조적 대입 가능, 파사드 config 스프레드가
   컴파일, `@ts-expect-error` 픽스처(잘못된 옵션 등).
@@ -452,7 +520,10 @@ toss-payments-nestjs 선례를 그대로 미러링:
   release 후 재claim, cleanup 삭제 건수, inbox deliveries 증가, bodyJson 특수문자
   (유니코드 이스케이프·이모지) 바이트 왕복, protected ciphertext가 raw secret/billing metadata를
   포함하지 않음, 두 aggregate instance의 `withMutationLock` lifecycle interleaving(두 번째
-  projection이 첫 번째보다 먼저 완료될 수 없음), stale operationId가 finalization을 막는지.
+  projection이 첫 번째보다 먼저 완료될 수 없음), 두 aggregate/pool connection의 같은 opaque
+  blind-index lifecycle callback이 cross-process 직렬화되는지, 다른 customerKey라도 same opaque
+  combined mutation callback이 먼저 끝날 때까지 시작되지 않는지, stale operationId가
+  finalization을 막는지.
   `fileParallelism: false` 유지.
   docker 편의: `toss-payments-postgresql/docker-compose.yml`(postgres 1개) 동봉.
 
@@ -462,7 +533,8 @@ toss-payments-nestjs 선례를 그대로 미러링:
   (runtime deps 0 — pg조차 peer 아님, `/nestjs`만 optional peer) ③ 설치 ④ 골든 패스
   (pool → fromPgPool → createTossPaymentsPostgres → migrate → defineTossPaymentsConfig 배선)
   ⑤ NestJS 배선 ⑥ 웹훅(dedupe + inbox) ⑦ 운영(cleanup·보관 책임·암호화 안내·리드 레플리카 금지 —
-  스토어는 반드시 primary를 보는 SqlClient로) ⑧ 공개 표면 표 ⑨ handoff 절차.
+  스토어는 반드시 primary를 보는 SqlClient로), opaque lifecycle lock의 nonsecret input·2PC
+  경계 ⑧ 공개 표면 표 ⑨ handoff 절차.
 - changeset minor(0.1.0 신규), 커밋 컨벤션 `feat(toss-payments-postgresql): ...` 본문 한국어.
 - 루트 스크립트 체인(check:readme 등)에 새 패키지 `--filter` 추가.
 
@@ -478,3 +550,5 @@ toss-payments-nestjs 선례를 그대로 미러링:
 | 라이브러리 소유 KMS/암호 알고리즘 | 기각 | provider 선택·key material·rotation은 소비자 책임. 대신 required `SensitiveValueProtector`와 purpose/recordId AAD seam 제공 |
 | audit 배치 insert | 보류 | v1 즉시 insert로 충분(코어가 비동기 fire-and-forget) |
 | pg peer 승격 | 기각 | 구조적 타입으로 충분 — deps·peer 0 유지 |
+| raw 식별자/HMAC 생성 API | 기각 | 원본 canonicalization·key material은 앱 소유. package는 nonsecret opaque 값의 짧은 순서화만 담당 |
+| session-level advisory lock | 기각 | 오류/connection 재사용 시 lock 누수 위험. transaction-scoped lock은 commit/rollback과 함께 자동 해제 |

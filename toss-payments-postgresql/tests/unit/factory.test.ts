@@ -22,15 +22,17 @@ describe('§5 팩토리 — 순수 조립', () => {
 
     expect(fake.calls).toHaveLength(0);
     expect(fake.connections).toBe(0);
-    // 스토어 6종 + inbox + migrate/cleanup — 설계 §5 공개 표면 전부
+    // 스토어 6종 + inbox + opaque lifecycle lock + migrate/cleanup — 설계 §5 공개 표면 전부
     expect(typeof pg.orders.saveOrder).toBe('function');
     expect(typeof pg.depositSecrets.saveSecret).toBe('function');
     expect(typeof pg.billingKeys.save).toBe('function');
+    expect(typeof pg.billingKeys.withOpaqueMutationLock).toBe('function');
     expect(typeof pg.cancelRetries.save).toBe('function');
     expect(typeof pg.webhookDedupe.claim).toBe('function');
     expect(typeof pg.audit.record).toBe('function');
     expect(typeof pg.audit.flush).toBe('function');
     expect(typeof pg.inbox.record).toBe('function');
+    expect(typeof pg.opaqueLocks.withLock).toBe('function');
     expect(typeof pg.migrate).toBe('function');
     expect(typeof pg.cleanup).toBe('function');
   });

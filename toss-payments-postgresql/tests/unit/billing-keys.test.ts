@@ -9,7 +9,9 @@ import { describe, expect, it } from 'vitest';
 import { createHash } from 'node:crypto';
 
 import { isTossPostgresError } from '../../src/errors';
+import { createOpaqueAdvisoryLockKey } from '../../src/opaque-advisory-locks';
 import { createPgBillingKeyStore } from '../../src/stores/billing-keys';
+import type { SqlClient } from '../../src/sql';
 import { createFakeSql, norm, normTexts } from './helpers/fake-sql';
 import {
   CUSTOMER_KEY,
@@ -419,6 +421,87 @@ describe('§3.3 PostgreSQL conditional mutation — stale webhook/compensation C
       'SELECT pg_advisory_xact_lock(hashtext($1), hashtext($2))',
       'SELECT billing_key, operation_fingerprint FROM "toss_payments".billing_keys WHERE customer_key = $1 FOR UPDATE',
       expect.stringContaining('INSERT INTO "toss_payments".billing_keys'),
+      'ROLLBACK',
+    ]);
+  });
+});
+
+describe('§3.3 opaque lifecycle + customer mutation combined lock', () => {
+  it('pool max=1 fake에서도 하나의 connection/transaction에 opaque → customer → mutation handle 순서를 강제한다', async () => {
+    const base = createFakeSql();
+    let connectionHeld = false;
+    const maxOneSql: SqlClient = {
+      query: (text, params) => base.query(text, params),
+      async withConnection(operation) {
+        if (connectionHeld) {
+          throw new Error('pool max=1: nested withConnection would deadlock');
+        }
+        connectionHeld = true;
+        try {
+          return await base.withConnection(operation);
+        } finally {
+          connectionHeld = false;
+        }
+      },
+    };
+    const store = createPgBillingKeyStore(maxOneSql, TEST_UNSAFE_SENSITIVE_STORE_OPTIONS);
+    const opaqueBlindIndex = 'v1:billing-credential:nonsecret-blind-index';
+    const record = makeBillingKeyRecord();
+    let callsWhenCallbackStarted = -1;
+
+    await store.withOpaqueMutationLock(
+      createOpaqueAdvisoryLockKey(opaqueBlindIndex),
+      CUSTOMER_KEY,
+      async (mutation) => {
+        callsWhenCallbackStarted = base.calls.length;
+        await mutation.save(record);
+      },
+    );
+
+    // BEGIN + opaque xact lock + customer mutation xact lock을 모두 잡은 뒤에만 callback이 시작한다.
+    expect(callsWhenCallbackStarted).toBe(3);
+    expect(base.connections).toBe(1);
+    expect(normTexts(base)).toEqual([
+      'BEGIN',
+      'SELECT pg_advisory_xact_lock(hashtext($1), hashtext($2))',
+      'SELECT pg_advisory_xact_lock(hashtext($1), hashtext($2))',
+      expect.stringContaining('INSERT INTO "toss_payments".billing_keys'),
+      'COMMIT',
+    ]);
+    expect(base.calls.every((call) => call.via === 'session')).toBe(true);
+    // First advisory query is opaque lock and receives a fingerprint, never the app blind-index raw value.
+    expect(base.calls[1]?.params?.[0]).toBe(
+      '@gj-kit/toss-payments-postgresql:opaque-advisory-lock:toss_payments',
+    );
+    expect(base.calls[1]?.params?.[1]).toMatch(/^[0-9a-f]{64}$/);
+    expect(base.calls[1]?.params).not.toContain(opaqueBlindIndex);
+    expect(JSON.stringify(base.calls)).not.toContain(opaqueBlindIndex);
+    // Second advisory query is the pre-existing customer mutation lock on the same session.
+    expect(base.calls[2]?.params).toEqual([
+      '@gj-kit/toss-payments-postgresql:billing-key:',
+      `toss_payments:${CUSTOMER_KEY}`,
+    ]);
+  });
+
+  it('combined callback failure는 두 lock을 보유한 같은 transaction을 rollback한다', async () => {
+    const fake = createFakeSql();
+    const store = createPgBillingKeyStore(fake, TEST_UNSAFE_SENSITIVE_STORE_OPTIONS);
+    const cause = new Error('host projection failed');
+
+    await expect(
+      store.withOpaqueMutationLock(
+        createOpaqueAdvisoryLockKey('v1:billing-credential:rollback-blind-index'),
+        CUSTOMER_KEY,
+        async () => {
+          throw cause;
+        },
+      ),
+    ).rejects.toBe(cause);
+
+    expect(normTexts(fake)).toEqual([
+      'BEGIN',
+      'SELECT pg_advisory_xact_lock(hashtext($1), hashtext($2))',
+      'SELECT pg_advisory_xact_lock(hashtext($1), hashtext($2))',
       'ROLLBACK',
     ]);
   });

@@ -19,6 +19,17 @@ export type {
   SqlRow,
 } from './sql';
 
+// 앱 lifecycle용 opaque advisory transaction lock — 원본 식별자/HMAC secret은 앱에 남긴다.
+export {
+  createOpaqueAdvisoryLockKey,
+  createPgOpaqueAdvisoryLocks,
+} from './opaque-advisory-locks';
+export type {
+  OpaqueAdvisoryLockKey,
+  PgOpaqueAdvisoryLocks,
+  PgOpaqueAdvisoryLocksOptions,
+} from './opaque-advisory-locks';
+
 // 에러 (설계 §5)
 export { TossPostgresError, isTossPostgresError } from './errors';
 export type { TossPostgresErrorCode } from './errors';

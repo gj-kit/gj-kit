@@ -25,6 +25,11 @@ import type {
 import { TossPostgresError } from '../errors';
 import { DEFAULT_SCHEMA, assertSqlIdentifier, schemaRef } from '../identifiers';
 import {
+  createOpaqueAdvisoryLockAcquirer,
+  createOpaqueAdvisoryLockKey,
+} from '../opaque-advisory-locks';
+import type { OpaqueAdvisoryLockKey } from '../opaque-advisory-locks';
+import {
   SENSITIVE_VALUE_PURPOSE,
   createSensitiveValueContext,
   requireProtectedString,
@@ -113,6 +118,26 @@ export interface PgBillingKeyStore extends BillingKeyStore {
   ): Promise<T>;
 
   /**
+   * opaque lifecycle lock과 customerKey mutation lock을 **같은 PostgreSQL connection과
+   * transaction**에서 `opaque → customer` 순서로 획득한다.
+   *
+   * credential issuance/revocation/compensation처럼 host lifecycle과 generic billing-key
+   * mutation을 함께 직렬화해야 할 때의 유일한 composable API다. callback은 두 lock을 모두
+   * 얻은 뒤에만 기존 customer-bound mutation handle을 받는다. callback 안에서는 handle만
+   * 사용하고 `opaqueLocks.withLock` 또는 outer billing store를 재진입하지 않는다.
+   *
+   * `opaqueLocks.withLock(key, () => withMutationLock(...))`처럼 두 public API를 중첩하면
+   * 서로 다른 `withConnection`을 열어 pool max=1에서 self-deadlock할 수 있고, 한
+   * transaction이라는 보장도 잃는다. 모든 결합 경로의 global lock order는 이 메서드가
+   * 강제하는 **opaque → customer**다.
+   */
+  withOpaqueMutationLock<T>(
+    opaqueKey: OpaqueAdvisoryLockKey,
+    customerKey: BillingKeyRecord['customerKey'],
+    operation: (mutation: PgBillingKeyMutation) => T | Promise<T>,
+  ): Promise<T>;
+
+  /**
    * record를 저장하고, 같은 트랜잭션에서 잠근 직전 snapshot을 반환한다.
    *
    * 단일 generic write의 snapshot/보상에는 `find()` 뒤 `save()`보다 안전하다. 다만 앱
@@ -160,6 +185,7 @@ export function createPgBillingKeyStore(
   const schema = assertSqlIdentifier(options.schema ?? DEFAULT_SCHEMA, 'schema');
   const qs = schemaRef(schema);
   const sensitiveValueProtector = requireSensitiveValueProtector(options.sensitiveValueProtector);
+  const opaqueLockAcquirer = createOpaqueAdvisoryLockAcquirer({ schema });
 
   const upsertSql = `INSERT INTO ${qs}.billing_keys (customer_key, billing_key, method, issued_at, card, transfers, operation_fingerprint)
 VALUES ($1, $2, $3, $4, $5, $6, $7)
@@ -210,6 +236,39 @@ RETURNING 1 AS replaced`;
       ),
     );
 
+  const withOpaqueMutationLock: PgBillingKeyStore['withOpaqueMutationLock'] = (
+    opaqueKey,
+    customerKey,
+    operation,
+  ) => {
+    // JS/any caller도 connection을 얻기 전 fail-fast한다. internal acquirer도 독립 사용
+    // 경로를 막기 위해 다시 검사하지만, invalid key 때문에 BEGIN/ROLLBACK을 만들 필요는 없다.
+    const normalizedOpaqueKey = createOpaqueAdvisoryLockKey(opaqueKey);
+    return withBillingKeyMutationTransaction(
+      sql,
+      schema,
+      customerKey,
+      (session) =>
+        operation(
+          createLockedBillingKeyMutation({
+            session,
+            customerKey,
+            sensitiveValueProtector,
+            upsertSql,
+            selectSql,
+            selectForUpdateSql,
+            conditionalDeleteSql,
+            conditionalReplaceSql,
+          }),
+        ),
+      {
+        // 고정 순서: opaque app lifecycle gate를 먼저, customer generic key gate를 다음.
+        // 두 lock과 callback이 아래 하나의 SqlClient connection/transaction에 남는다.
+        beforeCustomerLock: (session) => opaqueLockAcquirer.acquire(session, normalizedOpaqueKey),
+      },
+    );
+  };
+
   const replaceAndGetPrevious: PgBillingKeyStore['replaceAndGetPrevious'] = (record, options) =>
     withMutationLock(record.customerKey, (mutation) =>
       mutation.replaceAndGetPrevious(record, options),
@@ -245,6 +304,7 @@ RETURNING 1 AS replaced`;
       );
     },
     withMutationLock,
+    withOpaqueMutationLock,
     replaceAndGetPrevious,
     replaceIfBillingKeyMatches,
     deleteIfBillingKeyMatches,
@@ -265,12 +325,19 @@ async function withBillingKeyMutationTransaction<T>(
   schema: string,
   customerKey: BillingKeyRecord['customerKey'],
   operation: (session: SqlExecutor) => T | Promise<T>,
+  options?: {
+    /** combined lifecycle path only — customer advisory lock 전에 같은 session에서 실행한다. */
+    readonly beforeCustomerLock?: (session: SqlExecutor) => Promise<void>;
+  },
 ): Promise<T> {
   return sql.withConnection(async (session) => {
     let transactionOpen = false;
     try {
       await session.query('BEGIN');
       transactionOpen = true;
+      // `withOpaqueMutationLock` only: nested withConnection 없이 opaque→customer order를
+      // 한 transaction에서 만든다. standalone `opaqueLocks.withLock`과 중첩하면 안 된다.
+      await options?.beforeCustomerLock?.(session);
       await session.query(BILLING_KEY_MUTATION_LOCK_SQL, [
         BILLING_KEY_MUTATION_LOCK_PREFIX,
         `${schema}:${customerKey}`,

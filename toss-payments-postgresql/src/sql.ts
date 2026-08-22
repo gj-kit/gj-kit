@@ -9,9 +9,9 @@
  *   드라이버 에러를 감싸지 않는다(errors.ts 원칙).
  * - `rowCount`에 의존하지 않는다 — 존재 판정은 전부 RETURNING/SELECT의 rows로 한다
  *   (드라이버 간 이식성: rowCount 노출 형태가 제각각이다).
- * - `withConnection`은 migrate()와 PostgreSQL billing-key mutation lock의 트랜잭션·
- *   advisory lock이 풀의 서로 다른 커넥션으로 흩어지지 않게 한다. 일반 스토어 경로는
- *   단일 문이지만 `PgBillingKeyStore.withMutationLock` callback은 이 세션을 유지한다.
+ * - `withConnection`은 migrate()·PostgreSQL billing-key mutation lock·opaque lifecycle
+ *   advisory lock의 트랜잭션이 풀의 서로 다른 커넥션으로 흩어지지 않게 한다. 일반
+ *   스토어 경로는 단일 문이지만 lock callback은 이 세션을 유지한다.
  */
 
 export interface SqlRow {
@@ -29,8 +29,8 @@ export interface SqlExecutor {
 
 export interface SqlClient extends SqlExecutor {
   /**
-   * 단일 세션에 고정된 실행기로 fn을 실행한다 — migrate()와 billing-key mutation lock의
-   * 트랜잭션·advisory lock이 풀의 서로 다른 커넥션으로 흩어지지 않기 위한 요구다.
+   * 단일 세션에 고정된 실행기로 fn을 실행한다 — migrate()·billing-key mutation lock·opaque
+   * lifecycle advisory lock의 transaction이 풀의 서로 다른 커넥션으로 흩어지지 않기 위한 요구다.
    */
   withConnection<T>(fn: (session: SqlExecutor) => Promise<T>): Promise<T>;
 }

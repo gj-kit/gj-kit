@@ -204,20 +204,31 @@ const deleted = await pg.billingKeys.deleteIfBillingKeyMatches({
 뜻합니다.
 
 하지만 generic 저장과 앱 projection의 완료 순서까지 맞춰야 한다면 짧은 conditional 메서드만
-연결하지 말고, 경쟁하는 모든 issuance/revocation/compensation을 같은 customerKey의
-`withMutationLock` callback으로 감싸세요. 이 callback은 PostgreSQL advisory **transaction** lock을
-유지하므로 다른 인스턴스도 첫 lifecycle이 끝날 때까지 같은 customerKey를 바꾸지 못합니다.
-락 키는 널리 지원되는 `pg_advisory_xact_lock(hashtext($1), hashtext($2))` 두-int 형태를 씁니다.
-해시 충돌은 서로 다른 customer 작업을 추가 직렬화할 뿐 같은 customer의 안전성을 약화하지 않습니다.
+연결하지 마세요. customerKey만으로 충분한 내부 mutation은 `withMutationLock`을 쓸 수 있지만,
+앱 lifecycle HMAC/blind-index gate와 billing-key mutation을 **함께** 잡아야 하는 issuance,
+revocation, compensation은 반드시 `withOpaqueMutationLock`을 쓰세요. 이 API는 하나의
+PostgreSQL connection/transaction에서 `opaque → customerKey` 순으로 두 advisory lock을 잡고,
+둘 다 얻은 뒤에만 기존 mutation handle을 callback에 넘깁니다. lock SQL은 널리 지원되는
+`pg_advisory_xact_lock(hashtext($1), hashtext($2))` 두-int 형태이며, 해시 충돌은 unrelated work를
+추가 직렬화할 뿐 같은 key의 안전성을 약화하지 않습니다.
 
 ```ts
 import type { BillingKeyRecord } from '@gj-kit/toss-payments/server';
+import { createOpaqueAdvisoryLockKey } from '@gj-kit/toss-payments-postgresql';
 import { pg } from '@/payments/toss';
 
 const issued = undefined as unknown as BillingKeyRecord;
 const writeBillingProjection = undefined as unknown as (record: BillingKeyRecord) => Promise<void>;
+const appLifecycleBlindIndex = undefined as unknown as (
+  scope: 'billing-credential-lifecycle',
+  rawCredentialId: string,
+) => string;
+const rawCredentialId = undefined as unknown as string;
+const opaqueKey = createOpaqueAdvisoryLockKey(
+  appLifecycleBlindIndex('billing-credential-lifecycle', rawCredentialId),
+);
 
-await pg.billingKeys.withMutationLock(issued.customerKey, async (mutation) => {
+await pg.billingKeys.withOpaqueMutationLock(opaqueKey, issued.customerKey, async (mutation) => {
   // find() + save()의 외부 gap 없이 직전 snapshot과 새 generic record를 한 transaction에 둔다.
   const previous = await mutation.replaceAndGetPrevious(issued);
 
@@ -230,6 +241,20 @@ await pg.billingKeys.withMutationLock(issued.customerKey, async (mutation) => {
   void previous;
 });
 ```
+
+**두 public lock API를 중첩하지 마세요.**
+
+```text
+// 금지: `withConnection` 두 개가 생겨 pool max=1에서 self-deadlock하고,
+// opaque/customer lock이 같은 transaction이라는 보장도 사라진다.
+await pg.opaqueLocks.withLock(opaqueKey, () =>
+  pg.billingKeys.withMutationLock(issued.customerKey, async () => undefined),
+);
+```
+
+반대 순서(`withMutationLock` 안에서 `opaqueLocks.withLock`)도 금지입니다. 결합 경로의 global
+order는 라이브러리가 강제하는 **opaque → customerKey** 하나뿐입니다. callback에서는 전달된
+`mutation` handle만 사용하고, callback 바깥 `pg.billingKeys`를 다시 호출하지 마세요.
 
 ### 발급 후 operation fence — external projection 역완료 방지
 
@@ -280,6 +305,67 @@ idempotencyKey/operationId를 생략한 발급은 이 fence로 확인할 수 없
 `replaceAndGetPrevious(record)`의 top-level 버전은 generic storage snapshot만 원자화합니다. host
 projection lifecycle까지 보호하지 않으므로 위 callback 없이 `find → save → projection` 보상에
 사용하지 마세요.
+
+## 앱 lifecycle 순서화 — opaque advisory lock
+
+`pg.opaqueLocks`는 결제 도메인 정책을 추가하지 않는, 앱 소유 lifecycle용 **짧은** PostgreSQL
+advisory transaction-lock facility입니다. 예를 들어 같은 구독 credential의 발급/삭제/갱신
+finalization이 여러 API 인스턴스·worker에서 역순으로 끝나면 안 되는 경우, 앱이 만든
+nonsecret HMAC 또는 blind-index 문자열로 그 작업만 직렬화할 수 있습니다. 원본 customer ID,
+email, billing key, authorization secret을 이 API에 직접 넘기지 마세요.
+
+`pg.opaqueLocks.withLock`은 **candidate-null webhook처럼 billing-key mutation handle이 필요 없는
+host-only 작업**에 쓰세요. billing-key issuance/delete/compensation처럼 customer mutation도 필요한
+경로는 위의 `pg.billingKeys.withOpaqueMutationLock`만 사용합니다.
+
+```ts
+// subscriptions/billing-lifecycle.ts
+import {
+  createOpaqueAdvisoryLockKey,
+} from '@gj-kit/toss-payments-postgresql';
+import { pg } from '@/payments/toss';
+
+// 앱이 key management + canonicalization을 소유한다. 반환값은 raw 식별자가 아닌
+// nonsecret HMAC/blind-index여야 하며, scope/version을 포함해 용도 간 충돌을 막는다.
+const appLifecycleBlindIndex = undefined as unknown as (
+  scope: 'billing-credential-lifecycle',
+  rawCredentialId: string,
+) => string;
+const rawCredentialId = undefined as unknown as string;
+const finishLocalLifecycle = undefined as unknown as () => Promise<void>;
+
+const lockKey = createOpaqueAdvisoryLockKey(
+  appLifecycleBlindIndex('billing-credential-lifecycle', rawCredentialId),
+);
+
+await pg.opaqueLocks.withLock(lockKey, async () => {
+  // Prisma/ORM의 짧은 durable transaction, conditional state transition, outbox enqueue 등.
+  // Toss/provider/HTTP 호출처럼 오래 걸리거나 외부 side effect인 작업은 여기에 넣지 않는다.
+  await finishLocalLifecycle();
+});
+```
+
+`createOpaqueAdvisoryLockKey()`는 1~512 UTF-8 byte 문자열만 받고 branded type을 반환합니다.
+그래서 raw string은 실수로 `withLock`에 넘길 수 없고, 호출부가 HMAC/blind-index 생성이라는
+보안 결정을 명시해야 합니다. 라이브러리는 그 opaque 값도 SQL parameter에 직접 전달하지
+않습니다. 고정 namespace와 schema를 포함해 domain-separate한 SHA-256 fingerprint만
+`pg_advisory_xact_lock(hashtext($1), hashtext($2))`에 전달합니다. lock hash collision은 서로
+다른 작업을 추가로 직렬화할 뿐, 같은 key의 상호 배제를 약화하지 않습니다.
+
+이 facility는 별도 테이블·migration을 만들지 않습니다. aggregate의 `schema`는 lock namespace
+분리에만 쓰므로, migration 전에도 short-lived host lifecycle gate로 사용할 수 있습니다. 다만
+callback 안에서 **같은 key**로 `pg.opaqueLocks.withLock()`을 다시 호출하면 다른 connection이
+바깥 xact lock을 기다려 self-deadlock합니다. billing-key mutation을 함께 해야 한다면 위의
+combined API로 바꾸고, 여러 independent key가 필요하면 앱 전체에서 일관된 lock 획득 순서를
+정하세요.
+
+이 API는 한 library connection에서 `BEGIN → advisory lock → callback → COMMIT`을 수행하고,
+callback/락 획득 실패 시 `ROLLBACK`합니다. PostgreSQL transaction-scoped lock이라
+commit/rollback과 함께 자동 해제되어 session lock이 남지 않습니다. 다만 callback 안의
+Prisma 등 **다른 connection** transaction과 2PC 원자성을 만들지는 않습니다. 이는 durable
+idempotency, conditional write, outbox/reconciliation을 대체하지 않고 오직 cross-process
+순서화만 제공합니다. 앱 DB가 commit된 뒤 library connection의 commit이 실패하면 요청을
+fail-closed로 처리하고 reconciliation으로 수습하세요.
 
 ## NestJS 배선
 
@@ -577,11 +663,13 @@ export function fromTypeOrmDataSource(dataSource: DataSource): SqlClient {
 | `SensitiveValueProtector` / `SensitiveValueContext` / `SENSITIVE_VALUE_PURPOSE` | 앱 소유 async at-rest 보호 seam + billing/deposit/cancel AAD context 값 |
 | `unsafePlaintextSensitiveValueProtector` | **개발 DB 전용** 명시적 평문 opt-in — 기본값이 아니며 프로덕션 금지 |
 | `createTossPaymentsPostgres(options)` | 스토어 집합체 팩토리 — 순수 조립, 즉시 DB 접속 없음. `sensitiveValueProtector` 필수 (`TossPaymentsPostgres` / `TossPaymentsPostgresOptions` / `CleanupResult`) |
+| `pg.opaqueLocks.withLock(key, callback)` | aggregate가 제공하는 앱 lifecycle 순서화. `key`는 `createOpaqueAdvisoryLockKey(appHmacOrBlindIndex)`로 만든 nonsecret branded value여야 하며, callback에는 짧은 local durable work만 둔다. |
+| `createOpaqueAdvisoryLockKey(value)` / `createPgOpaqueAdvisoryLocks(sql, { schema? })` | aggregate 밖에서 같은 facility를 조립할 때의 public factory와 `OpaqueAdvisoryLockKey` / `PgOpaqueAdvisoryLocks` / `PgOpaqueAdvisoryLocksOptions` 타입. raw identifier/HMAC secret 생성은 앱 책임이다. |
 | `migrate(sql, { schema? })` | 명시 호출 마이그레이션 — advisory lock 직렬화 + 단일 트랜잭션 + 멱등 (`MigrateOptions` / `MigrationResult`) |
 | `renderMigrationSql({ schema? })` | 동일 SQL 전체 스크립트(버전 테이블 관리 문 제외) — Flyway/dbmate 사용자용 |
 | `advisoryLockKey(schema)` | migrate가 잡는 FNV-1a 64bit advisory lock 키 재계산 |
 | `createPgOrderStore` / `createPgDepositSecretStore` / `createPgBillingKeyStore` / `createPgCancelRetryStore` / `createPgWebhookDedupeStore` / `createPgAuditSink` | 집합체 없이 개별 스토어만 조립할 때. 세 민감 스토어에는 `PgSensitiveStoreOptions`의 필수 `sensitiveValueProtector`가 필요함 |
-| `PgBillingKeyStore` / `PgBillingKeyMutation` / `PgBillingKeySnapshot` | `SqlClient` aggregate/direct factory의 PostgreSQL-only lifecycle fence. `withMutationLock(customerKey, callback)` 안에서 customer-bound handle로 `replaceAndGetPrevious`, conditional replace/delete, `isCurrentOperationId`를 사용한다. billing store factory는 `SqlExecutor` fallback이 없으며 `SqlClient`가 필수다. |
+| `PgBillingKeyStore` / `PgBillingKeyMutation` / `PgBillingKeySnapshot` | `SqlClient` aggregate/direct factory의 PostgreSQL-only lifecycle fence. customer-only path는 `withMutationLock(customerKey, callback)`을, opaque host lifecycle + customer mutation은 **같은 transaction**의 `withOpaqueMutationLock(opaqueKey, customerKey, callback)`을 쓴다. combined API는 opaque → customer 순서를 강제하고 handle로 `replaceAndGetPrevious`, conditional replace/delete, `isCurrentOperationId`를 제공한다. 두 public lock API를 중첩하지 않는다. |
 | `createPgWebhookInboxStore(sql, options?)` / `withWebhookInbox(inbox, handlers, options?)` | 웹훅 이벤트 원문 보존 (`WebhookInboxStore` / `WithWebhookInboxOptions`) |
 | `TossPostgresError` / `isTossPostgresError` / `TossPostgresErrorCode` | 이 패키지가 직접 판정한 실패 전용 — code가 공개 계약 |
 | `DEFAULT_SCHEMA` / `IDENTIFIER_PATTERN` | 기본 스키마 이름(`'toss_payments'`)과 식별자 허용 패턴 |

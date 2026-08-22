@@ -1,0 +1,20 @@
+{
+  // config plugin은 **CJS**로 빌드한다 — `app.plugin.js`가 `require('./plugin/build')`로 읽는다.
+  // 라이브러리 tsconfig와 분리돼 있는 이유: 여기서는 `expo/config-plugins`(Node 타입)를 쓰고,
+  // 라이브러리 소스는 그것을 절대 보면 안 된다.
+  "compilerOptions": {
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "exactOptionalPropertyTypes": true,
+    "target": "ES2022",
+    "module": "CommonJS",
+    "moduleResolution": "Node10",
+    "lib": ["ES2022"],
+    "declaration": true,
+    "skipLibCheck": true,
+    "ignoreDeprecations": "6.0",
+    "outDir": "build",
+    "rootDir": "src"
+  },
+  "include": ["src"]
+}

@@ -1,0 +1,25 @@
+{
+  "$comment": "설계 §8.3의 매핑표를 핀으로 박은 골든 벡터. TS 단위 테스트 · XCTest · JUnit이 이 파일 하나를 읽는다. 정수는 iPhoneOS26.5 SDK 헤더와 connect-client-1.1.0.aar 바이트코드에서 직접 읽은 값이다. 표를 고칠 때는 세 언어의 테스트가 함께 실패해야 하므로 여기부터 고친다.",
+  "kinds": [
+    { "kind": "running", "pairedOnAndroid": true, "ios": 37, "hc": 56, "hcIndoor": 57 },
+    { "kind": "walking", "pairedOnAndroid": false, "ios": 52, "hc": 79 },
+    { "kind": "hiking", "pairedOnAndroid": false, "ios": 24, "hc": 37 },
+    { "kind": "cycling", "pairedOnAndroid": true, "ios": 13, "hc": 8, "hcIndoor": 9 },
+    { "kind": "swimming", "pairedOnAndroid": true, "ios": 46, "hc": 73, "hcIndoor": 74 },
+    { "kind": "rowing", "pairedOnAndroid": true, "ios": 35, "hc": 53, "hcIndoor": 54 },
+    { "kind": "strength", "pairedOnAndroid": false, "ios": 50, "hc": 70 },
+    { "kind": "wheelchair", "pairedOnAndroid": false, "ios": 70, "hc": 82 },
+    { "kind": "other", "pairedOnAndroid": false, "ios": 3000, "hc": 0 }
+  ],
+  "iosReadAliases": [
+    { "raw": 20, "kind": "strength", "$comment": "FunctionalStrengthTraining — 쓰기 방향은 20을 절대 내지 않는다" },
+    { "raw": 71, "kind": "wheelchair", "$comment": "WheelchairRunPace — 쓰기는 언제나 70(walk pace)이다" }
+  ],
+  "unknownIntegers": [0, -1, 3000, 2147483647, 16, 1.5],
+  "$integerCollisions": [
+    "iOS Hiking = 24 이지만 HC HIKING = 37 이고, iOS Running 이 37 이다.",
+    "iOS WheelchairWalkPace = 70 이고 HC STRENGTH_TRAINING 도 70 이다.",
+    "iOS .other = 3000 이고 HC OTHER_WORKOUT = 0 이다.",
+    "따라서 두 플랫폼 사이에 정수를 재사용하는 표는 전부 틀린다."
+  ]
+}

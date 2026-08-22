@@ -1,0 +1,11 @@
+{
+  // 테스트 전용. 가드는 `node:fs`·`typescript`를 쓰므로 여기에는 Node 타입이 들어온다 —
+  // 라이브러리 소스의 무DOM·무peer 규율은 tsconfig.core.json이 따로 강제하므로 영향이 없다.
+  "extends": "../tsconfig.base.json",
+  "compilerOptions": {
+    "lib": ["ES2022"],
+    "ignoreDeprecations": "6.0",
+    "resolveJsonModule": true
+  },
+  "include": ["src", "tests"]
+}

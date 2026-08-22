@@ -1,0 +1,20 @@
+{
+  // `plugin/__tests__`의 타입 체크 전용. **`plugin/tsconfig.json`은 빌드 정본이고 여기에 테스트를
+  // 넣으면 테스트가 `plugin/build`로 방출돼 tarball에 실린다** — 그래서 별도 파일이다.
+  //
+  // 빌드 정본과 두 가지가 다르다:
+  //   1. `noEmit` — 아무것도 내지 않는다. 따라서 `rootDir` 경계 검사(TS6059)도 일어나지 않고,
+  //      `../../src/plugin-types.ts`(공개 타입 정본)를 import해 상호 대입 가능성을 단언할 수 있다.
+  //   2. `module: ESNext` / `moduleResolution: Bundler` — 테스트는 vitest(ESM)가 실행하며
+  //      `import.meta.url`을 쓴다. CommonJS 모듈 설정에서는 그것이 컴파일 에러다.
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": true,
+    // `rootDir`은 빌드 정본의 `src`를 그대로 물려받으면 안 된다 — TS6059는 `noEmit`에서도
+    // 검사되며, 이 프로그램은 일부러 패키지 루트 밖(`../../src/plugin-types.ts`)을 본다.
+    "rootDir": "..",
+    "module": "ESNext",
+    "moduleResolution": "Bundler"
+  },
+  "include": ["src", "__tests__"]
+}

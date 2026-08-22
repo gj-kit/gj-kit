@@ -1,0 +1,22 @@
+{
+  // 순수성 **소스** 가드 (설계 §2.4-B). `./core`·`./testing`·`./plugin`과 `.`의 node/browser
+  // 브랜치는 peer도 DOM도 참조하지 않는다 — 그 규율의 강제자가 이 프로젝트다.
+  //
+  // ⚠ `include`에서 `src/index.ts`와 `src/native.ts`가 빠져 있는 것이 이 파일의 전부다.
+  //   그 둘만이 `expo`를 그래프에 들여도 되는 파일이며, 나머지 전부가 여기서 컴파일된다.
+  //   실측 근거(V15, expo-media §2.4 계승): tsup은 코어의 오염을 전혀 잡지 못하고
+  //   `dist/core.d.ts`에 그대로 방출한다. 타입 체커에게 물어보는 것이 유일하게 새지 않는 방법이다.
+  "extends": "../tsconfig.base.json",
+  "compilerOptions": {
+    "lib": ["ES2022"],
+    "noEmit": true,
+    "ignoreDeprecations": "6.0"
+  },
+  "include": [
+    "src/core",
+    "src/core.ts",
+    "src/testing.ts",
+    "src/plugin-types.ts",
+    "src/index.unsupported.ts"
+  ]
+}

@@ -1,0 +1,136 @@
+{
+  "name": "@gj-kit/expo-workouts",
+  "version": "0.1.0",
+  "description": "HealthKit / Health Connect workout + GPS-route bridge for Expo. Gap-free incremental sync, idempotent writes, streamed routes — protocol in pure TypeScript, zero runtime dependencies.",
+  "keywords": [
+    "expo",
+    "react-native",
+    "healthkit",
+    "health-connect",
+    "workout",
+    "gps-route",
+    "fitness",
+    "sync",
+    "typescript"
+  ],
+  "homepage": "https://github.com/gj-kit/gj-kit/tree/main/expo-workouts",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/gj-kit/gj-kit.git",
+    "directory": "expo-workouts"
+  },
+  "bugs": {
+    "url": "https://github.com/gj-kit/gj-kit/issues"
+  },
+  "license": "MIT",
+  "sideEffects": false,
+  "engines": {
+    "node": ">=20"
+  },
+  "files": [
+    "dist",
+    "ios",
+    "android/build.gradle",
+    "android/src/main",
+    "expo-module.config.json",
+    "app.plugin.js",
+    "plugin/build",
+    "README.md",
+    "CHANGELOG.md",
+    "LICENSE"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "main": "./dist/index.js",
+  "module": "./dist/index.mjs",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "node": {
+        "import": {
+          "types": "./dist/index.d.mts",
+          "default": "./dist/index.unsupported.mjs"
+        },
+        "require": {
+          "types": "./dist/index.d.ts",
+          "default": "./dist/index.unsupported.js"
+        }
+      },
+      "browser": {
+        "import": {
+          "types": "./dist/index.d.mts",
+          "default": "./dist/index.unsupported.mjs"
+        },
+        "require": {
+          "types": "./dist/index.d.ts",
+          "default": "./dist/index.unsupported.js"
+        }
+      },
+      "import": {
+        "types": "./dist/index.d.mts",
+        "default": "./dist/index.mjs"
+      },
+      "require": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      }
+    },
+    "./core": {
+      "import": {
+        "types": "./dist/core.d.mts",
+        "default": "./dist/core.mjs"
+      },
+      "require": {
+        "types": "./dist/core.d.ts",
+        "default": "./dist/core.js"
+      }
+    },
+    "./testing": {
+      "import": {
+        "types": "./dist/testing.d.mts",
+        "default": "./dist/testing.mjs"
+      },
+      "require": {
+        "types": "./dist/testing.d.ts",
+        "default": "./dist/testing.js"
+      }
+    },
+    "./plugin": {
+      "import": {
+        "types": "./dist/plugin.d.mts",
+        "default": "./dist/plugin.mjs"
+      },
+      "require": {
+        "types": "./dist/plugin.d.ts",
+        "default": "./dist/plugin.js"
+      }
+    },
+    "./app.plugin.js": "./app.plugin.js",
+    "./package.json": "./package.json"
+  },
+  "scripts": {
+    "build": "tsup && tsc -p plugin/tsconfig.json && node scripts/stamp-provenance.mjs",
+    "prepack": "npm run build && node scripts/check-provenance.mjs --require-clean",
+    "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.core.json && tsc --noEmit -p tsconfig.tests.json && tsc --noEmit -p plugin/tsconfig.test.json",
+    "test": "vitest run --project unit --project native --project plugin",
+    "test:types": "vitest run --project types",
+    "test:all": "pnpm run test && pnpm run test:types",
+    "check:readme": "corepack pnpm run build && node scripts/check-readme.mjs"
+  },
+  "peerDependencies": {
+    "expo": ">=56.0.0 <58.0.0"
+  },
+  "peerDependenciesMeta": {
+    "expo": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "expo": "~56.0.20",
+    "expo-modules-core": "~56.0.24",
+    "tsup": "^8",
+    "typescript": "~6.0.3",
+    "vitest": "^3"
+  }
+}

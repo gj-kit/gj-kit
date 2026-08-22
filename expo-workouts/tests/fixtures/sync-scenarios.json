@@ -1,0 +1,177 @@
+{
+  "$comment": "설계 §9.4의 공유 시나리오 표. TS 단위 테스트(tests/native/sync-scenarios.test.ts) · XCTest(HealthStoring 페이크) · JUnit(HealthConnectGateway 페이크)이 이 파일 하나를 구동한다. 네이티브와 TS의 의미 표류가 기기 발견이 아니라 실패하는 테스트가 되는 지점이다.",
+  "schemaVersion": 1,
+  "$schema": {
+    "scenario": "{ name, platforms: ('ios'|'android')[], steps: Step[], $note? }",
+    "index": "steps의 `index`는 **시드 순서**(0부터)로 매긴 논리적 워크아웃 번호다. replace가 native id를 바꿔도 번호는 그대로다 — 드라이버가 번호 -> 현재 native id 표를 유지한다.",
+    "ops": {
+      "seed": "{ op:'seed', count, own?, sameClientId? } — 워크아웃 `count`개를 만든다. `own:true`면 clientId를 붙이고 isOwn이다. `sameClientId:true`면 **직전에 지워진 논리 워크아웃과 같은 clientId/native id**로 되살린다(f92: UUID는 삭제로 해제되지 않는다).",
+      "sync": "{ op:'sync', cursor?: null, expect?, expectByPlatform? } — `cursor:null`이면 커서를 null로 넘긴다(신규 설치). 아니면 마지막으로 커밋된 커서를 넘긴다. 결과를 저장소에 적용하고 커서를 커밋한다.",
+      "backfill": "{ op:'backfill', expect?: { pages?, items? } } — horizon부터 listWorkouts를 끝까지 돌려 저장소에 적용한다.",
+      "replace": "{ op:'replace', index } — 같은 논리 워크아웃을 재저장한다. iOS는 새 native id + removed{replaced:true}, Android는 같은 id + upsertion만.",
+      "remove": "{ op:'remove', index } — 진짜 삭제.",
+      "purgeDeletion": "{ op:'purgeDeletion', index } — HealthKit이 삭제 기록을 purge한 경우. 워크아웃이 removed 없이 사라진다(idx f17).",
+      "noOpUpsertion": "{ op:'noOpUpsertion', index } — 바뀐 것이 없는데 upsertion change만 온다(f94).",
+      "expireCursor": "{ op:'expireCursor', reason } — 다음 드레인이 `reason`으로 reset하게 만든다. 'expired'와 'scopesChanged'만 저장소 사실이다.",
+      "corruptCursor": "{ op:'corruptCursor', reason } — 커밋된 커서 문자열을 조작한다. 'malformed' | 'formatUnsupported' | 'platformMismatch'.",
+      "changeScopes": "{ op:'changeScopes' } — expireCursor('scopesChanged')의 별칭.",
+      "kill": "{ op:'kill', afterPages } — 한 번 더 sync하되 **아무것도 커밋하지 않는다**. 한 트랜잭션 규칙을 지킨 소비자가 죽은 모양이며, 재개 시 갭이 없어야 한다."
+    },
+    "expect": "{ reset?, resetReason?, added?, removed?, removedReplaced?, hasMore? } — 그 sync 단계가 내야 하는 값. 생략한 키는 검사하지 않는다.",
+    "finalStore": "시나리오가 끝났을 때 소비자 저장소에 남아야 하는 **논리 번호** 목록(정렬됨). 생략하면 검사하지 않는다."
+  },
+  "horizonMs": 1700000000000,
+  "resetReasons": [
+    "noCursor",
+    "malformed",
+    "formatUnsupported",
+    "platformMismatch",
+    "expired",
+    "scopesChanged"
+  ],
+  "scenarios": [
+    {
+      "name": "초기 백필 3페이지",
+      "platforms": ["ios", "android"],
+      "steps": [
+        { "op": "seed", "count": 7, "own": true },
+        {
+          "op": "sync",
+          "cursor": null,
+          "expect": { "reset": true, "resetReason": "noCursor", "added": 0, "removed": 0, "hasMore": false }
+        },
+        { "op": "backfill", "expect": { "items": 7 } }
+      ],
+      "finalStore": [0, 1, 2, 3, 4, 5, 6],
+      "$note": "syncWorkouts(null)은 아무것도 읽지 않는다 — 체크포인트만 잡는다(§4.4). 그래서 added가 0이다."
+    },
+    {
+      "name": "백필 중 크래시 재개",
+      "platforms": ["ios", "android"],
+      "steps": [
+        { "op": "seed", "count": 5, "own": true },
+        { "op": "sync", "cursor": null, "expect": { "reset": true, "resetReason": "noCursor" } },
+        { "op": "kill", "afterPages": 1 },
+        { "op": "seed", "count": 1, "own": true },
+        { "op": "sync", "expect": { "reset": false } },
+        { "op": "backfill", "expect": { "items": 6 } }
+      ],
+      "finalStore": [0, 1, 2, 3, 4, 5],
+      "$note": "커서는 백필 전에 잡혔으므로 재개해도 갭이 없다. 이중 계상은 upsert가 흡수한다."
+    },
+    {
+      "name": "드레인 교체 — iOS는 새 id, Android는 같은 id",
+      "platforms": ["ios", "android"],
+      "steps": [
+        { "op": "seed", "count": 1, "own": true },
+        { "op": "sync", "cursor": null },
+        { "op": "backfill" },
+        { "op": "replace", "index": 0 },
+        {
+          "op": "sync",
+          "expectByPlatform": {
+            "ios": { "reset": false, "added": 1, "removed": 1, "removedReplaced": true },
+            "android": { "reset": false, "added": 1, "removed": 0 }
+          }
+        }
+      ],
+      "finalStore": [0],
+      "$note": "§4.6. Android의 removal은 언제나 진짜 삭제이므로 replaced는 항상 false다(f92, f97)."
+    },
+    {
+      "name": "f94 no-op upsertion — 바뀐 것이 없어도 upsertion이 온다",
+      "platforms": ["android"],
+      "steps": [
+        { "op": "seed", "count": 1, "own": true },
+        { "op": "sync", "cursor": null },
+        { "op": "backfill" },
+        { "op": "noOpUpsertion", "index": 0 },
+        { "op": "sync", "expect": { "reset": false, "added": 1, "removed": 0 } }
+      ],
+      "finalStore": [0],
+      "$note": "added에 있다는 것은 '바뀌었다'는 주장이 아니다. 호출자는 idempotent upsert만 하면 된다."
+    },
+    {
+      "name": "토큰 만료",
+      "platforms": ["android"],
+      "steps": [
+        { "op": "seed", "count": 2, "own": true },
+        { "op": "sync", "cursor": null },
+        { "op": "backfill" },
+        { "op": "expireCursor", "reason": "expired" },
+        { "op": "sync", "expect": { "reset": true, "resetReason": "expired", "added": 0, "removed": 0 } },
+        { "op": "backfill", "expect": { "items": 2 } }
+      ],
+      "finalStore": [0, 1]
+    },
+    {
+      "name": "scope 지문 변화 — 넓어져도 좁아져도 reset",
+      "platforms": ["ios", "android"],
+      "steps": [
+        { "op": "seed", "count": 2, "own": true },
+        { "op": "sync", "cursor": null },
+        { "op": "backfill" },
+        { "op": "changeScopes" },
+        { "op": "sync", "expect": { "reset": true, "resetReason": "scopesChanged" } }
+      ],
+      "finalStore": [0, 1],
+      "$note": "사용자가 나중에 steps를 허용해도 이미 드레인된 워크아웃은 재방출되지 않는다 — 그래서 reset한다. 읽기 함정이 자가 치유되는 기계가 이것이다."
+    },
+    {
+      "name": "손상된 커서 — 예외가 아니라 reset이다",
+      "platforms": ["ios", "android"],
+      "steps": [
+        { "op": "seed", "count": 1, "own": true },
+        { "op": "sync", "cursor": null },
+        { "op": "corruptCursor", "reason": "malformed" },
+        { "op": "sync", "expect": { "reset": true, "resetReason": "malformed" } },
+        { "op": "corruptCursor", "reason": "formatUnsupported" },
+        { "op": "sync", "expect": { "reset": true, "resetReason": "formatUnsupported" } },
+        { "op": "corruptCursor", "reason": "platformMismatch" },
+        { "op": "sync", "expect": { "reset": true, "resetReason": "platformMismatch" } },
+        { "op": "backfill", "expect": { "items": 1 } }
+      ],
+      "finalStore": [0],
+      "$note": "§4.5 — 미션 §4.2의 'Expired/invalid cursor -> reset:true, never an exception'. 매직 검사가 파서보다 먼저다."
+    },
+    {
+      "name": "purge된 삭제 — 워크아웃이 removed 없이 사라진다",
+      "platforms": ["ios"],
+      "steps": [
+        { "op": "seed", "count": 2, "own": true },
+        { "op": "sync", "cursor": null },
+        { "op": "backfill", "expect": { "items": 2 } },
+        { "op": "purgeDeletion", "index": 0 },
+        { "op": "sync", "expect": { "reset": false, "added": 0, "removed": 0 } }
+      ],
+      "finalStore": [0, 1],
+      "$note": "idx f17. 증명의 전제가 무너지는 유일한 지점이며 라이브러리가 막을 수 없다 — 저장소에는 이미 사라진 워크아웃이 남는다. README가 removed만으로 파괴적 동작을 하지 말라고 적고, 권위를 주는 것은 주기적인 listWorkouts 전체 재조회뿐이다."
+    },
+    {
+      "name": "added와 removed에 같은 id가 동시에",
+      "platforms": ["android"],
+      "steps": [
+        { "op": "seed", "count": 1, "own": true },
+        { "op": "sync", "cursor": null },
+        { "op": "backfill" },
+        { "op": "remove", "index": 0 },
+        { "op": "seed", "count": 1, "own": true, "sameClientId": true },
+        { "op": "sync", "expect": { "reset": false, "added": 1, "removed": 0 } }
+      ],
+      "finalStore": [0],
+      "$note": "f92 — UUID는 삭제로 해제되지 않는다. 같은 clientRecordId를 지운 뒤 다시 넣으면 한 배치에 added와 removed가 같은 id로 온다. reduceSyncPage가 removed에서 뺀다: 진실은 '존재한다'이다."
+    },
+    {
+      "name": "삭제는 드레인으로 전파된다",
+      "platforms": ["ios", "android"],
+      "steps": [
+        { "op": "seed", "count": 3, "own": true },
+        { "op": "sync", "cursor": null },
+        { "op": "backfill", "expect": { "items": 3 } },
+        { "op": "remove", "index": 1 },
+        { "op": "sync", "expect": { "reset": false, "added": 0, "removed": 1, "removedReplaced": false } }
+      ],
+      "finalStore": [0, 2]
+    }
+  ]
+}

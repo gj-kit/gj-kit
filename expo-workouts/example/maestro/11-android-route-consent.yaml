@@ -1,0 +1,58 @@
+# Android — the per-route consent dialog (f111, f117).
+#
+# Health Connect gates exercise ROUTES behind a dialog that is separate from the data-type
+# permission screen and has its own vocabulary. Measured button labels on Android 16:
+#   `Allow this route`  -> one-shot, READ_EXERCISE_ROUTES is NOT granted afterwards (6.7 s)
+#   `Allow all routes`  -> grants READ_EXERCISE_ROUTES, flags become USER_SET (9.0 s)
+#   `Don't allow`       -> null route, and a SINGLE denial does NOT set USER_FIXED (22.1 s)
+# Once granted, a later read returns the route in ~151 ms with no dialog at all.
+#
+# Run 10-android-authorize.yaml FIRST — this flow assumes the data-type permissions exist.
+#
+#   cd expo-workouts/example && maestro --device emulator-5556 test maestro/11-android-route-consent.yaml
+#
+# ⚠ Phase 2: `get-route` is a stub, so the dialog will NOT appear and every step below is optional
+#   by construction. The flow still runs green (it asserts the log line, not the dialog). It becomes
+#   a real gate when the Android lane lands.
+appId: kit.gj.workouts.example
+---
+- launchApp:
+    clearState: false
+
+# expo-dev-client furniture on the first launch of a fresh install — dismissed, never asserted.
+- tapOn:
+    text: '^Continue$'
+    optional: true
+- tapOn:
+    id: 'xmark'
+    optional: true
+
+# The dev client downloads the JS bundle from Metro on every cold start, and a cold bundle takes
+# seconds. Wait for the app's own root instead of asserting it instantly — a blank white screen with
+# "id: title not found" is almost always an unreachable Metro, not a regression (see maestro/README).
+- extendedWaitUntil:
+    visible:
+      id: 'title'
+    timeout: 60000
+
+- tapOn:
+    id: 'get-route'
+
+- runFlow:
+    when:
+      visible:
+        text: 'Allow all routes'
+    commands:
+      - takeScreenshot: 11-01-route-dialog
+      # "Allow all routes" (persistent) rather than "Allow this route" (one-shot): the smoke loop
+      # re-reads the same route several times and a one-shot grant would re-prompt each time.
+      - tapOn:
+          text: 'Allow all routes'
+
+- extendedWaitUntil:
+    visible:
+      id: 'log'
+    timeout: 30000
+- assertNotVisible:
+    text: '\(empty\)'
+- takeScreenshot: 11-02-route-result

@@ -1,0 +1,98 @@
+# Android — drive the Health Connect permission flow end to end.
+#
+#   $ANDROID_HOME/emulator/emulator -avd Pixel_9a_hcprobe -port 5556 &   # PIN 1234 (f127)
+#   cd expo-workouts/example && maestro --device emulator-5556 test maestro/10-android-authorize.yaml
+#
+# ⚠ The pre-existing `Pixel_9a` AVD is PIN-locked and cannot be unlocked (f127). Use
+#   `Pixel_9a_hcprobe` (emulator-5556) or the flow will never get past the keyguard.
+#
+# EVERY selector below is a MAINLINE-DELIVERED string. Google ships the Health Connect controller
+# through an APEX, so these labels are localised and WILL drift. Three measured hazards (f124):
+#   · non-breaking space (U+00A0) inside "Health Connect" in every title  -> never match the title
+#   · curly quotes in  Allow "HC Reader" to read                          -> never match that title
+#   · typographic apostrophe in  Don't allow                              -> written  Don.t allow
+# The regexes below therefore match BUTTON LABELS only, use `.` wherever a quote or space could be
+# typographic, and every screen that is not guaranteed to appear is `optional: true`.
+#
+# Timing: f122 measured 41.6 s of scripted tapping for a five-permission request, and f120 measured
+# 19.6 s just to bounce off onboarding. Nothing here may assume a fast dialog.
+appId: kit.gj.workouts.example
+---
+- launchApp:
+    clearState: false
+
+# expo-dev-client furniture on the first launch of a fresh install — dismissed, never asserted.
+- tapOn:
+    text: '^Continue$'
+    optional: true
+- tapOn:
+    id: 'xmark'
+    optional: true
+
+# The dev client downloads the JS bundle from Metro on every cold start, and a cold bundle takes
+# seconds. Wait for the app's own root instead of asserting it instantly — a blank white screen with
+# "id: title not found" is almost always an unreachable Metro, not a regression (see maestro/README).
+- extendedWaitUntil:
+    visible:
+      id: 'title'
+    timeout: 60000
+- takeScreenshot: 10-01-before-request
+
+- tapOn:
+    id: 'request-authorization'
+
+# 1. First-run ONBOARDING (f120). Appears only on a never-onboarded device and never again.
+#    Tapping "Go back" here makes the permission contract return an EMPTY SET after ~19.6 s, which
+#    is byte-identical at the API surface to the user denying everything — which is exactly why the
+#    library reports `conclusive: false` instead of `denied`. Do NOT tap "Go back".
+- runFlow:
+    when:
+      visible:
+        text: 'Get started.*'
+    commands:
+      - takeScreenshot: 10-02-onboarding
+      - tapOn:
+          text: 'Get started.*'
+
+# 2. The per-data-type permission screen (f121). `Allow all` is a MASTER SWITCH
+#    (id/settingslib_main_switch_bar) over the listed rows — it is NOT the route dialog's
+#    "Allow all routes" button, and the two must never be confused.
+- extendedWaitUntil:
+    visible:
+      text: 'Allow all$'
+    timeout: 30000
+    optional: true
+- runFlow:
+    when:
+      visible:
+        text: 'Allow all$'
+    commands:
+      - takeScreenshot: 10-03-permission-rows
+      - tapOn:
+          text: 'Allow all$'
+- tapOn:
+    text: '^Allow$'
+    optional: true
+
+# 3. The PAST-DATA screen (f122) — a SECOND full-screen dialog from the SAME contract call, shown
+#    because the app requests READ_HEALTH_DATA_HISTORY (`history: true` in app.config.ts). Its title
+#    carries an explicit today-minus-30-days date, so only the buttons are matchable.
+- extendedWaitUntil:
+    visible:
+      text: '^Allow$'
+    timeout: 30000
+    optional: true
+- tapOn:
+    text: '^Allow$'
+    optional: true
+
+- extendedWaitUntil:
+    visible:
+      id: 'authorization'
+    timeout: 60000
+- takeScreenshot: 10-04-after-request
+- tapOn:
+    id: 'refresh-state'
+- assertVisible:
+    id: 'authorization'
+- takeScreenshot: 10-05-state

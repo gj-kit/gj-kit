@@ -1,0 +1,11 @@
+# 빌드 산출물 (루트 .gitignore가 dist/만 무시한다)
+plugin/build/
+
+# 네이티브 빌드 캐시 — 다음 레인이 ios/·android/를 만들 때 대비
+android/build/
+android/.gradle/
+android/local.properties
+# ⚠ 머신 고유 절대 경로(org.gradle.java.home)를 담을 수 있어 저장소에도 타르볼에도 넣지 않는다 (f128)
+android/gradle.properties
+ios/build/
+ios/Pods/

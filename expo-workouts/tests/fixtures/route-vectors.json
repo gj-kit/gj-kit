@@ -1,0 +1,496 @@
+{
+  "$comment": "설계 §8.2의 위생 8규칙과 f100의 크기 공식을 세 언어(TS · Swift · Kotlin)가 공유하는 골든 벡터로 고정한다. 이 파일이 없으면 위생과 크기 공식이 세 번 구현되고 그 표류는 기기에서만 보인다.",
+  "window": {
+    "startMs": 1755000000000,
+    "endMs": 1755000600000
+  },
+  "hygiene": [
+    {
+      "name": "빈 배열은 'none'과 같은 뜻이 아니다",
+      "points": [],
+      "throws": "invalidArgument"
+    },
+    {
+      "name": "lat 91은 거절한다 — iOS는 그대로 저장하고 HC는 throw한다 (f85)",
+      "points": [
+        {
+          "t": 1755000001000,
+          "lat": 91,
+          "lon": 0
+        }
+      ],
+      "throws": "invalidArgument"
+    },
+    {
+      "name": "lon 181도 거절한다",
+      "points": [
+        {
+          "t": 1755000001000,
+          "lat": 0,
+          "lon": 181
+        }
+      ],
+      "throws": "invalidArgument"
+    },
+    {
+      "name": "hAcc 80은 드롭, hAcc -1도 드롭, hAcc 0은 유지 (idx f25 · f83)",
+      "points": [
+        {
+          "t": 1755000001000,
+          "lat": 37.5,
+          "lon": 127.0,
+          "hAccM": 80
+        },
+        {
+          "t": 1755000002000,
+          "lat": 37.5,
+          "lon": 127.001,
+          "hAccM": -1
+        },
+        {
+          "t": 1755000003000,
+          "lat": 37.5,
+          "lon": 127.002,
+          "hAccM": 0
+        },
+        {
+          "t": 1755000004000,
+          "lat": 37.5,
+          "lon": 127.003
+        }
+      ],
+      "survivorTimes": [
+        1755000003000,
+        1755000004000
+      ]
+    },
+    {
+      "name": "창 앞뒤 60초는 드롭한다 — clamp하지 않는다 (미션 §4.3에서의 의도적 이탈)",
+      "points": [
+        {
+          "t": 1754999940000,
+          "lat": 37.5,
+          "lon": 127.0
+        },
+        {
+          "t": 1755000001000,
+          "lat": 37.5,
+          "lon": 127.001
+        },
+        {
+          "t": 1755000600000,
+          "lat": 37.5,
+          "lon": 127.002
+        },
+        {
+          "t": 1755000660000,
+          "lat": 37.5,
+          "lon": 127.003
+        }
+      ],
+      "survivorTimes": [
+        1755000001000
+      ]
+    },
+    {
+      "name": "같은 t는 마지막 것만 남는다 (f82 — HealthKit이 조용히 하는 것과 같게)",
+      "points": [
+        {
+          "t": 1755000005000,
+          "lat": 1,
+          "lon": 1
+        },
+        {
+          "t": 1755000005000,
+          "lat": 2,
+          "lon": 2
+        },
+        {
+          "t": 1755000004000,
+          "lat": 3,
+          "lon": 3
+        }
+      ],
+      "survivorTimes": [
+        1755000004000,
+        1755000005000
+      ],
+      "survivorLats": [
+        3,
+        2
+      ]
+    },
+    {
+      "name": "전부 드롭되면 살아남는 점이 0이다 — 에러가 아니라 route: 'dropped' (f84)",
+      "points": [
+        {
+          "t": 1,
+          "lat": 37.5,
+          "lon": 127.0
+        }
+      ],
+      "survivorTimes": []
+    }
+  ],
+  "sentinels": [
+    {
+      "name": "-1은 undefined, 명시적 0은 보존, 음수 고도는 실제 값 (f83)",
+      "input": {
+        "t": 1755000001000,
+        "lat": 31.5,
+        "lon": 35.5,
+        "altM": -430,
+        "hAccM": -1,
+        "vAccM": -1,
+        "speedMps": 0,
+        "courseDeg": 0
+      },
+      "expect": {
+        "altM": -430,
+        "hAccM": null,
+        "vAccM": null,
+        "speedMps": 0,
+        "courseDeg": 0
+      }
+    },
+    {
+      "name": "비유한 값과 null은 전부 undefined로 접힌다",
+      "input": {
+        "t": 1755000002000,
+        "lat": 37.5,
+        "lon": 127.0,
+        "altM": null,
+        "hAccM": null,
+        "vAccM": null,
+        "speedMps": null,
+        "courseDeg": null
+      },
+      "expect": {
+        "altM": null,
+        "hAccM": null,
+        "vAccM": null,
+        "speedMps": null,
+        "courseDeg": null
+      }
+    },
+    {
+      "name": "양수는 그대로 통과한다 — 정리는 음수 sentinel에만 적용된다",
+      "input": {
+        "t": 1755000003000,
+        "lat": 37.5,
+        "lon": 127.0,
+        "altM": 123.45,
+        "hAccM": 4.25,
+        "vAccM": 6.5,
+        "speedMps": 3.25,
+        "courseDeg": 271.75
+      },
+      "expect": {
+        "altM": 123.45,
+        "hAccM": 4.25,
+        "vAccM": 6.5,
+        "speedMps": 3.25,
+        "courseDeg": 271.75
+      }
+    }
+  ],
+  "sizeVectors": [
+    {
+      "$comment": "f99의 정확한 핀. 13자 title + 13자 clientRecordId -> bytes = 212 + 48·points. ⚠ Phase 3 정정: `accepted`는 **우리 쓰기 가드의 판정**이지 플랫폼 상한의 판정이 아니다($schema가 그렇게 적고 있다). 20 828점은 플랫폼 상한 1 000 000 B 아래(999 956 B)이지만 우리는 20 000점에서 이미 거절하므로 `false`가 옳다. Phase 2에서 `true`로 적혀 있었고 TS 테스트가 이 필드를 읽지 않아 보이지 않았다 — Kotlin JUnit이 같은 파일을 읽기 시작하면서 드러났다.",
+      "routePoints": 20828,
+      "clientRecordIdLength": 13,
+      "titleLength": 13,
+      "bytes": 999956,
+      "accepted": false
+    },
+    {
+      "routePoints": 20829,
+      "clientRecordIdLength": 13,
+      "titleLength": 13,
+      "bytes": 1000004,
+      "accepted": false
+    },
+    {
+      "routePoints": 20830,
+      "clientRecordIdLength": 13,
+      "titleLength": 13,
+      "bytes": 1000052,
+      "accepted": false
+    },
+    {
+      "$comment": "optional 필드는 비용 0이다 — 같은 점 수는 고도·정확도 유무와 무관하게 바이트 동일하다.",
+      "routePoints": 20000,
+      "clientRecordIdLength": 0,
+      "bytes": 960160,
+      "accepted": false
+    },
+    {
+      "routePoints": 0,
+      "clientRecordIdLength": 0,
+      "bytes": 160,
+      "accepted": true
+    },
+    {
+      "routePoints": 100,
+      "clientRecordIdLength": 36,
+      "segments": 2,
+      "laps": 3,
+      "bytes": 5152,
+      "accepted": true
+    }
+  ],
+  "schemaVersion": 1,
+  "$schema": {
+    "window": "hygiene 벡터가 쓰는 워크아웃 창 `[startMs, endMs)`.",
+    "hygiene": "{ name, points, throws? , survivorTimes?, survivorLats? } — `normalizeRouteForWrite(points, window)`의 결과. `throws`가 있으면 그 공개 코드로 거절해야 하고, 없으면 살아남는 점의 `t`(그리고 필요하면 `lat`)가 정확히 survivor*와 같아야 한다.",
+    "sentinels": "{ name, input, expect } — 읽기 방향 sentinel 정리(f83). `expect`의 `null`은 `undefined`(모름)를 뜻한다. JSON에 undefined가 없어서 null로 적는다.",
+    "sizeVectors": "{ routePoints, clientRecordIdLength, titleLength?, notesLength?, segments?, laps?, bytes, accepted } — f100의 공식 결과와 20 000점 쓰기 가드의 판정.",
+    "derived": "{ name, fn, points, arg?, expect } — 파생 유틸의 골든 벡터. fn ∈ 'routeDistanceM' | 'routeElevationGainM' | 'derivePauses'. 부동소수는 `tolerance`가 있으면 그 절대 오차 안에서 비교한다.",
+    "chunking": "{ points, chunkSizes } — `getRoute()`가 내야 하는 청크 크기 수열(f78 · D8의 1000점). 상수 자체는 공개하지 않지만 **관측 가능한 결과**는 세 언어가 같아야 한다."
+  },
+  "derived": [
+    {
+      "name": "적도에서 경도 1도는 약 111.3 km다 (haversine, R=6371008.8 m)",
+      "fn": "routeDistanceM",
+      "points": [
+        {
+          "t": 1,
+          "lat": 0,
+          "lon": 0
+        },
+        {
+          "t": 2,
+          "lat": 0,
+          "lon": 1
+        }
+      ],
+      "expect": 111194.9,
+      "tolerance": 50
+    },
+    {
+      "name": "점이 0개 또는 1개면 0이다",
+      "fn": "routeDistanceM",
+      "points": [
+        {
+          "t": 1,
+          "lat": 37.5,
+          "lon": 127.0
+        }
+      ],
+      "expect": 0,
+      "tolerance": 0
+    },
+    {
+      "name": "같은 좌표를 반복해도 0이다 — 정지 상태가 거리를 만들지 않는다",
+      "fn": "routeDistanceM",
+      "points": [
+        {
+          "t": 1,
+          "lat": 37.5,
+          "lon": 127.0
+        },
+        {
+          "t": 2,
+          "lat": 37.5,
+          "lon": 127.0
+        },
+        {
+          "t": 3,
+          "lat": 37.5,
+          "lon": 127.0
+        }
+      ],
+      "expect": 0,
+      "tolerance": 0.001
+    },
+    {
+      "name": "히스테리시스 5 m — 2 m 노이즈는 상승이 아니다",
+      "fn": "routeElevationGainM",
+      "points": [
+        {
+          "t": 1,
+          "lat": 0,
+          "lon": 0,
+          "altM": 100
+        },
+        {
+          "t": 2,
+          "lat": 0,
+          "lon": 0,
+          "altM": 102
+        },
+        {
+          "t": 3,
+          "lat": 0,
+          "lon": 0,
+          "altM": 100
+        },
+        {
+          "t": 4,
+          "lat": 0,
+          "lon": 0,
+          "altM": 120
+        },
+        {
+          "t": 5,
+          "lat": 0,
+          "lon": 0,
+          "altM": 119
+        }
+      ],
+      "arg": 5,
+      "expect": 20,
+      "tolerance": 0.001
+    },
+    {
+      "name": "히스테리시스 0.5 m — 같은 입력에서 노이즈까지 센다",
+      "fn": "routeElevationGainM",
+      "points": [
+        {
+          "t": 1,
+          "lat": 0,
+          "lon": 0,
+          "altM": 100
+        },
+        {
+          "t": 2,
+          "lat": 0,
+          "lon": 0,
+          "altM": 102
+        },
+        {
+          "t": 3,
+          "lat": 0,
+          "lon": 0,
+          "altM": 100
+        },
+        {
+          "t": 4,
+          "lat": 0,
+          "lon": 0,
+          "altM": 120
+        },
+        {
+          "t": 5,
+          "lat": 0,
+          "lon": 0,
+          "altM": 119
+        }
+      ],
+      "arg": 0.5,
+      "expect": 22,
+      "tolerance": 0.001
+    },
+    {
+      "name": "altM이 없는 점은 상승을 끊지도 잇지도 않는다",
+      "fn": "routeElevationGainM",
+      "points": [
+        {
+          "t": 1,
+          "lat": 0,
+          "lon": 0,
+          "altM": 100
+        },
+        {
+          "t": 2,
+          "lat": 0,
+          "lon": 0
+        },
+        {
+          "t": 3,
+          "lat": 0,
+          "lon": 0,
+          "altM": 110
+        }
+      ],
+      "arg": 1,
+      "expect": 10,
+      "tolerance": 0.001
+    },
+    {
+      "name": "30 s 이상의 간격만 pause다",
+      "fn": "derivePauses",
+      "points": [
+        {
+          "t": 1755000000000,
+          "lat": 0,
+          "lon": 0
+        },
+        {
+          "t": 1755000010000,
+          "lat": 0,
+          "lon": 0
+        },
+        {
+          "t": 1755000100000,
+          "lat": 0,
+          "lon": 0
+        },
+        {
+          "t": 1755000105000,
+          "lat": 0,
+          "lon": 0
+        }
+      ],
+      "arg": 30000,
+      "expect": [
+        {
+          "startMs": 1755000010000,
+          "endMs": 1755000100000
+        }
+      ]
+    },
+    {
+      "name": "간격이 없으면 pause도 없다",
+      "fn": "derivePauses",
+      "points": [
+        {
+          "t": 1755000000000,
+          "lat": 0,
+          "lon": 0
+        },
+        {
+          "t": 1755000010000,
+          "lat": 0,
+          "lon": 0
+        }
+      ],
+      "arg": 30000,
+      "expect": []
+    }
+  ],
+  "chunking": [
+    {
+      "points": 0,
+      "chunkSizes": []
+    },
+    {
+      "points": 1,
+      "chunkSizes": [
+        1
+      ]
+    },
+    {
+      "points": 1000,
+      "chunkSizes": [
+        1000
+      ]
+    },
+    {
+      "points": 2500,
+      "chunkSizes": [
+        1000,
+        1000,
+        500
+      ]
+    },
+    {
+      "points": 3000,
+      "chunkSizes": [
+        1000,
+        1000,
+        1000
+      ]
+    }
+  ]
+}

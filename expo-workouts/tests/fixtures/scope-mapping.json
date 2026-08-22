@@ -1,0 +1,58 @@
+{
+  "$comment": "설계 §8.8의 두 표를 한 파일로. XCTest · JUnit · TS plugin-introspect 스냅샷이 같은 파일에 대해 단언한다. 없으면 매핑 변경이 3방향으로 조용히 표류한다.",
+  "$evidence": {
+    "deviceGranted": [
+      "android.permission.health.READ_EXERCISE",
+      "android.permission.health.WRITE_EXERCISE",
+      "android.permission.health.READ_EXERCISE_ROUTES",
+      "android.permission.health.WRITE_EXERCISE_ROUTE",
+      "android.permission.health.READ_DISTANCE",
+      "android.permission.health.READ_HEALTH_DATA_HISTORY",
+      "android.permission.health.WRITE_DISTANCE",
+      "android.permission.health.WRITE_ACTIVE_CALORIES_BURNED",
+      "android.permission.health.WRITE_ELEVATION_GAINED",
+      "android.permission.health.WRITE_HEART_RATE",
+      "android.permission.health.WRITE_STEPS"
+    ],
+    "officialDocOnly": [
+      "android.permission.health.READ_ACTIVE_CALORIES_BURNED",
+      "android.permission.health.READ_ELEVATION_GAINED",
+      "android.permission.health.READ_HEART_RATE",
+      "android.permission.health.READ_STEPS"
+    ],
+    "$unverifiedNote": "Phase 3 (2026-08-22) closed §11-24: `adb shell pm grant kit.gj.workouts.example android.permission.health.WRITE_{DISTANCE,ACTIVE_CALORIES_BURNED,ELEVATION_GAINED,HEART_RATE,STEPS}` — five lines, all rc=0, all `granted=true` in dumpsys on Pixel_9a_hcprobe (API 36). The five strings moved from `unverified` to `deviceGranted`; the list is now empty and both the TS parity test and the Kotlin ScopeMappingTest assert that.",
+    "unverified": []
+  },
+  "ios": {
+    "workouts": ["HKWorkoutTypeIdentifier"],
+    "distance": [
+      "HKQuantityTypeIdentifierDistanceWalkingRunning",
+      "HKQuantityTypeIdentifierDistanceCycling"
+    ],
+    "activeEnergy": ["HKQuantityTypeIdentifierActiveEnergyBurned"],
+    "elevation": [],
+    "routes": ["HKWorkoutRouteTypeIdentifier"],
+    "heartRate": ["HKQuantityTypeIdentifierHeartRate"],
+    "steps": ["HKQuantityTypeIdentifierStepCount"]
+  },
+  "androidRead": {
+    "workouts": "android.permission.health.READ_EXERCISE",
+    "distance": "android.permission.health.READ_DISTANCE",
+    "activeEnergy": "android.permission.health.READ_ACTIVE_CALORIES_BURNED",
+    "elevation": "android.permission.health.READ_ELEVATION_GAINED",
+    "routes": "android.permission.health.READ_EXERCISE_ROUTES",
+    "heartRate": "android.permission.health.READ_HEART_RATE",
+    "steps": "android.permission.health.READ_STEPS"
+  },
+  "androidWrite": {
+    "workouts": "android.permission.health.WRITE_EXERCISE",
+    "distance": "android.permission.health.WRITE_DISTANCE",
+    "activeEnergy": "android.permission.health.WRITE_ACTIVE_CALORIES_BURNED",
+    "elevation": "android.permission.health.WRITE_ELEVATION_GAINED",
+    "routes": "android.permission.health.WRITE_EXERCISE_ROUTE",
+    "heartRate": "android.permission.health.WRITE_HEART_RATE",
+    "steps": "android.permission.health.WRITE_STEPS"
+  },
+  "androidHistory": "android.permission.health.READ_HEALTH_DATA_HISTORY",
+  "manifestOnly": ["android.permission.health.READ_EXERCISE_ROUTES"]
+}

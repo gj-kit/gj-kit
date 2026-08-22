@@ -1,0 +1,8 @@
+# Raw device evidence and probe worktrees are useful while investigating a platform, but contain
+# machine-local paths, credentials, screenshots, and generated Gradle/Xcode output. Commit the
+# reviewed research index, reports, and RESULTS.md instead.
+/hkprobe/
+/phase0/hcprobe/
+/phase0/logs/
+/phase0/probe-ios-a/
+/phase0/probe-ios-b/

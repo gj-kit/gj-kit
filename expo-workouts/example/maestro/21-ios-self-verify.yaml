@@ -1,0 +1,105 @@
+# iOS — the **self-verifying loop** of design §9.5-1, as a Maestro gate.
+#
+# The iOS twin of `12-android-self-verify.yaml`, driving the same `id: self-check` button and the
+# same `SelfCheck.ts`. What that button does, in order:
+#
+#   -1 clean slate -> 0 checkpoint -> 1 save v1 (3 600-point route) -> 2 listWorkouts -> 2b totals
+#   -> 3 sync sees it as own -> 4 getRoute round trip -> 5 save v2 -> 6 sync reports replaced
+#   -> 7 delete -> 8 sync reports removed -> 9 nothing left behind
+#
+#   cd expo-workouts/example && maestro --device F852C6FF-2BA6-40C2-A36F-ED0C9E47AC42 \
+#        test maestro/21-ios-self-verify.yaml
+#
+# Prerequisites: run `20-ios-authorize.yaml` FIRST — the loop writes distance, active energy, steps
+# and a route, and design §8.5-0's write pre-flight refuses a payload whose scopes were never
+# granted. Measured here (Phase 3): with `'steps'` missing from the request, step 1 failed with
+# exactly `notAuthorized`, which is the pre-flight doing its job rather than a bug.
+#
+# ── What this asserts that a screenshot cannot ──────────────────────────────────────────────────
+#   * NO step printed FAIL;
+#   * the two iOS-SPECIFIC outcomes the Android flow cannot assert:
+#       - step 5 mints a NEW native id (`newNativeId=true`) — a re-save under the same sync
+#         identifier replaces the workout with a new UUID (idx f26), where Health Connect reuses it;
+#       - step 6 therefore reports ONE removal flagged `replaced` plus one addition in the same
+#         batch (§4.6), where Android reports `removed=0 replaced=0`;
+#   * the privacy rule: the loop writes distance, calories, steps and 3 600 coordinates, and NONE of
+#     them may reach the screen.
+#
+# The Health.app half of §9.5-1 (one workout visible, its route rendered, nothing left after the
+# delete) is driven by the `save-visible` / `delete-visible` buttons instead, because this loop
+# deletes its own artefact in step 7 — which is exactly what makes it repeatable. See maestro/README.
+appId: kit.gj.workouts.example
+---
+- launchApp:
+    clearState: false
+
+# Give the client time to render EITHER the app or its launcher before deciding which one it is.
+- extendedWaitUntil:
+    visible:
+      id: 'title'
+    timeout: 25000
+    optional: true
+
+# Dev-client launcher recovery — a cold `launchApp` starts the client with no URL. See the note in
+# `20-ios-authorize.yaml`.
+- runFlow:
+    when:
+      visible:
+        text: 'Enter URL manually'
+    commands:
+      - tapOn:
+          text: 'http://localhost:.*'
+          optional: true
+- tapOn:
+    text: '^Continue$'
+    optional: true
+- tapOn:
+    id: 'xmark'
+    optional: true
+- extendedWaitUntil:
+    visible:
+      id: 'title'
+    timeout: 60000
+
+- tapOn:
+    id: 'self-check'
+
+# Maestro asserts on what is ON SCREEN, and the log sits at the bottom of a scroll view. Without this
+# the whole gate fails on a screen that is merely scrolled, which looks exactly like a regression.
+- scrollUntilVisible:
+    element:
+      id: 'log'
+    direction: DOWN
+
+# The loop writes and re-writes 3 600 points and drains the anchored query three times. Sixty seconds
+# is generous on a simulator and honest on a cold one.
+- extendedWaitUntil:
+    visible:
+      text: '.*9 nothing left behind.*'
+    timeout: 180000
+- takeScreenshot: 21-01-self-verify
+
+# The whole gate: not one step may have failed.
+- assertNotVisible:
+    text: '.*selfCheck FAIL.*'
+
+- assertVisible:
+    text: '.*4 getRoute round trip: wrote=3600 read=3600 mismatches=0.*'
+- assertVisible:
+    text: '.*9 nothing left behind: remaining=0.*'
+# iOS-only: the replacement mints a new uuid, so the batch carries a removal flagged `replaced`.
+- assertVisible:
+    text: '.*5 save v2: status=saved route=stored newNativeId=true.*'
+- assertVisible:
+    text: '.*6 sync reports replaced: added=1 removed=1 replaced=1.*'
+
+# Privacy (design §9.2): the loop wrote 8 000 m, 420 kcal, 7 200 steps and 3 600 coordinates around
+# 37.5665 / 126.978. None of it may be on screen.
+- assertNotVisible:
+    text: '.*37\.566.*'
+- assertNotVisible:
+    text: '.*126\.97.*'
+- assertNotVisible:
+    text: '.*8000.*'
+- assertNotVisible:
+    text: '.*420.*'

@@ -68,6 +68,76 @@ describe('§3.7 record — upsert(dedupe_key)', () => {
     expect(parsed.data.raw.secret).toBe('[REDACTED]');
   });
 
+  it('billing/auth key·token·password·card/account 계열을 모든 깊이에서 마스킹하고 handler 원본은 변형하지 않는다', async () => {
+    const fake = createFakeSql();
+    const inbox = createPgWebhookInboxStore(fake);
+    const sensitiveEvent = {
+      envelope: 'legacy',
+      eventType: 'PAYMENT_STATUS_CHANGED',
+      createdAt: '2026-08-20T12:00:00+09:00',
+      data: {
+        billingKey: 'bkey-should-never-persist',
+        auth_key: 'auth-should-never-persist',
+        tokens: ['access-token-1', 'refresh-token-2'],
+        password: 'password-should-never-persist',
+        cardNumber: '4111111111111111',
+        card: { number: '5555555555554444', issuer: 'issuer-kept-out-with-card' },
+        nested: {
+          Authorization: 'Bearer should-never-persist',
+          bank_account_no: '100012345678',
+          keep: 'audit-safe-value',
+        },
+      },
+    };
+    const webhook = {
+      trust: 'unverified',
+      event: sensitiveEvent,
+      meta: makeSecretVerifiedWebhook().meta,
+    } as unknown as Parameters<WebhookInboxStore['record']>[0];
+    const before = JSON.stringify(sensitiveEvent);
+
+    await inbox.record(webhook);
+
+    const stored = String(fake.calls[0]?.params?.[6]);
+    for (const raw of [
+      'bkey-should-never-persist',
+      'auth-should-never-persist',
+      'access-token-1',
+      'refresh-token-2',
+      'password-should-never-persist',
+      '4111111111111111',
+      '5555555555554444',
+      'Bearer should-never-persist',
+      '100012345678',
+    ]) {
+      expect(stored).not.toContain(raw);
+    }
+    const parsed = JSON.parse(stored) as {
+      data: {
+        billingKey: string;
+        auth_key: string;
+        tokens: string;
+        password: string;
+        cardNumber: string;
+        card: string;
+        nested: { Authorization: string; bank_account_no: string; keep: string };
+      };
+    };
+    expect(parsed.data.billingKey).toBe('[REDACTED]');
+    expect(parsed.data.auth_key).toBe('[REDACTED]');
+    expect(parsed.data.tokens).toBe('[REDACTED]');
+    expect(parsed.data.password).toBe('[REDACTED]');
+    expect(parsed.data.cardNumber).toBe('[REDACTED]');
+    expect(parsed.data.card).toBe('[REDACTED]');
+    expect(parsed.data.nested.Authorization).toBe('[REDACTED]');
+    expect(parsed.data.nested.bank_account_no).toBe('[REDACTED]');
+    expect(parsed.data.nested.keep).toBe('audit-safe-value');
+    // serializeJsonb가 새 객체를 만들므로 실제 handler가 받는 webhook/event는 그대로다.
+    expect(JSON.stringify(sensitiveEvent)).toBe(before);
+    expect(sensitiveEvent.data.billingKey).toBe('bkey-should-never-persist');
+    expect(sensitiveEvent.data.card.number).toBe('5555555555554444');
+  });
+
   it('jsonb가 거부하는 U+0000·비페어 서로게이트는 U+FFFD로 정화해 저장한다 — poison message 차단', async () => {
     const fake = createFakeSql();
     const inbox = createPgWebhookInboxStore(fake);

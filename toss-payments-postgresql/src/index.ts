@@ -19,12 +19,36 @@ export type {
   SqlRow,
 } from './sql';
 
+// 앱 lifecycle용 opaque advisory transaction lock — 원본 식별자/HMAC secret은 앱에 남긴다.
+export {
+  createOpaqueAdvisoryLockKey,
+  createPgOpaqueAdvisoryLocks,
+} from './opaque-advisory-locks';
+export type {
+  OpaqueAdvisoryLockKey,
+  PgOpaqueAdvisoryLocks,
+  PgOpaqueAdvisoryLocksOptions,
+} from './opaque-advisory-locks';
+
 // 에러 (설계 §5)
 export { TossPostgresError, isTossPostgresError } from './errors';
 export type { TossPostgresErrorCode } from './errors';
 
 // 식별자 규칙 — 소비자가 자기 설정 검증에 재사용할 수 있게 공개
 export { DEFAULT_SCHEMA, IDENTIFIER_PATTERN } from './identifiers';
+
+// 민감값 at-rest 보호 seam — 암호 알고리즘/KMS는 소비자 소유, 평문은 명시적 unsafe opt-in만 허용
+export {
+  SENSITIVE_VALUE_PURPOSE,
+  createSensitiveValueContext,
+  unsafePlaintextSensitiveValueProtector,
+} from './sensitive-values';
+export type {
+  PgSensitiveStoreOptions,
+  SensitiveValueContext,
+  SensitiveValueProtector,
+  SensitiveValuePurpose,
+} from './sensitive-values';
 
 // 마이그레이션 (설계 §4)
 export { advisoryLockKey, migrate, renderMigrationSql } from './migrations';
@@ -35,6 +59,7 @@ export { createPgOrderStore } from './stores/orders';
 export type { PgStoreOptions } from './stores/orders';
 export { createPgDepositSecretStore } from './stores/deposit-secrets';
 export { createPgBillingKeyStore } from './stores/billing-keys';
+export type { PgBillingKeyMutation, PgBillingKeySnapshot, PgBillingKeyStore } from './stores/billing-keys';
 export { createPgCancelRetryStore } from './stores/cancel-retries';
 export { createPgWebhookDedupeStore } from './stores/webhook-dedupe';
 export type { PgWebhookDedupeStoreOptions } from './stores/webhook-dedupe';

@@ -264,8 +264,19 @@ export type RevokeBillingKeyError =
   | {
       readonly source: 'library';
       readonly kind: 'profile-detached';
-      readonly customerKey: CustomerKey;
-    };
+    readonly customerKey: CustomerKey;
+  };
+
+/**
+ * 원격 billing key revoke 뒤 현재 로컬 credential도 제거됐는지의 명시적 결과.
+ *
+ * `false`는 profile이 오래되어 같은 customerKey에 더 새 billing key가 있거나, 이미
+ * 로컬 행이 없어서 현재 credential을 건드리지 않았다는 뜻이다. 원격 DELETE 자체는
+ * 성공했으므로 Err가 아니지만, 호출자가 이를 "현재 결제수단 해제"로 오해하면 안 된다.
+ */
+export interface RevokeBillingKeyOutcome {
+  readonly currentStoredKeyDeleted: boolean;
+}
 
 export type ImportBillingKeyError =
   | {
@@ -321,13 +332,17 @@ export interface BillingFlowBase<E extends Env> {
   ) => Promise<Result<BillingPayment, BillingApproveError>>;
 
   /**
-   * DELETE /v1/billing/{billingKey} + store.delete.
-   * 갱신 API는 존재하지 않는다 — refresh류 메서드 없음. 재발급 = 새 인증부터.
+   * DELETE /v1/billing/{billingKey} 뒤
+   * `store.delete({ customerKey, expectedBillingKey: billingKey })`.
+   *
+   * 반환의 `currentStoredKeyDeleted`가 false면 profile은 이미 오래됐거나 행이 없어
+   * 현재 저장 credential을 지우지 않았다. 갱신 API는 존재하지 않는다 — refresh류
+   * 메서드 없음. 재발급 = 새 인증부터.
    */
   revoke(
     profile: BillingProfile,
     options?: CallOptions<E>,
-  ): Promise<Result<void, RevokeBillingKeyError>>;
+  ): Promise<Result<RevokeBillingKeyOutcome, RevokeBillingKeyError>>;
 }
 
 export type BillingFlow<E extends Env, C extends BillingCapabilities = {}> =
@@ -498,7 +513,12 @@ export function createBillingFlow<E extends Env, C extends BillingCapabilities =
       });
     }
     try {
-      await store.save(record);
+      await store.save(
+        record,
+        callOptions?.idempotencyKey === undefined
+          ? undefined
+          : { operationId: callOptions.idempotencyKey },
+      );
     } catch (cause) {
       // 키는 발급됐다 — record를 동봉해 유실을 막는다(호출자 수동 복구).
       // billingKey는 봉인 상태로 동봉 — 에러 통째 로깅에도 새지 않는다(recoverBillingKeyRecord로 회수)
@@ -594,7 +614,7 @@ export function createBillingFlow<E extends Env, C extends BillingCapabilities =
   const revokeImpl = async (
     profile: BillingProfile,
     callOptions?: CallOptions<E>,
-  ): Promise<Result<void, RevokeBillingKeyError>> => {
+  ): Promise<Result<RevokeBillingKeyOutcome, RevokeBillingKeyError>> => {
     const billingKey = readSeal(profile, billingKeySeal);
     if (billingKey === undefined) {
       return err({ source: 'library', kind: 'profile-detached', customerKey: profile.customerKey });
@@ -611,12 +631,19 @@ export function createBillingFlow<E extends Env, C extends BillingCapabilities =
     if (!r.ok && !(r.error.source === 'toss' && r.error.code === 'ALREADY_REMOVED_BILLING_KEY')) {
       return err(r.error);
     }
+    let currentStoredKeyDeleted: boolean;
     try {
-      await store.delete(profile.customerKey);
+      // JavaScript 소비자가 오래된 store 구현을 붙여 undefined/임의 truthy를 반환해도
+      // "현재 credential 삭제"로 승격하지 않는다. 오직 literal true만 성공이다.
+      currentStoredKeyDeleted =
+        (await store.delete({
+          customerKey: profile.customerKey,
+          expectedBillingKey: billingKey,
+        })) === true;
     } catch (cause) {
       return err({ source: 'library', kind: 'store-failure', operation: 'delete', cause });
     }
-    return ok(undefined);
+    return ok({ currentStoredKeyDeleted });
   };
 
   const base: BillingFlowBase<E> = {
@@ -681,7 +708,12 @@ export function createBillingFlow<E extends Env, C extends BillingCapabilities =
 
     async revoke(profile, callOptions) {
       const r = await revokeImpl(profile, callOptions);
-      if (r.ok) emit?.emit('billing.revoked', { customerKey: profile.customerKey });
+      // stale profile의 원격 key revoke는 성공할 수 있어도, 더 새 local key를 건드리지
+      // 않았으면 customerKey만 담긴 이벤트를 발화하면 안 된다. 수신자가 현재 entitlement를
+      // 비활성화하는 잘못된 해석을 할 수 있기 때문이다.
+      if (r.ok && r.value.currentStoredKeyDeleted) {
+        emit?.emit('billing.revoked', { customerKey: profile.customerKey });
+      }
       return r;
     },
   };

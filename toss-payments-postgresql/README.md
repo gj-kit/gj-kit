@@ -1,8 +1,8 @@
 # @gj-kit/toss-payments-postgresql
 
-[`@gj-kit/toss-payments`](../toss-payments/README.md)가 공개한 저장소 주입 seam 6종 — 주문 금액 원본(`OrderStore`), 가상계좌 secret(`DepositSecretStore`), 빌링키(`BillingKeyStore`), 취소 재시도 티켓(`CancelRetryStore`), 웹훅 중복 제거(`WebhookDedupeStore`), 감사 로그(`AuditSink`) — 의 PostgreSQL 구현입니다. 테이블 7종과 마이그레이션을 이 패키지가 소유하므로 프로덕션 채택이 "테이블을 설계하는 일"이 아니라 "설정하는 일"이 됩니다. 웹훅 dedupe의 `claim`은 단일 문 CTE로 원자적으로 전이해 동시 재전송 N건 중 정확히 1건만 처리권을 얻고, 코어에 seam이 없는 이벤트 원문 보존은 웹훅 inbox 헬퍼(`withWebhookInbox`)로 제공합니다.
+[`@gj-kit/toss-payments`](../toss-payments/README.md)가 공개한 저장소 주입 seam 6종 — 주문 금액 원본(`OrderStore`), 가상계좌 secret(`DepositSecretStore`), 빌링키(`BillingKeyStore`), 취소 재시도 티켓(`CancelRetryStore`), 웹훅 중복 제거(`WebhookDedupeStore`), 감사 로그(`AuditSink`) — 의 PostgreSQL 구현입니다. 테이블 7종과 마이그레이션을 이 패키지가 소유하므로 프로덕션 채택이 "테이블을 설계하는 일"이 아니라 "설정하는 일"이 됩니다. billing key 레코드 전체·deposit secret·cancel retry 레코드는 앱이 제공한 비동기 `SensitiveValueProtector`를 거쳐서만 저장됩니다. 즉, 암호 알고리즘/KMS는 앱이 소유하되 평문 저장은 기본값으로 존재하지 않습니다. 웹훅 dedupe의 `claim`은 단일 문 CTE로 원자적으로 전이해 동시 재전송 N건 중 정확히 1건만 처리권을 얻고, 코어에 seam이 없는 이벤트 원문 보존은 웹훅 inbox 헬퍼(`withWebhookInbox`)로 제공합니다.
 
-> **원칙 경계**: direct runtime dependency 0 — **`pg`조차 peer가 아닙니다.** `fromPgPool`은 구조적 타입 `PgPoolLike`만 소비하므로 `pg.Pool`이 그대로 대입되고, TypeORM 등 다른 드라이버 사용자는 `SqlClient`를 직접 구현하면 됩니다. `@nestjs/common`·`reflect-metadata`·`rxjs`는 `./nestjs` 서브패스 전용 optional peer이며, 루트 엔트리 `.`는 Nest 없이 동작합니다. 코어 공개 계약은 **구현만** 하고 재정의·확장하지 않습니다.
+> **원칙 경계**: direct runtime dependency 0 — **`pg`조차 peer가 아닙니다.** `fromPgPool`은 구조적 타입 `PgPoolLike`만 소비하므로 `pg.Pool`이 그대로 대입되고, TypeORM 등 다른 드라이버 사용자는 `SqlClient`를 직접 구현하면 됩니다. `@nestjs/common`·`reflect-metadata`·`rxjs`는 `./nestjs` 서브패스 전용 optional peer이며, 루트 엔트리 `.`는 Nest 없이 동작합니다. 코어 `BillingKeyStore`에는 그대로 대입되며, stale webhook·projection 경쟁 방어는 PostgreSQL 전용 `PgBillingKeyStore` 확장으로 별도 제공됩니다.
 
 ## 설치
 
@@ -27,12 +27,31 @@ import {
   parseApiSecretKey,
 } from '@gj-kit/toss-payments/server';
 import { createTossPaymentsPostgres, fromPgPool } from '@gj-kit/toss-payments-postgresql';
+import type {
+  SensitiveValueContext,
+  SensitiveValueProtector,
+} from '@gj-kit/toss-payments-postgresql';
 
 const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+// 앱의 실제 KMS/AEAD 어댑터를 주입한다. 이 패키지는 crypto dependency를 소유하지 않는다.
+const paymentEnvelopeCrypto = undefined as unknown as {
+  encrypt(plaintext: string, options: { aad: string }): Promise<string>;
+  decrypt(ciphertext: string, options: { aad: string }): Promise<string>;
+};
+
+// 앱이 키 관리·알고리즘을 소유한다. encrypt/decrypt 양쪽에서 purpose + recordId를
+// 같은 AAD로 결속해야, 암호문 행 교체/다른 용도 재사용을 AEAD가 거부한다.
+const aad = ({ purpose, recordId }: SensitiveValueContext) =>
+  `gj-kit/toss-payments-postgresql:v1:${purpose}:${recordId}`;
+const sensitiveValueProtector: SensitiveValueProtector = {
+  encrypt: (plaintext, context) => paymentEnvelopeCrypto.encrypt(plaintext, { aad: aad(context) }),
+  decrypt: (ciphertext, context) => paymentEnvelopeCrypto.decrypt(ciphertext, { aad: aad(context) }),
+};
 
 // 순수 조립 — 즉시 DB 접속 없음, 자동 DDL 없음, 자동 cleanup 타이머 없음.
 export const pg = createTossPaymentsPostgres({
   sql: fromPgPool(pool),
+  sensitiveValueProtector, // 필수 — billing/deposit/cancel 평문 fallback 없음
   // schema: 'toss_payments',                                  // 기본값
   // dedupe: { leaseSeconds: 60, completedTtlSeconds: 432_000 }, // 기본값 (5일)
   // retention: { cancelRetryDays: 15 },                       // 기본값 — 토스 멱등키 유효기간
@@ -50,6 +69,79 @@ export const tossConfig = defineTossPaymentsConfig({
 
 export const toss = createTossPayments(tossConfig);
 ```
+
+## 민감값 보호 — 필수 설정, AAD binding, 개발 DB opt-in
+
+`createTossPaymentsPostgres`와 세 개의 개별 스토어 팩토리(`createPgBillingKeyStore`,
+`createPgDepositSecretStore`, `createPgCancelRetryStore`)는 모두
+`sensitiveValueProtector`를 **필수**로 받습니다. 이 패키지는 Node `crypto`·특정 KMS에
+의존하지 않습니다. 대신 앱의 AEAD/envelope-encryption/KMS 어댑터가 아래 contract를
+구현합니다.
+
+```ts
+import type {
+  SensitiveValueContext,
+  SensitiveValueProtector,
+} from '@gj-kit/toss-payments-postgresql';
+
+const appKeyService = undefined as unknown as {
+  encrypt(plaintext: string, options: { aad: string }): Promise<string>;
+  decrypt(ciphertext: string, options: { aad: string }): Promise<string>;
+};
+
+const sensitiveValueProtector: SensitiveValueProtector = {
+  async encrypt(plaintext, context) {
+    // random nonce/IV + authenticated encryption. context 두 필드를 AAD에 모두 넣는다.
+    return appKeyService.encrypt(plaintext, {
+      aad: `toss-pg:v1:${context.purpose}:${context.recordId}`,
+    });
+  },
+  async decrypt(ciphertext, context) {
+    return appKeyService.decrypt(ciphertext, {
+      aad: `toss-pg:v1:${context.purpose}:${context.recordId}`,
+    });
+  },
+};
+```
+
+스토어가 전달하는 고정 context는 다음과 같습니다. `purpose`와 DB lookup key를 AAD에
+함께 넣어야 동일 암호문을 다른 행/용도로 옮기는 공격을 막을 수 있습니다.
+
+| 저장소 | 보호 범위 | context |
+|---|---|---|
+| `billing_keys` | `BillingKeyRecord` 전체 (billing key·card/account metadata 포함) | `{ purpose: 'billing-key', recordId: customerKey }` |
+| `deposit_secrets` | secret 문자열 | `{ purpose: 'deposit-secret', recordId: orderId }` |
+| `cancel_retries` | JSON 직렬화된 `CancelRetryRecord` 전체 | `{ purpose: 'cancel-retry-record', recordId: ticketId }` |
+
+`encrypt`/`decrypt` 실패는 숨기거나 평문으로 재시도하지 않고 그대로 호출자에게 전달됩니다.
+보호기 구현도 오류 메시지·telemetry에 입력값을 넣지 않아야 합니다. `cancelRetries`의
+`bodyJson`은 여전히 코드 유닛 단위로 무손실 복원되므로 동일 멱등키+동일 요청 바이트
+재생 계약이 유지됩니다.
+
+로컬 테스트/일회성 개발 DB에서만 아래처럼 의도적으로 평문으로 열 수 있습니다. 이
+상수는 이름대로 unsafe이며 프로덕션 설정에 두지 마세요.
+
+```ts
+import {
+  createTossPaymentsPostgres,
+  unsafePlaintextSensitiveValueProtector,
+} from '@gj-kit/toss-payments-postgresql';
+
+const sql = undefined as never;
+
+const pg = createTossPaymentsPostgres({
+  sql,
+  sensitiveValueProtector: unsafePlaintextSensitiveValueProtector,
+});
+```
+
+이전 `0.1.x`가 만든 평문 행은 새 안전 모드에서 자동으로 읽거나 재암호화하지 않습니다.
+배포 전 서비스라면 해당 개발 schema를 비우고 다시 만들고, 이미 운영 중인 소비자는
+이전 버전으로 레코드를 안전하게 export한 뒤 새 보호기를 통해 다시 저장하는 명시적
+cutover를 수행하세요. `0001_init`은 변경하지 않았으며 이 보안 변경은 런타임 저장
+형식 변경이므로 release notes의 breaking migration 안내를 따릅니다. 현재 release의
+`0002_billing_key_operation_fingerprint`도 append-only로 적용됩니다. 이것은 raw key나
+operationId를 저장하지 않고 lifecycle fence용 SHA-256 fingerprint만 추가합니다.
 
 부팅 시퀀스는 항상 **migrate → listen** 순서입니다. 이 패키지는 부팅 시 자동 DDL을 실행하지 않습니다 — `migrate()`는 명시 호출 전용입니다.
 
@@ -75,9 +167,205 @@ Flyway/dbmate 등 자체 마이그레이션 도구를 쓴다면 SQL 원문을 �
 import { renderMigrationSql } from '@gj-kit/toss-payments-postgresql';
 
 const script = renderMigrationSql({ schema: 'toss_payments' });
-// migrate()와 동일한 SQL(버전 테이블 관리 문 제외) — V0001__toss_payments_init.sql 등으로 저장
+// migrate()와 동일한 SQL(버전 테이블 관리 문 제외) — V0001 init + V0002 fingerprint 등으로 저장
 console.log(script);
 ```
+
+## 빌링키 lifecycle fence — stale 삭제와 projection 경쟁
+
+코어 `BillingKeyStore.delete({ customerKey, expectedBillingKey })` 자체가 **조건부** 연산입니다.
+지연된 `BILLING_DELETED`·stale `BillingProfile`은 현재 보호 record의 raw key와 일치할 때만
+삭제되고, missing/mismatch면 `false`로 끝나므로 재발급된 더 새 키를 지우지 않습니다.
+`createPgBillingKeyStore`와 aggregate의 `billingKeys`는 이 compare/decrypt/delete를 같은
+connection transaction에서 수행해야 하므로 `SqlExecutor`가 아니라 `SqlClient`를 요구합니다.
+PostgreSQL aggregate의 `billingKeys`는 코어 타입에 대입 가능한 `PgBillingKeyStore`이며, 다음
+추가 API를 제공합니다.
+
+```ts
+import type { BillingKeyRecord } from '@gj-kit/toss-payments/server';
+import { pg } from '@/payments/toss';
+
+const customerKey = undefined as unknown as BillingKeyRecord['customerKey'];
+const deletedWebhookBillingKey = undefined as unknown as BillingKeyRecord['billingKey'];
+
+// 오래된 BILLING_DELETED가 새 issuance를 지우지 않는다.
+// 행이 없거나 현재 key가 다르면 false — 장애가 아니라 안전한 no-op이다.
+const deleted = await pg.billingKeys.deleteIfBillingKeyMatches({
+  customerKey,
+  expectedBillingKey: deletedWebhookBillingKey,
+});
+```
+
+`deleteIfBillingKeyMatches({ customerKey, expectedBillingKey })`와
+`replaceIfBillingKeyMatches(customerKey, expectedKey, replacement)`는
+단일 PostgreSQL transaction에서 customerKey advisory lock → `SELECT … FOR UPDATE` → 보호 payload
+복호화 → `timingSafeEqual` 비교 → `DELETE` 또는 `UPDATE`를 실행합니다. `replacement: null`은
+조건부 삭제입니다. 행 손상·복호화 실패는 숨기지 않고 throw하며, `false`는 **missing/mismatch**만
+뜻합니다.
+
+하지만 generic 저장과 앱 projection의 완료 순서까지 맞춰야 한다면 짧은 conditional 메서드만
+연결하지 마세요. customerKey만으로 충분한 내부 mutation은 `withMutationLock`을 쓸 수 있지만,
+앱 lifecycle HMAC/blind-index gate와 billing-key mutation을 **함께** 잡아야 하는 issuance,
+revocation, compensation은 반드시 `withOpaqueMutationLock`을 쓰세요. 이 API는 하나의
+PostgreSQL connection/transaction에서 `opaque → customerKey` 순으로 두 advisory lock을 잡고,
+둘 다 얻은 뒤에만 기존 mutation handle을 callback에 넘깁니다. lock SQL은 널리 지원되는
+`pg_advisory_xact_lock(hashtext($1), hashtext($2))` 두-int 형태이며, 해시 충돌은 unrelated work를
+추가 직렬화할 뿐 같은 key의 안전성을 약화하지 않습니다.
+
+```ts
+import type { BillingKeyRecord } from '@gj-kit/toss-payments/server';
+import { createOpaqueAdvisoryLockKey } from '@gj-kit/toss-payments-postgresql';
+import { pg } from '@/payments/toss';
+
+const issued = undefined as unknown as BillingKeyRecord;
+const writeBillingProjection = undefined as unknown as (record: BillingKeyRecord) => Promise<void>;
+const appLifecycleBlindIndex = undefined as unknown as (
+  scope: 'billing-credential-lifecycle',
+  rawCredentialId: string,
+) => string;
+const rawCredentialId = undefined as unknown as string;
+const opaqueKey = createOpaqueAdvisoryLockKey(
+  appLifecycleBlindIndex('billing-credential-lifecycle', rawCredentialId),
+);
+
+await pg.billingKeys.withOpaqueMutationLock(opaqueKey, issued.customerKey, async (mutation) => {
+  // find() + save()의 외부 gap 없이 직전 snapshot과 새 generic record를 한 transaction에 둔다.
+  const previous = await mutation.replaceAndGetPrevious(issued);
+
+  // 예: 같은 customerKey의 Prisma projection transaction. Toss API/네트워크 I/O는 여기서 하지 않는다.
+  await writeBillingProjection(issued);
+
+  // 정상 반환하면 generic transaction commit. callback이 throw하면 generic 변경은 ROLLBACK된다.
+  // previous는 PgBillingKeySnapshot이다. 원본을 conditional restore에 그대로 넘기면
+  // prior operation fingerprint도 보존된다. JSON/spread 복제본은 fingerprint를 잃어 fail-closed다.
+  void previous;
+});
+```
+
+**두 public lock API를 중첩하지 마세요.**
+
+```text
+// 금지: `withConnection` 두 개가 생겨 pool max=1에서 self-deadlock하고,
+// opaque/customer lock이 같은 transaction이라는 보장도 사라진다.
+await pg.opaqueLocks.withLock(opaqueKey, () =>
+  pg.billingKeys.withMutationLock(issued.customerKey, async () => undefined),
+);
+```
+
+반대 순서(`withMutationLock` 안에서 `opaqueLocks.withLock`)도 금지입니다. 결합 경로의 global
+order는 라이브러리가 강제하는 **opaque → customerKey** 하나뿐입니다. callback에서는 전달된
+`mutation` handle만 사용하고, callback 바깥 `pg.billingKeys`를 다시 호출하지 마세요.
+
+### 발급 후 operation fence — external projection 역완료 방지
+
+core `billing.issue(auth, { idempotencyKey })`는 그 idempotency key를
+`store.save(record, { operationId })`로 자동 전달합니다. PostgreSQL은 raw operationId가 아니라
+SHA-256 fingerprint만 `billing_keys.operation_fingerprint`에 보관하고, locked mutation에서만
+`isCurrentOperationId(operationId)`로 현재 row와 대조합니다. 앱이 별도 intent/subscription
+projection을 **발급 반환 뒤** 완료한다면 다음처럼 같은 intent-derived operationId를 다시
+확인하세요.
+
+```ts
+import type { BillingKeyRecord } from '@gj-kit/toss-payments/server';
+import { pg } from '@/payments/toss';
+
+const customerKey = undefined as unknown as BillingKeyRecord['customerKey'];
+const operationId = undefined as unknown as string; // 해당 issuance의 unique idempotency key; secret/key/card 값 금지
+const finishLocalIntentAndSubscription = undefined as unknown as () => Promise<void>;
+
+await pg.billingKeys.withMutationLock(customerKey, async (mutation) => {
+  if (!(await mutation.isCurrentOperationId(operationId))) {
+    throw new Error('billing issuance is no longer current'); // fail closed; no raw values in the error
+  }
+  await finishLocalIntentAndSubscription(); // local durable work only
+});
+```
+
+이 operation fence는 **post-persistence** finalization이 A/B 역순으로 끝나며 A가 B credential을
+자기 intent에 붙이는 문제를 막습니다. provider 요청 자체의 순서를 보장하거나 두 auth intent의
+제품 정책을 결정하지는 않습니다. 같은 customer의 provider 호출도 직렬화해야 한다면 앱은
+provider 호출 전의 durable per-customer gate를 별도로 가져야 합니다. store wrapper는
+`save(record, options)`의 options를 반드시 `mutation.save(record, options)`로 전달해야 하며,
+idempotencyKey/operationId를 생략한 발급은 이 fence로 확인할 수 없습니다.
+
+중요한 운영 경계:
+
+- callback 안에서는 전달받은 `mutation` handle만 사용하세요. 바깥 `pg.billingKeys`를 다시
+  호출하면 다른 connection이 같은 advisory lock을 기다려 deadlock이 납니다. handle은 해당
+  customerKey에 고정되어 다른 customerKey record를 저장하면 throw합니다.
+- callback에는 Toss/provider 호출·HTTP·긴 네트워크 I/O를 넣지 마세요. 보호기에 필요한
+  encrypt/decrypt만 라이브러리 내부에서 수행되므로 protector는 low-latency로 유지합니다.
+- Prisma 등 별도 connection의 projection transaction은 **순서화되지만 generic transaction과
+  2PC 원자성은 아닙니다.** callback 반환 뒤 generic `COMMIT`이 실패하면 요청을 fail-closed로
+  처리하고, generic row와 projection을 reconciliation/retry 대상으로 남기세요. 성공을 먼저
+  응답하거나 민감값을 로그에 남기면 안 됩니다.
+- callback이 throw하면 generic billing key 변경은 rollback됩니다. projection도 자체 DB
+  transaction으로 rollback되게 만들거나, 외부 side effect는 명시적 reconciliation을 둬야 합니다.
+
+`replaceAndGetPrevious(record)`의 top-level 버전은 generic storage snapshot만 원자화합니다. host
+projection lifecycle까지 보호하지 않으므로 위 callback 없이 `find → save → projection` 보상에
+사용하지 마세요.
+
+## 앱 lifecycle 순서화 — opaque advisory lock
+
+`pg.opaqueLocks`는 결제 도메인 정책을 추가하지 않는, 앱 소유 lifecycle용 **짧은** PostgreSQL
+advisory transaction-lock facility입니다. 예를 들어 같은 구독 credential의 발급/삭제/갱신
+finalization이 여러 API 인스턴스·worker에서 역순으로 끝나면 안 되는 경우, 앱이 만든
+nonsecret HMAC 또는 blind-index 문자열로 그 작업만 직렬화할 수 있습니다. 원본 customer ID,
+email, billing key, authorization secret을 이 API에 직접 넘기지 마세요.
+
+`pg.opaqueLocks.withLock`은 **candidate-null webhook처럼 billing-key mutation handle이 필요 없는
+host-only 작업**에 쓰세요. billing-key issuance/delete/compensation처럼 customer mutation도 필요한
+경로는 위의 `pg.billingKeys.withOpaqueMutationLock`만 사용합니다.
+
+```ts
+// subscriptions/billing-lifecycle.ts
+import {
+  createOpaqueAdvisoryLockKey,
+} from '@gj-kit/toss-payments-postgresql';
+import { pg } from '@/payments/toss';
+
+// 앱이 key management + canonicalization을 소유한다. 반환값은 raw 식별자가 아닌
+// nonsecret HMAC/blind-index여야 하며, scope/version을 포함해 용도 간 충돌을 막는다.
+const appLifecycleBlindIndex = undefined as unknown as (
+  scope: 'billing-credential-lifecycle',
+  rawCredentialId: string,
+) => string;
+const rawCredentialId = undefined as unknown as string;
+const finishLocalLifecycle = undefined as unknown as () => Promise<void>;
+
+const lockKey = createOpaqueAdvisoryLockKey(
+  appLifecycleBlindIndex('billing-credential-lifecycle', rawCredentialId),
+);
+
+await pg.opaqueLocks.withLock(lockKey, async () => {
+  // Prisma/ORM의 짧은 durable transaction, conditional state transition, outbox enqueue 등.
+  // Toss/provider/HTTP 호출처럼 오래 걸리거나 외부 side effect인 작업은 여기에 넣지 않는다.
+  await finishLocalLifecycle();
+});
+```
+
+`createOpaqueAdvisoryLockKey()`는 1~512 UTF-8 byte 문자열만 받고 branded type을 반환합니다.
+그래서 raw string은 실수로 `withLock`에 넘길 수 없고, 호출부가 HMAC/blind-index 생성이라는
+보안 결정을 명시해야 합니다. 라이브러리는 그 opaque 값도 SQL parameter에 직접 전달하지
+않습니다. 고정 namespace와 schema를 포함해 domain-separate한 SHA-256 fingerprint만
+`pg_advisory_xact_lock(hashtext($1), hashtext($2))`에 전달합니다. lock hash collision은 서로
+다른 작업을 추가로 직렬화할 뿐, 같은 key의 상호 배제를 약화하지 않습니다.
+
+이 facility는 별도 테이블·migration을 만들지 않습니다. aggregate의 `schema`는 lock namespace
+분리에만 쓰므로, migration 전에도 short-lived host lifecycle gate로 사용할 수 있습니다. 다만
+callback 안에서 **같은 key**로 `pg.opaqueLocks.withLock()`을 다시 호출하면 다른 connection이
+바깥 xact lock을 기다려 self-deadlock합니다. billing-key mutation을 함께 해야 한다면 위의
+combined API로 바꾸고, 여러 independent key가 필요하면 앱 전체에서 일관된 lock 획득 순서를
+정하세요.
+
+이 API는 한 library connection에서 `BEGIN → advisory lock → callback → COMMIT`을 수행하고,
+callback/락 획득 실패 시 `ROLLBACK`합니다. PostgreSQL transaction-scoped lock이라
+commit/rollback과 함께 자동 해제되어 session lock이 남지 않습니다. 다만 callback 안의
+Prisma 등 **다른 connection** transaction과 2PC 원자성을 만들지는 않습니다. 이는 durable
+idempotency, conditional write, outbox/reconciliation을 대체하지 않고 오직 cross-process
+순서화만 제공합니다. 앱 DB가 commit된 뒤 library connection의 commit이 실패하면 요청을
+fail-closed로 처리하고 reconciliation으로 수습하세요.
 
 ## NestJS 배선
 
@@ -119,6 +407,11 @@ import {
 import type { TossPaymentsPostgres } from '@gj-kit/toss-payments-postgresql/nestjs';
 import { buildTossConfig } from '@/payments/toss.config';
 
+// 앱의 실제 KMS/AEAD protector provider를 import해 사용한다.
+const sensitiveValueProtector = undefined as never;
+// Pool은 앱 lifecycle이 소유하는 singleton이다. forRootAsync 안에서 매번 만들지 않는다.
+const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+
 @Module({
   imports: [
     TossPaymentsModule.forRootAsync({
@@ -126,7 +419,8 @@ import { buildTossConfig } from '@/payments/toss.config';
       imports: [
         TossPaymentsPostgresModule.forRootAsync({
           useFactory: () => ({
-            sql: fromPgPool(new Pool({ connectionString: process.env.DATABASE_URL })),
+            sql: fromPgPool(pool),
+            sensitiveValueProtector,
           }),
         }),
       ],
@@ -150,10 +444,17 @@ import type { TossPaymentsPostgres } from '@gj-kit/toss-payments-postgresql/nest
 import { AppModule } from '@/app.module';
 
 const app = await NestFactory.create(AppModule, { rawBody: true }); // rawBody — 웹훅 검증 전제
+app.enableShutdownHooks(); // SIGTERM/SIGINT에서 app-owned lifecycle provider를 호출
 const pg = app.get<TossPaymentsPostgres>(TOSS_PAYMENTS_POSTGRES);
 await pg.migrate();
 await app.listen(3000);
 ```
+
+`pg.Pool`은 앱이 소유하는 singleton provider로 만들고, **같은 Pool**을 `fromPgPool`에 전달하세요.
+`forRootAsync` factory 안에서 새 Pool을 만들면 종료 때 추적할 수 없고 connection leak가 납니다.
+Nest shutdown provider에서는 `await pg.audit.flush()` 후 `await pool.end()`를 정확히 한 번 호출합니다.
+`pg.migrate()`는 `app.listen()` 전에 await해야 하며, 실패하면 listen하지 말고 부팅을 실패 처리하세요.
+모듈은 migration·cleanup을 자동 실행하지 않습니다.
 
 ## 웹훅 — dedupe 배선과 inbox
 
@@ -163,7 +464,7 @@ await app.listen(3000);
 - 처리 중 크래시에 대비한 lease(기본 60초)가 만료되면 다음 수신이 재점유합니다.
 - `completed` 행은 기본 5일(코어 권장 — 토스 최장 재전송 기간보다 길게) 보존되어 재전송을 계속 걸러내고, 삭제는 `cleanup()` 호출 시에만 일어납니다.
 
-웹훅 **inbox**는 스토어 seam이 아니라 `WebhookHandlers`를 감싸는 헬퍼입니다(코어 `claim`에는 이벤트 메타가 전달되지 않으므로 — 코어 계약 무변경). 사업 이벤트 1건 = 1행(`dedupe_key` PK)이고 재전송은 `deliveries` 증가로 관측됩니다. record는 핸들러 **앞**에서 실행되어 핸들러가 실패해도 수신 사실은 남습니다(감사·재처리 목적). 저장본에는 두 가지 정화가 적용됩니다: ① 모든 깊이의 `secret` 키는 `'[REDACTED]'`로 마스킹됩니다 — `PAYMENT_STATUS_CHANGED`의 `data`는 코어 `Payment` 통짜라 가상계좌 결제면 입금 웹훅 위조에 쓰일 수 있는 secret이 실려 오는데, 이 테이블은 무기한 보존되기 때문입니다(핸들러가 받는 이벤트는 원본 그대로입니다). ② jsonb가 저장을 거부하는 U+0000·비페어 서로게이트는 U+FFFD로 치환됩니다 — `failOnRecordError: true`에서 특정 웹훅이 영구 재전송 실패 루프(poison message)가 되는 것을 막습니다.
+웹훅 **inbox**는 스토어 seam이 아니라 `WebhookHandlers`를 감싸는 헬퍼입니다(코어 `claim`에는 이벤트 메타가 전달되지 않으므로 — 코어 계약 무변경). 사업 이벤트 1건 = 1행(`dedupe_key` PK)이고 재전송은 `deliveries` 증가로 관측됩니다. record는 핸들러 **앞**에서 실행되어 핸들러가 실패해도 수신 사실은 남습니다(감사·재처리 목적). 저장본에는 두 가지 정화가 적용됩니다: ① 모든 깊이의 `secret`, `billingKey`, `authKey`, token, password, credential, API/private/security key, card/account number 계열 키는 `'[REDACTED]'`로 마스킹됩니다. 새 provider 필드·중첩 `raw`에도 같은 규칙이 재귀 적용되고, **핸들러가 받는 이벤트 객체는 절대 변형하지 않습니다.** ② jsonb가 저장을 거부하는 U+0000·비페어 서로게이트는 U+FFFD로 치환됩니다 — `failOnRecordError: true`에서 특정 웹훅이 영구 재전송 실패 루프(poison message)가 되는 것을 막습니다.
 
 ```ts
 // app/api/webhooks/toss/route.ts — Next.js Route Handler (Fetch 표준 어댑터)
@@ -300,11 +601,13 @@ await pg.audit.flush(); // 시작된 모든 audit insert의 정착 대기 — �
 
 ### 보관 책임 — cleanup이 지우지 않는 테이블
 
-`audit_entries`, `webhook_inbox`, `orders`, `deposit_secrets`는 **어떤 경로로도 이 패키지가 삭제하지 않습니다.** `billing_keys`도 `cleanup()`은 지우지 않습니다 — 단 코어 계약 메서드 `BillingKeyStore.delete(customerKey)`(빌링키 삭제 플로우)가 호출되면 해당 고객의 행 1건은 삭제됩니다. 보관 기간·아카이빙·접근 통제는 소비자 책임입니다 — 특히 `audit_entries`(요청/응답 증거)와 `webhook_inbox`(이벤트 원문)는 분쟁 대응 근거이므로 조직의 감사 보존 정책에 따라 관리하세요.
+`audit_entries`, `webhook_inbox`, `orders`, `deposit_secrets`는 **어떤 경로로도 이 패키지가 삭제하지 않습니다.** `billing_keys`도 `cleanup()`은 지우지 않습니다 — 단 코어 계약 메서드 `BillingKeyStore.delete({ customerKey, expectedBillingKey })`가 현재 key와 일치할 때만 해당 고객의 행 1건을 삭제합니다. 보관 기간·아카이빙·접근 통제는 소비자 책임입니다 — 특히 `audit_entries`(요청/응답 증거)와 `webhook_inbox`(이벤트 원문)는 분쟁 대응 근거이므로 조직의 감사 보존 정책에 따라 관리하세요.
 
-### cancel_retries는 평문이다 — DB 레벨 암호화를 켜라
+### cancel_retries는 보호된 text다 — DB 경계도 계속 방어하라
 
-`cancel_retries.record_json`에는 취소 요청 본문이 그대로 들어가며, 가상계좌 환불이면 **환불 계좌 정보가 평문으로 포함될 수 있습니다.** v1에는 at-rest 암호화 seam이 없으므로 TDE·디스크/백업 암호화 등 DB 레벨 암호화와 테이블 접근 통제를 반드시 적용하세요. 컬럼이 jsonb가 아닌 text인 것은 의도입니다 — `bodyJson`은 멱등 재생의 바이트 계약이라 jsonb 정규화(NUL 거부, 이스케이프/키 정렬)로 원문이 변형될 위험을 원천 배제합니다.
+`cancel_retries.record_json`에는 `SensitiveValueProtector`가 만든 opaque 문자열만 저장됩니다. 복호화 뒤의 `CancelRetryRecord.bodyJson`은 멱등 재생의 바이트 계약 때문에 text → JSON parse 경로로 코드 유닛 단위 복원됩니다. jsonb 정규화(NUL 거부, 이스케이프/키 정렬)로 원문이 변형될 위험을 원천 배제합니다.
+
+앱 보호기 외에도 DB 접속 권한 최소화, TLS, 디스크/백업 암호화, KMS 키 회전과 테이블 감사는 계속 필요합니다. 이 패키지는 key material·KMS 권한·retention policy를 소유하지 않으며, `unsafePlaintextSensitiveValueProtector`는 이 방어를 대체하지 못하는 개발 전용 escape hatch입니다.
 
 ### 스토어는 반드시 primary를 본다 — 리드 레플리카 금지
 
@@ -312,7 +615,7 @@ await pg.audit.flush(); // 시작된 모든 audit insert의 정착 대기 — �
 
 ### 다른 드라이버 — TypeORM DataSource로 SqlClient 직접 구현
 
-`SqlClient`가 이 패키지의 유일한 드라이버 접점입니다. 요구는 세 가지뿐입니다: `$1, $2` 위치 파라미터, 실패는 그대로 throw, `withConnection`은 단일 세션 고정(`migrate()`의 트랜잭션·advisory lock용 — 스토어는 전부 단일 문이라 이 경로를 쓰지 않습니다).
+`SqlClient`가 이 패키지의 유일한 드라이버 접점입니다. 요구는 세 가지뿐입니다: `$1, $2` 위치 파라미터, 실패는 그대로 throw, `withConnection`은 단일 세션 고정(`migrate()`와 `billingKeys.withMutationLock()`의 transaction·advisory lock용)입니다.
 
 ```ts
 // payments/typeorm-sql-client.ts — SqlClient 직접 구현 예시 (TypeORM DataSource)
@@ -327,7 +630,8 @@ export function fromTypeOrmDataSource(dataSource: DataSource): SqlClient {
       return { rows };
     },
     async withConnection(fn) {
-      // migrate()의 BEGIN·advisory lock이 한 커넥션에 고정되도록 QueryRunner 1개를 전용한다
+      // migrate()/billingKeys.withMutationLock()의 BEGIN·advisory lock이 한 connection에
+      // 고정되도록 QueryRunner 1개를 전용한다
       const runner = dataSource.createQueryRunner();
       try {
         return await fn({
@@ -337,7 +641,7 @@ export function fromTypeOrmDataSource(dataSource: DataSource): SqlClient {
           },
         });
       } finally {
-        // migrate()는 실패 경로에서 스스로 ROLLBACK을 시도한 뒤 throw한다
+        // migrate()/billing mutation lock은 실패 경로에서 스스로 ROLLBACK을 시도한 뒤 throw한다
         await runner.release();
       }
     },
@@ -356,11 +660,16 @@ export function fromTypeOrmDataSource(dataSource: DataSource): SqlClient {
 | `fromPgPool(pool)` | `pg.Pool` → `SqlClient` 구조적 어댑터 — fn throw 시 `release(err)`로 커넥션 폐기 |
 | `SqlClient` / `SqlExecutor` / `SqlResult` / `SqlRow` | 드라이버 중립 seam — `$1` 위치 파라미터, `rowCount` 미의존 |
 | `PgPoolLike` / `PgPoolClientLike` / `PgQueryResultLike` | `pg`를 import하지 않고 `pg.Pool`이 대입되는 구조적 타입 |
-| `createTossPaymentsPostgres(options)` | 스토어 집합체 팩토리 — 순수 조립, 즉시 DB 접속 없음 (`TossPaymentsPostgres` / `TossPaymentsPostgresOptions` / `CleanupResult`) |
+| `SensitiveValueProtector` / `SensitiveValueContext` / `SENSITIVE_VALUE_PURPOSE` | 앱 소유 async at-rest 보호 seam + billing/deposit/cancel AAD context 값 |
+| `unsafePlaintextSensitiveValueProtector` | **개발 DB 전용** 명시적 평문 opt-in — 기본값이 아니며 프로덕션 금지 |
+| `createTossPaymentsPostgres(options)` | 스토어 집합체 팩토리 — 순수 조립, 즉시 DB 접속 없음. `sensitiveValueProtector` 필수 (`TossPaymentsPostgres` / `TossPaymentsPostgresOptions` / `CleanupResult`) |
+| `pg.opaqueLocks.withLock(key, callback)` | aggregate가 제공하는 앱 lifecycle 순서화. `key`는 `createOpaqueAdvisoryLockKey(appHmacOrBlindIndex)`로 만든 nonsecret branded value여야 하며, callback에는 짧은 local durable work만 둔다. |
+| `createOpaqueAdvisoryLockKey(value)` / `createPgOpaqueAdvisoryLocks(sql, { schema? })` | aggregate 밖에서 같은 facility를 조립할 때의 public factory와 `OpaqueAdvisoryLockKey` / `PgOpaqueAdvisoryLocks` / `PgOpaqueAdvisoryLocksOptions` 타입. raw identifier/HMAC secret 생성은 앱 책임이다. |
 | `migrate(sql, { schema? })` | 명시 호출 마이그레이션 — advisory lock 직렬화 + 단일 트랜잭션 + 멱등 (`MigrateOptions` / `MigrationResult`) |
 | `renderMigrationSql({ schema? })` | 동일 SQL 전체 스크립트(버전 테이블 관리 문 제외) — Flyway/dbmate 사용자용 |
 | `advisoryLockKey(schema)` | migrate가 잡는 FNV-1a 64bit advisory lock 키 재계산 |
-| `createPgOrderStore` / `createPgDepositSecretStore` / `createPgBillingKeyStore` / `createPgCancelRetryStore` / `createPgWebhookDedupeStore` / `createPgAuditSink` | 집합체 없이 개별 스토어만 조립할 때 (`PgStoreOptions` / `PgWebhookDedupeStoreOptions` / `PgAuditSink`) |
+| `createPgOrderStore` / `createPgDepositSecretStore` / `createPgBillingKeyStore` / `createPgCancelRetryStore` / `createPgWebhookDedupeStore` / `createPgAuditSink` | 집합체 없이 개별 스토어만 조립할 때. 세 민감 스토어에는 `PgSensitiveStoreOptions`의 필수 `sensitiveValueProtector`가 필요함 |
+| `PgBillingKeyStore` / `PgBillingKeyMutation` / `PgBillingKeySnapshot` | `SqlClient` aggregate/direct factory의 PostgreSQL-only lifecycle fence. customer-only path는 `withMutationLock(customerKey, callback)`을, opaque host lifecycle + customer mutation은 **같은 transaction**의 `withOpaqueMutationLock(opaqueKey, customerKey, callback)`을 쓴다. combined API는 opaque → customer 순서를 강제하고 handle로 `replaceAndGetPrevious`, conditional replace/delete, `isCurrentOperationId`를 제공한다. 두 public lock API를 중첩하지 않는다. |
 | `createPgWebhookInboxStore(sql, options?)` / `withWebhookInbox(inbox, handlers, options?)` | 웹훅 이벤트 원문 보존 (`WebhookInboxStore` / `WithWebhookInboxOptions`) |
 | `TossPostgresError` / `isTossPostgresError` / `TossPostgresErrorCode` | 이 패키지가 직접 판정한 실패 전용 — code가 공개 계약 |
 | `DEFAULT_SCHEMA` / `IDENTIFIER_PATTERN` | 기본 스키마 이름(`'toss_payments'`)과 식별자 허용 패턴 |
@@ -371,9 +680,9 @@ export function fromTypeOrmDataSource(dataSource: DataSource): SqlClient {
 |---|---|
 | `TOSS_PAYMENTS_POSTGRES` | `Symbol.for` 기반 단일 토큰 — 집합체 전체가 바인딩 (ESM/CJS 이중 로드에도 동일) |
 | `InjectTossPaymentsPostgres()` | 명시적 `@Inject(토큰)` 위임 데코레이터 — `design:paramtypes` 미사용 |
-| `TossPaymentsPostgresModule.forRoot(options)` | 동기 조립 — `global` 기본 true |
-| `TossPaymentsPostgresModule.forRootAsync({ imports?, inject?, useFactory, global? })` | Nest provider 기반 비동기 조립 |
-| `TossPaymentsPostgres` / `TossPaymentsPostgresOptions` (type 재export) | 주입부 타이핑 — 루트 엔트리 없이 사용 가능 |
+| `TossPaymentsPostgresModule.forRoot(options)` | 동기 조립 — `global` 기본 true, 필수 `sensitiveValueProtector` 포함 |
+| `TossPaymentsPostgresModule.forRootAsync({ imports?, inject?, useFactory, global? })` | Nest provider 기반 비동기 조립 — `useFactory` 반환값에 `sensitiveValueProtector` 필수 |
+| `TossPaymentsPostgres` / `TossPaymentsPostgresOptions` / `SensitiveValueProtector` / `PgBillingKeyStore` / `PgBillingKeyMutation` (type 재export) | 주입부 타이핑 — 루트 엔트리 없이 사용 가능 |
 
 에러 모델: `TossPostgresError.code`는 `'invalid-identifier'`(스키마 식별자 위반) · `'order-conflict'`(saveOrder가 다른 값으로 재저장 시도 — 금액 대조 원본 보호) · `'unsafe-amount'`(bigint가 `Number.isSafeInteger` 범위 밖) · `'invalid-row'`(DB 행이 코어 계약 형태로 복원 불가) · `'migration-failed'` 5종입니다. 메시지가 아니라 **code가 공개 계약**이고, 드라이버 에러는 감싸지 않고 그대로 통과합니다(SQLSTATE 등 cause 체인 보존). 어떤 에러 메시지에도 secret·billingKey 값은 포함되지 않습니다.
 

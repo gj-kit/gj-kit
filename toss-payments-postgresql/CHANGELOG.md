@@ -1,5 +1,61 @@
 # @gj-kit/toss-payments-postgresql
 
+## 0.4.0
+
+### Minor Changes
+
+- Add `TossPaymentsPostgres.opaqueLocks` for cross-process serialization of short
+  application lifecycle finalization. Applications explicitly wrap a nonsecret
+  HMAC/blind-index with `createOpaqueAdvisoryLockKey()` and call
+  `withLock(key, callback)`. The PostgreSQL adapter holds a transaction-scoped
+  advisory lock on one connection, passes only a domain-separated SHA-256
+  fingerprint to SQL, and rolls back on failures. This is ordering only: provider
+  network I/O and cross-connection atomicity remain application responsibilities.
+
+  Add `PgBillingKeyStore.withOpaqueMutationLock(opaqueKey, customerKey, callback)`
+  for lifecycle paths that also mutate a billing key. It acquires the opaque lock
+  and the customer mutation lock in the fixed opaque-to-customer order on the
+  same connection and transaction, then exposes the existing customer-bound
+  mutation handle. Applications must use this combined API instead of nesting
+  `opaqueLocks.withLock` with `withMutationLock`, which can self-deadlock on a
+  pool of one and splits the lock lifecycle across connections.
+
+## 0.3.0
+
+### Minor Changes
+
+- Harden billing-key lifecycle persistence against stale revocation and concurrent
+  projection races. `BillingKeyStore.delete` now requires the atomic request
+  `{ customerKey, expectedBillingKey }` and `billing.revoke` returns the explicit
+  `{ currentStoredKeyDeleted }` outcome, emitting `billing.revoked` only when the
+  current stored credential was removed. `save` accepts an optional nonsecret
+  `operationId` correlation value.
+
+  PostgreSQL billing-key storage now requires `SqlClient`, encrypts the full
+  record through the required protector, persists only a SHA-256 operation
+  fingerprint, and adds migration `0002_billing_key_operation_fingerprint`.
+  `PgBillingKeyStore` provides locked compare/delete, compare/replace, opaque
+  previous snapshots, and `withMutationLock` / `isCurrentOperationId` for a
+  customer-scoped host projection fence. The fence does not serialize provider
+  network calls; applications still need their own durable pre-provider gate.
+
+  Update the Nest peer range so applications can consume core 0.5.
+
+## 0.2.0
+
+### Minor Changes
+
+- **Breaking (0.x minor):** `createTossPaymentsPostgres`, Nest `forRoot`/`forRootAsync`, and the
+  three direct sensitive-store factories now require an async `sensitiveValueProtector`. Billing key
+  records, deposit secrets, and cancel retry records are persisted only through that protector with
+  purpose + record-id context for AEAD AAD binding; there is no raw-storage default. Development-only
+  plaintext requires the explicit `unsafePlaintextSensitiveValueProtector` opt-in.
+
+  Webhook inbox persistence now recursively redacts credential, key, token, password, card, and
+  account fields without mutating the webhook object delivered to handlers. Existing 0.1.x plaintext
+  rows need an explicit export/rewrite cutover (or a development schema reset); `0001_init` remains
+  unchanged.
+
 ## 0.1.1
 
 ### Patch Changes

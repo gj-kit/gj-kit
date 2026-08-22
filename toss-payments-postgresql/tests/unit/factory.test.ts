@@ -9,25 +9,30 @@ import { describe, expect, it } from 'vitest';
 
 import { isTossPostgresError } from '../../src/errors';
 import { createTossPaymentsPostgres } from '../../src/factory';
+import { unsafePlaintextSensitiveValueProtector } from '../../src/sensitive-values';
 import { createFakeSql, norm } from './helpers/fake-sql';
+
+const DEVELOPMENT_SENSITIVE_VALUES = { sensitiveValueProtector: unsafePlaintextSensitiveValueProtector } as const;
 
 describe('§5 팩토리 — 순수 조립', () => {
   it('조립 시점에 어떤 쿼리도 실행하지 않고 표면 전체를 반환한다', () => {
     const fake = createFakeSql();
 
-    const pg = createTossPaymentsPostgres({ sql: fake });
+    const pg = createTossPaymentsPostgres({ sql: fake, ...DEVELOPMENT_SENSITIVE_VALUES });
 
     expect(fake.calls).toHaveLength(0);
     expect(fake.connections).toBe(0);
-    // 스토어 6종 + inbox + migrate/cleanup — 설계 §5 공개 표면 전부
+    // 스토어 6종 + inbox + opaque lifecycle lock + migrate/cleanup — 설계 §5 공개 표면 전부
     expect(typeof pg.orders.saveOrder).toBe('function');
     expect(typeof pg.depositSecrets.saveSecret).toBe('function');
     expect(typeof pg.billingKeys.save).toBe('function');
+    expect(typeof pg.billingKeys.withOpaqueMutationLock).toBe('function');
     expect(typeof pg.cancelRetries.save).toBe('function');
     expect(typeof pg.webhookDedupe.claim).toBe('function');
     expect(typeof pg.audit.record).toBe('function');
     expect(typeof pg.audit.flush).toBe('function');
     expect(typeof pg.inbox.record).toBe('function');
+    expect(typeof pg.opaqueLocks.withLock).toBe('function');
     expect(typeof pg.migrate).toBe('function');
     expect(typeof pg.cleanup).toBe('function');
   });
@@ -37,7 +42,7 @@ describe('§5 팩토리 — 순수 조립', () => {
 
     let thrown: unknown;
     try {
-      createTossPaymentsPostgres({ sql: fake, schema: 'Bad Schema' });
+      createTossPaymentsPostgres({ sql: fake, ...DEVELOPMENT_SENSITIVE_VALUES, schema: 'Bad Schema' });
     } catch (error) {
       thrown = error;
     }
@@ -55,12 +60,18 @@ describe('§5 팩토리 — 순수 조립', () => {
     ['dedupe.leaseSeconds Infinity', { dedupe: { leaseSeconds: Number.POSITIVE_INFINITY } }],
   ])('잘못된 수치 옵션(%s)은 조립 시점에 TypeError로 거부한다', (_label, options) => {
     const fake = createFakeSql();
-    expect(() => createTossPaymentsPostgres({ sql: fake, ...options })).toThrow(TypeError);
+    expect(() =>
+      createTossPaymentsPostgres({ sql: fake, ...DEVELOPMENT_SENSITIVE_VALUES, ...options }),
+    ).toThrow(TypeError);
   });
 
   it('schema 옵션이 스토어 SQL과 migrate에 일관되게 전파된다', async () => {
     const fake = createFakeSql();
-    const pg = createTossPaymentsPostgres({ sql: fake, schema: 'custom_schema' });
+    const pg = createTossPaymentsPostgres({
+      sql: fake,
+      ...DEVELOPMENT_SENSITIVE_VALUES,
+      schema: 'custom_schema',
+    });
 
     await pg.orders.loadOrder('order_x' as never);
     expect(fake.calls[0]?.text).toContain('"custom_schema".orders');
@@ -74,7 +85,11 @@ describe('§5 팩토리 — 순수 조립', () => {
 
   it('dedupe.leaseSeconds 옵션이 claim 파라미터로 전달된다', async () => {
     const fake = createFakeSql();
-    const pg = createTossPaymentsPostgres({ sql: fake, dedupe: { leaseSeconds: 42 } });
+    const pg = createTossPaymentsPostgres({
+      sql: fake,
+      ...DEVELOPMENT_SENSITIVE_VALUES,
+      dedupe: { leaseSeconds: 42 },
+    });
 
     await pg.webhookDedupe.claim('evt-1');
 
@@ -87,7 +102,7 @@ describe('§6 cleanup — TTL 행 정리', () => {
     const fake = createFakeSql();
     fake.enqueueRows([{ deleted: 1 }, { deleted: 1 }]); // webhook_dedupe 2건
     fake.enqueueRows([{ deleted: 1 }]); // cancel_retries 1건
-    const pg = createTossPaymentsPostgres({ sql: fake });
+    const pg = createTossPaymentsPostgres({ sql: fake, ...DEVELOPMENT_SENSITIVE_VALUES });
 
     const result = await pg.cleanup();
 
@@ -111,6 +126,7 @@ describe('§6 cleanup — TTL 행 정리', () => {
     const fake = createFakeSql();
     const pg = createTossPaymentsPostgres({
       sql: fake,
+      ...DEVELOPMENT_SENSITIVE_VALUES,
       dedupe: { completedTtlSeconds: 3600 },
       retention: { cancelRetryDays: 3 },
     });
@@ -123,7 +139,7 @@ describe('§6 cleanup — TTL 행 정리', () => {
 
   it('지운 행이 없으면 0건을 보고한다', async () => {
     const fake = createFakeSql();
-    const pg = createTossPaymentsPostgres({ sql: fake });
+    const pg = createTossPaymentsPostgres({ sql: fake, ...DEVELOPMENT_SENSITIVE_VALUES });
 
     await expect(pg.cleanup()).resolves.toEqual({ dedupeDeleted: 0, cancelRetriesDeleted: 0 });
   });
@@ -132,11 +148,14 @@ describe('§6 cleanup — TTL 행 정리', () => {
 describe('§5 migrate 위임', () => {
   it('pg.migrate()는 팩토리 스키마로 migrate를 실행해 MigrationResult를 반환한다', async () => {
     const fake = createFakeSql();
-    const pg = createTossPaymentsPostgres({ sql: fake });
+    const pg = createTossPaymentsPostgres({ sql: fake, ...DEVELOPMENT_SENSITIVE_VALUES });
 
     const result = await pg.migrate();
 
-    expect(result).toEqual({ applied: ['0001_init'], skipped: [] });
+    expect(result).toEqual({
+      applied: ['0001_init', '0002_billing_key_operation_fingerprint'],
+      skipped: [],
+    });
     expect(fake.connections).toBe(1);
   });
 });

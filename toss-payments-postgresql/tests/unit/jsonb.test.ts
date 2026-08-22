@@ -3,7 +3,8 @@
  *
  * 계약: 문제 문자(U+0000·비페어 서로게이트)가 없는 값은 JSON.stringify와 바이트
  * 동일하고, 문제 코드유닛만 U+FFFD로 치환된다(페어 서로게이트 이모지는 보존).
- * redactSecrets는 모든 깊이의 secret 키를 [REDACTED]로 치환한다(null은 보존).
+ * redactSensitiveValues는 모든 깊이의 credential/secret/key/token/password/card/account
+ * 계열 키를 [REDACTED]로 치환한다(null은 보존).
  */
 import { describe, expect, it } from 'vitest';
 
@@ -75,6 +76,38 @@ describe('serializeJsonb — redactSecrets', () => {
 
   it('옵션이 없으면 secret 키도 그대로 둔다 — audit entry는 코어 redaction 통과본이라 재마스킹하지 않는다', () => {
     expect(serializeJsonb({ secret: 'kept' })).toBe('{"secret":"kept"}');
+  });
+
+  it('새 broad opt-in은 camel/snake/case 혼합 credential·key·token·password·card/account 키를 재귀 마스킹한다', () => {
+    const value = {
+      billingKey: 'bkey',
+      auth_key: 'auth',
+      apiKey: 'api',
+      nested: {
+        TOKENS: ['token-1'],
+        Password: 'password',
+        cardNumber: '4111111111111111',
+        bank_account_no: '100012345678',
+        normalNumber: 42,
+      },
+    };
+    const json = serializeJsonb(value, { redactSensitiveValues: true });
+    expect(json).not.toContain('bkey');
+    expect(json).not.toContain('4111111111111111');
+    expect(JSON.parse(json)).toEqual({
+      billingKey: '[REDACTED]',
+      auth_key: '[REDACTED]',
+      apiKey: '[REDACTED]',
+      nested: {
+        TOKENS: '[REDACTED]',
+        Password: '[REDACTED]',
+        cardNumber: '[REDACTED]',
+        bank_account_no: '[REDACTED]',
+        normalNumber: 42,
+      },
+    });
+    // 마스킹은 저장본 clone에서만 수행한다.
+    expect(value.nested.cardNumber).toBe('4111111111111111');
   });
 });
 

@@ -10,12 +10,12 @@ import { describe, expect, it } from 'vitest';
 import { isTossPostgresError } from '../../src/errors';
 import { createPgCancelRetryStore } from '../../src/stores/cancel-retries';
 import { createFakeSql, norm } from './helpers/fake-sql';
-import { makeCancelRetryRecord } from './helpers/fixtures';
+import { TEST_UNSAFE_SENSITIVE_STORE_OPTIONS, makeCancelRetryRecord } from './helpers/fixtures';
 
 describe('§3.4 save — 통짜 JSON 1컬럼 upsert', () => {
   it('record 전체를 JSON.stringify해 (ticket_id, record_json)으로 저장한다', async () => {
     const fake = createFakeSql();
-    const store = createPgCancelRetryStore(fake);
+    const store = createPgCancelRetryStore(fake, TEST_UNSAFE_SENSITIVE_STORE_OPTIONS);
     const record = makeCancelRetryRecord();
 
     await store.save(record);
@@ -34,7 +34,7 @@ describe('§3.4 save — 통짜 JSON 1컬럼 upsert', () => {
 describe('§3.4 load — 왕복 무손실', () => {
   it('행이 없으면 null', async () => {
     const fake = createFakeSql();
-    const store = createPgCancelRetryStore(fake);
+    const store = createPgCancelRetryStore(fake, TEST_UNSAFE_SENSITIVE_STORE_OPTIONS);
 
     await expect(store.load('ticket-none')).resolves.toBeNull();
   });
@@ -43,7 +43,7 @@ describe('§3.4 load — 왕복 무손실', () => {
     const fake = createFakeSql();
     const record = makeCancelRetryRecord();
     fake.enqueueRows([{ record_json: JSON.stringify(record) }]);
-    const store = createPgCancelRetryStore(fake);
+    const store = createPgCancelRetryStore(fake, TEST_UNSAFE_SENSITIVE_STORE_OPTIONS);
 
     const loaded = await store.load(record.ticketId);
 
@@ -63,7 +63,7 @@ describe('§3.4 load — 왕복 무손실', () => {
     const record = makeCancelRetryRecord({ bodyJson: trickyBodyJson });
     const fake = createFakeSql();
     fake.enqueueRows([{ record_json: JSON.stringify(record) }]);
-    const store = createPgCancelRetryStore(fake);
+    const store = createPgCancelRetryStore(fake, TEST_UNSAFE_SENSITIVE_STORE_OPTIONS);
 
     const loaded = await store.load(record.ticketId);
 
@@ -76,7 +76,7 @@ describe('§3.4 load — 왕복 무손실', () => {
     const record = makeCancelRetryRecord({ testCode: undefined });
     const fake = createFakeSql();
     fake.enqueueRows([{ record_json: JSON.stringify(record) }]);
-    const store = createPgCancelRetryStore(fake);
+    const store = createPgCancelRetryStore(fake, TEST_UNSAFE_SENSITIVE_STORE_OPTIONS);
 
     const loaded = await store.load(record.ticketId);
     expect(loaded?.testCode).toBeUndefined();
@@ -89,7 +89,7 @@ describe('§3.4 load — 왕복 무손실', () => {
   ])('형태 위반(%s)은 invalid-row로 throw한다', async (_label, row) => {
     const fake = createFakeSql();
     fake.enqueueRows([row]);
-    const store = createPgCancelRetryStore(fake);
+    const store = createPgCancelRetryStore(fake, TEST_UNSAFE_SENSITIVE_STORE_OPTIONS);
 
     let thrown: unknown;
     try {
@@ -101,11 +101,11 @@ describe('§3.4 load — 왕복 무손실', () => {
     if (isTossPostgresError(thrown)) expect(thrown.code).toBe('invalid-row');
   });
 
-  it('JSON 파싱 실패는 invalid-row(cause 보존) — record 내용은 메시지에 없다', async () => {
+  it('JSON 파싱 실패는 invalid-row — 복호화 평문 cause도 보존하지 않는다', async () => {
     const fake = createFakeSql();
     // 환불 계좌가 섞인 손상 JSON — 메시지에 이 내용이 새면 안 된다
     fake.enqueueRows([{ record_json: '{"refundAccount":"98765432109876", broken' }]);
-    const store = createPgCancelRetryStore(fake);
+    const store = createPgCancelRetryStore(fake, TEST_UNSAFE_SENSITIVE_STORE_OPTIONS);
 
     let thrown: unknown;
     try {
@@ -117,7 +117,7 @@ describe('§3.4 load — 왕복 무손실', () => {
     expect(isTossPostgresError(thrown)).toBe(true);
     if (isTossPostgresError(thrown)) {
       expect(thrown.code).toBe('invalid-row');
-      expect(thrown.cause).toBeInstanceOf(SyntaxError);
+      expect(thrown.cause).toBeUndefined();
       expect(thrown.message).not.toContain('98765432109876');
       expect(thrown.message).toContain('ticket-0001'); // 추적 키는 ticketId만
     }
@@ -127,7 +127,7 @@ describe('§3.4 load — 왕복 무손실', () => {
 describe('§3.4 delete', () => {
   it('ticket_id 기준 DELETE를 실행한다', async () => {
     const fake = createFakeSql();
-    const store = createPgCancelRetryStore(fake);
+    const store = createPgCancelRetryStore(fake, TEST_UNSAFE_SENSITIVE_STORE_OPTIONS);
 
     await store.delete('ticket-0001');
 

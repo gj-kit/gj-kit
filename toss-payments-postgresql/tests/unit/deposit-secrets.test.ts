@@ -9,14 +9,14 @@ import { describe, expect, it } from 'vitest';
 import { isTossPostgresError } from '../../src/errors';
 import { createPgDepositSecretStore } from '../../src/stores/deposit-secrets';
 import { createFakeSql, norm } from './helpers/fake-sql';
-import { ORDER_ID } from './helpers/fixtures';
+import { ORDER_ID, TEST_UNSAFE_SENSITIVE_STORE_OPTIONS } from './helpers/fixtures';
 
 const SECRET = 'ps_vbank_secret_do_not_log';
 
 describe('§3.2 saveSecret — upsert 시맨틱', () => {
   it('INSERT ... ON CONFLICT (order_id) DO UPDATE 1문으로 저장한다', async () => {
     const fake = createFakeSql();
-    const store = createPgDepositSecretStore(fake);
+    const store = createPgDepositSecretStore(fake, TEST_UNSAFE_SENSITIVE_STORE_OPTIONS);
 
     await store.saveSecret(ORDER_ID, SECRET);
 
@@ -31,7 +31,10 @@ describe('§3.2 saveSecret — upsert 시맨틱', () => {
 
   it('스키마 옵션이 SQL에 반영된다', async () => {
     const fake = createFakeSql();
-    const store = createPgDepositSecretStore(fake, { schema: 'custom_schema' });
+    const store = createPgDepositSecretStore(fake, {
+      ...TEST_UNSAFE_SENSITIVE_STORE_OPTIONS,
+      schema: 'custom_schema',
+    });
 
     await store.saveSecret(ORDER_ID, SECRET);
 
@@ -42,7 +45,7 @@ describe('§3.2 saveSecret — upsert 시맨틱', () => {
 describe('§3.2 getSecret — 조회', () => {
   it('행이 없으면 null을 반환한다', async () => {
     const fake = createFakeSql();
-    const store = createPgDepositSecretStore(fake);
+    const store = createPgDepositSecretStore(fake, TEST_UNSAFE_SENSITIVE_STORE_OPTIONS);
 
     await expect(store.getSecret(ORDER_ID)).resolves.toBeNull();
     expect(norm(fake.calls[0]?.text ?? '')).toContain(
@@ -54,7 +57,7 @@ describe('§3.2 getSecret — 조회', () => {
   it('저장된 secret을 그대로 반환한다', async () => {
     const fake = createFakeSql();
     fake.enqueueRows([{ secret: SECRET }]);
-    const store = createPgDepositSecretStore(fake);
+    const store = createPgDepositSecretStore(fake, TEST_UNSAFE_SENSITIVE_STORE_OPTIONS);
 
     await expect(store.getSecret(ORDER_ID)).resolves.toBe(SECRET);
   });
@@ -62,7 +65,7 @@ describe('§3.2 getSecret — 조회', () => {
   it('secret 컬럼이 문자열이 아니면 invalid-row — 메시지에 컬럼 값 미포함', async () => {
     const fake = createFakeSql();
     fake.enqueueRows([{ secret: 987654321 }]);
-    const store = createPgDepositSecretStore(fake);
+    const store = createPgDepositSecretStore(fake, TEST_UNSAFE_SENSITIVE_STORE_OPTIONS);
 
     let thrown: unknown;
     try {
@@ -83,7 +86,7 @@ describe('§3.2 getSecret — 조회', () => {
     const fake = createFakeSql();
     const driverError = new Error('deadlock detected');
     fake.enqueueError(driverError);
-    const store = createPgDepositSecretStore(fake);
+    const store = createPgDepositSecretStore(fake, TEST_UNSAFE_SENSITIVE_STORE_OPTIONS);
 
     await expect(store.saveSecret(ORDER_ID, SECRET)).rejects.toBe(driverError);
     expect(driverError.message).not.toContain(SECRET);

@@ -9,6 +9,8 @@ export { parseApiSecretKey, parseSecretKey, parseWidgetSecretKey } from './keys'
 // 저장소 인터페이스 (필수 주입 지점 + §3.1 depositSecrets)
 export type {
   BillingKeyRecord,
+  BillingKeyDeleteRequest,
+  BillingKeySaveOptions,
   BillingKeyStore,
   DepositSecretStore,
   OrderStore,
@@ -128,6 +130,7 @@ export type {
   PendingBillingAuth,
   BillingProfile,
   RevokeBillingKeyError,
+  RevokeBillingKeyOutcome,
   SealedBillingKeyRecord,
   StoreFailure,
 } from './billing';

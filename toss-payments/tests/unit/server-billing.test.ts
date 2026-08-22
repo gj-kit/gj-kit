@@ -10,6 +10,7 @@ import {
   recoverBillingKeyRecord,
   type AuthKeyReceived,
   type BillingKeyRecord,
+  type BillingKeySaveOptions,
   type BillingKeyStore,
   type BillingProfile,
 } from '../../src/server';
@@ -31,8 +32,11 @@ function memoryBillingStore(): BillingKeyStore & { readonly map: Map<string, Bil
       map.set(record.customerKey, record);
     },
     find: async (ck) => map.get(ck) ?? null,
-    delete: async (ck) => {
-      map.delete(ck);
+    delete: async ({ customerKey, expectedBillingKey }) => {
+      const current = map.get(customerKey);
+      if (current === undefined || current.billingKey !== expectedBillingKey) return false;
+      map.delete(customerKey);
+      return true;
     },
   };
 }
@@ -131,6 +135,25 @@ describe('billing.issue — store.save 성공 후에만 Ok', () => {
     expect(Object.values({ ...r.value })).not.toContain('bill_abcdef=');
   });
 
+  it('발급 idempotencyKey를 store lifecycle operationId로 전달한다', async () => {
+    const pair = mockFetch(() => ({ status: 200, body: issueResponse }));
+    let saveOptions: BillingKeySaveOptions | undefined;
+    const store: BillingKeyStore = {
+      save: async (_record, options) => {
+        saveOptions = options;
+      },
+      find: async () => null,
+      delete: async () => true,
+    };
+    const billing = createBillingFlow(apiClient(pair.fetch), store);
+    const operationId = orThrow(idempotencyKey('billing-intent-opaque-123'));
+
+    const result = await billing.issue(receivedAuth(), { idempotencyKey: operationId });
+
+    expect(isOk(result)).toBe(true);
+    expect(saveOptions).toEqual({ operationId });
+  });
+
   it('저장 실패 → Err에 발급 record 동봉 — billingKey는 봉인, recoverBillingKeyRecord로만 회수', async () => {
     const pair = mockFetch(() => ({ status: 200, body: issueResponse }));
     const boom = new Error('db down');
@@ -139,7 +162,7 @@ describe('billing.issue — store.save 성공 후에만 Ok', () => {
         throw boom;
       },
       find: async () => null,
-      delete: async () => undefined,
+      delete: async () => true,
     };
     const billing = createBillingFlow(apiClient(pair.fetch), store);
     const r = await billing.issue(receivedAuth());
@@ -321,8 +344,8 @@ describe('billing.approve — 봉인 쌍으로만 승인', () => {
   });
 });
 
-describe('billing.revoke — DELETE + store.delete', () => {
-  it('삭제 성공 시 스토어에서도 제거된다', async () => {
+describe('billing.revoke — DELETE + 조건부 store.delete', () => {
+  it('현재 키 삭제 성공 시 스토어에서도 제거되고 currentStoredKeyDeleted=true', async () => {
     const pair = mockFetch((_call, index) =>
       index === 0 ? { status: 200, body: issueResponse } : { status: 200 },
     );
@@ -332,12 +355,13 @@ describe('billing.revoke — DELETE + store.delete', () => {
 
     const r = await billing.revoke(profile);
     expect(isOk(r)).toBe(true);
+    if (isOk(r)) expect(r.value.currentStoredKeyDeleted).toBe(true);
     expect(pair.calls[1]?.method).toBe('DELETE');
     expect(pair.calls[1]?.url).toBe('https://api.tosspayments.com/v1/billing/bill_abcdef%3D');
     expect(store.map.has(CK)).toBe(false);
   });
 
-  it('이미 삭제된 키 → 로컬 store도 정리하고 멱등 성공', async () => {
+  it('이미 삭제된 키 → 현재 로컬 키를 조건부로 정리하고 멱등 성공', async () => {
     const pair = mockFetch((_call, index) =>
       index === 0
         ? { status: 200, body: issueResponse }
@@ -348,7 +372,32 @@ describe('billing.revoke — DELETE + store.delete', () => {
     const profile = orThrow(await billing.issue(receivedAuth()));
     const r = await billing.revoke(profile);
     expect(isOk(r)).toBe(true);
+    if (isOk(r)) expect(r.value.currentStoredKeyDeleted).toBe(true);
     expect(store.map.has(CK)).toBe(false);
+  });
+
+  it('오래된 profile의 원격 revoke는 더 새 로컬 키를 지우지 않고 false를 명시한다', async () => {
+    const pair = mockFetch((_call, index) =>
+      index === 0 ? { status: 200, body: issueResponse } : { status: 200 },
+    );
+    const store = memoryBillingStore();
+    const billing = createBillingFlow(apiClient(pair.fetch), store);
+    const staleProfile = orThrow(await billing.issue(receivedAuth()));
+    await store.save({
+      customerKey: CK,
+      billingKey: 'bill_reissued_newer',
+      method: '카드',
+      issuedAt: '2026-08-10T12:00:00+09:00',
+      card: { issuerCode: '21', number: '941000******890', cardType: '신용', ownerType: '개인' },
+      transfers: null,
+    });
+
+    const r = await billing.revoke(staleProfile);
+
+    expect(isOk(r)).toBe(true);
+    if (isOk(r)) expect(r.value).toEqual({ currentStoredKeyDeleted: false });
+    expect((await store.find(sessionCk()))?.billingKey).toBe('bill_reissued_newer');
+    expect(pair.calls[1]?.url).toBe('https://api.tosspayments.com/v1/billing/bill_abcdef%3D');
   });
 });
 

@@ -77,6 +77,10 @@ CREATE TABLE "my_service".webhook_inbox (
   first_received_at timestamptz NOT NULL DEFAULT now(),
   last_received_at  timestamptz NOT NULL DEFAULT now()
 );
+
+-- ── 0002_billing_key_operation_fingerprint ──────────────────────
+ALTER TABLE "my_service".billing_keys
+ADD COLUMN operation_fingerprint text;
 "
 `;
 
@@ -157,5 +161,9 @@ CREATE TABLE "toss_payments".webhook_inbox (
   first_received_at timestamptz NOT NULL DEFAULT now(),
   last_received_at  timestamptz NOT NULL DEFAULT now()
 );
+
+-- ── 0002_billing_key_operation_fingerprint ──────────────────────
+ALTER TABLE "toss_payments".billing_keys
+ADD COLUMN operation_fingerprint text;
 "
 `;

@@ -31,7 +31,13 @@ export function memoryOrderStore(): OrderStore {
   };
 }
 
-/** customerKey 키 인메모리 BillingKeyStore — save는 같은 customerKey를 덮어쓴다(upsert). */
+/**
+ * customerKey 키 인메모리 BillingKeyStore — save는 같은 customerKey를 덮어쓴다(upsert).
+ *
+ * `delete` 비교와 제거 사이에 await가 없어 한 JavaScript 프로세스 안에서는 조건부
+ * 삭제가 원자적이다. 다중 프로세스/인스턴스 환경에는 DB CAS 또는 transaction 구현을
+ * 써야 하며, 이 테스트용 구현을 프로덕션에 사용하면 안 된다.
+ */
 export function memoryBillingKeyStore(): BillingKeyStore {
   const records = new Map<string, BillingKeyRecord>();
   return {
@@ -41,8 +47,11 @@ export function memoryBillingKeyStore(): BillingKeyStore {
     async find(customerKey) {
       return records.get(customerKey) ?? null;
     },
-    async delete(customerKey) {
+    async delete({ customerKey, expectedBillingKey }) {
+      const current = records.get(customerKey);
+      if (current === undefined || current.billingKey !== expectedBillingKey) return false;
       records.delete(customerKey);
+      return true;
     },
   };
 }

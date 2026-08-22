@@ -7,7 +7,6 @@
  */
 import type { AuditSink } from '@gj-kit/toss-payments';
 import type {
-  BillingKeyStore,
   CancelRetryStore,
   DepositSecretStore,
   OrderStore,
@@ -17,9 +16,14 @@ import type { WebhookDedupeStore } from '@gj-kit/toss-payments/webhook';
 import { DEFAULT_SCHEMA, assertSqlIdentifier, schemaRef } from './identifiers';
 import { migrate } from './migrations';
 import type { MigrationResult } from './migrations';
+import { createPgOpaqueAdvisoryLocks } from './opaque-advisory-locks';
+import type { PgOpaqueAdvisoryLocks } from './opaque-advisory-locks';
+import { requireSensitiveValueProtector } from './sensitive-values';
+import type { SensitiveValueProtector } from './sensitive-values';
 import type { SqlClient } from './sql';
 import { createPgAuditSink } from './stores/audit';
 import { createPgBillingKeyStore } from './stores/billing-keys';
+import type { PgBillingKeyStore } from './stores/billing-keys';
 import { createPgCancelRetryStore } from './stores/cancel-retries';
 import { createPgDepositSecretStore } from './stores/deposit-secrets';
 import { createPgOrderStore } from './stores/orders';
@@ -29,6 +33,14 @@ import type { WebhookInboxStore } from './stores/inbox';
 
 export interface TossPaymentsPostgresOptions {
   readonly sql: SqlClient;
+  /**
+   * billing key·deposit secret·cancel retry record의 필수 at-rest 보호기.
+   *
+   * 기본값은 없다. 평문 개발 DB를 의도적으로 써야 할 때만
+   * `unsafePlaintextSensitiveValueProtector`를 명시해 전달한다. 보호기는 `purpose`와
+   * `recordId`를 AAD에 결속해야 한다.
+   */
+  readonly sensitiveValueProtector: SensitiveValueProtector;
   /** 기본 'toss_payments'. `/^[a-z_][a-z0-9_]{0,62}$/` 위반 시 조립 시점에 throw. */
   readonly schema?: string;
   readonly dedupe?: {
@@ -60,11 +72,25 @@ export interface CleanupResult {
 export interface TossPaymentsPostgres {
   readonly orders: OrderStore;
   readonly depositSecrets: DepositSecretStore;
-  readonly billingKeys: BillingKeyStore;
+  /**
+   * 코어 BillingKeyStore + PostgreSQL conditional compare-and-mutate 확장.
+   *
+   * `deleteIfBillingKeyMatches`/`replaceIfBillingKeyMatches`는 stale BILLING_DELETED와
+   * projection 보상 경합에서 무조건 delete/save 대신 사용하는 원자적 API다.
+   */
+  readonly billingKeys: PgBillingKeyStore;
   readonly cancelRetries: CancelRetryStore;
   readonly webhookDedupe: WebhookDedupeStore;
   readonly audit: AuditSink & { flush(): Promise<void> };
   readonly inbox: WebhookInboxStore;
+  /**
+   * 앱이 만든 nonsecret HMAC/blind-index key로 짧은 host lifecycle을 인스턴스 간
+   * 순서화하는 PostgreSQL advisory transaction lock facility.
+   *
+   * 이 API는 다른 ORM connection의 transaction과 2PC 원자성을 만들지 않는다. provider
+   * network I/O가 아니라 local durable finalization만 callback에 넣어야 한다.
+   */
+  readonly opaqueLocks: PgOpaqueAdvisoryLocks;
   /** 명시 호출 전용 — 부팅 시 자동 실행 없음. `app.listen` 전에 await하는 것이 골든 패스. */
   migrate(): Promise<MigrationResult>;
   /**
@@ -81,6 +107,7 @@ export function createTossPaymentsPostgres(
   options: TossPaymentsPostgresOptions,
 ): TossPaymentsPostgres {
   const { sql } = options;
+  const sensitiveValueProtector = requireSensitiveValueProtector(options.sensitiveValueProtector);
   const schema = assertSqlIdentifier(options.schema ?? DEFAULT_SCHEMA, 'schema');
   const qs = schemaRef(schema);
 
@@ -90,7 +117,7 @@ export function createTossPaymentsPostgres(
   assertPositiveFinite(completedTtlSeconds, 'dedupe.completedTtlSeconds');
   assertPositiveInteger(cancelRetryDays, 'retention.cancelRetryDays');
 
-  const storeOptions = { schema } as const;
+  const storeOptions = { schema, sensitiveValueProtector } as const;
 
   // 존재/건수 판정은 전부 RETURNING rows로 한다(rowCount 미의존 — 설계 §2).
   const cleanupDedupeSql = `DELETE FROM ${qs}.webhook_dedupe
@@ -114,6 +141,7 @@ RETURNING 1 AS deleted`;
     }),
     audit: createPgAuditSink(sql, storeOptions),
     inbox: createPgWebhookInboxStore(sql, storeOptions),
+    opaqueLocks: createPgOpaqueAdvisoryLocks(sql, { schema }),
 
     migrate() {
       return migrate(sql, { schema });

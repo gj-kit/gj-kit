@@ -318,9 +318,9 @@
 - 승인 요청의 customerKey 일치 요구(NOT_MATCHES_CUSTOMER_KEY)를 타입으로 표현: 승인 함수를 독립 billingKey가 아니라 {billingKey, customerKey}가 봉인된 BillingProfile 객체의 메서드로만 노출하면 잘못된 쌍 조합을 구조적으로 방지
 - 두 발급 경로(SDK authKey 경로 / API 카드 직접 경로)는 같은 결과(Billing 객체)로 수렴하므로, 추상클래스 BillingKeyIssuer에 issueWithAuthKey / issueWithCard 두 구현을 두는 전략 패턴이 자연스러움. 단 카드 직접 경로는 추가 계약 필요이므로 기본 비활성(옵트인 + 명시적 capability 플래그) 권장
 - successUrl 콜백 파싱을 라이브러리가 담당하되, 반환 타입을 즉시 사용 가능한 값이 아니라 '서버 검증을 통과해야 열리는' PendingAuth로 만들어 세션의 customerKey 대조 단계를 건너뛸 수 없게 설계
-- 빌링키 조회 API가 없으므로 라이브러리는 저장(persistence) 훅 인터페이스(BillingKeyStore: save/find/delete)를 필수 주입으로 요구하는 편이 안전 — 발급 후 저장을 잊는 실수를 인터페이스로 강제
+- 빌링키 조회 API가 없으므로 라이브러리는 저장(persistence) 훅 인터페이스(BillingKeyStore: save/find/현재 키 조건부 delete)를 필수 주입으로 요구하는 편이 안전 — 발급 후 저장을 잊는 실수를 인터페이스로 강제하고, stale profile이 재발급된 키를 삭제하지 않게 한다
 - 스케줄링은 토스 미제공이므로 라이브러리 범위에서 제외하되, approve를 멱등하게 감싸는 인터페이스(orderId 생성 규칙 6~64자 검증 포함)를 제공하면 이중 과금 방지에 기여
-- 갱신 API 부재를 반영해 BillingProfile에 revoke(): Promise<void>(DELETE)와 reissue 플로우 재시작만 제공하고 refresh 같은 오해 소지 메서드는 만들지 말 것
+- 갱신 API 부재를 반영해 `revoke(): Promise<Result<RevokeBillingKeyOutcome, ...>>`(원격 DELETE 뒤 현재 로컬 credential 삭제 여부를 명시)와 reissue 플로우 재시작만 제공하고 refresh 같은 오해 소지 메서드는 만들지 말 것
 - 시크릿 키 Basic 인증 문자열 생성(base64(secretKey + ":"))은 라이브러리 내부에 캡슐화하고, 클라이언트 키/시크릿 키를 타입으로 분리(ClientKey vs SecretKey)해 브라우저 번들에 시크릿 키가 들어가는 실수를 타입 레벨에서 경고
 - 에러 모델: PAY_PROCESS_CANCELED/PAY_PROCESS_ABORTED/REJECT_CARD_COMPANY(등록창 실패), NOT_MATCHES_CUSTOMER_KEY(승인), NOT_SUPPORTED_METHOD(계약 없음)를 판별 가능한 discriminated union으로 노출
 

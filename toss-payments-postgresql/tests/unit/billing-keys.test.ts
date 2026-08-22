@@ -6,117 +6,114 @@
  * 회귀 방지선으로 고정한다.
  */
 import { describe, expect, it } from 'vitest';
+import { createHash } from 'node:crypto';
 
 import { isTossPostgresError } from '../../src/errors';
+import { createOpaqueAdvisoryLockKey } from '../../src/opaque-advisory-locks';
 import { createPgBillingKeyStore } from '../../src/stores/billing-keys';
-import { createFakeSql, norm } from './helpers/fake-sql';
-import { CUSTOMER_KEY, makeBillingKeyRecord } from './helpers/fixtures';
+import type { SqlClient } from '../../src/sql';
+import { createFakeSql, norm, normTexts } from './helpers/fake-sql';
+import {
+  CUSTOMER_KEY,
+  TEST_UNSAFE_SENSITIVE_STORE_OPTIONS,
+  makeBillingKeyRecord,
+} from './helpers/fixtures';
 
 describe('§3.3 save — upsert(customer_key)', () => {
   it('INSERT ... ON CONFLICT (customer_key) DO UPDATE로 최신 발급본을 유지한다', async () => {
     const fake = createFakeSql();
-    const store = createPgBillingKeyStore(fake);
+    const store = createPgBillingKeyStore(fake, TEST_UNSAFE_SENSITIVE_STORE_OPTIONS);
     const record = makeBillingKeyRecord();
 
     await store.save(record);
 
-    expect(fake.calls).toHaveLength(1);
-    const text = norm(fake.calls[0]?.text ?? '');
+    // SqlClient aggregate/direct path는 첫 발급의 missing-row 경합까지 막기 위해
+    // customerKey advisory lock + transaction에 save를 넣는다.
+    expect(fake.calls).toHaveLength(5);
+    expect(normTexts(fake).slice(0, 3)).toEqual([
+      'BEGIN',
+      'SELECT pg_advisory_xact_lock(hashtext($1), hashtext($2))',
+      'SELECT billing_key, operation_fingerprint FROM "toss_payments".billing_keys WHERE customer_key = $1 FOR UPDATE',
+    ]);
+    const text = norm(fake.calls[3]?.text ?? '');
     expect(text).toContain('INSERT INTO "toss_payments".billing_keys');
     expect(text).toContain('ON CONFLICT (customer_key) DO UPDATE');
     expect(text).toContain('billing_key = excluded.billing_key');
-    // jsonb 파라미터는 드라이버 중립을 위해 스토어가 직접 직렬화한다
-    expect(fake.calls[0]?.params).toEqual([
+    // unsafe opt-in 테스트에서는 record JSON이 그대로 보이지만, 실제 protector에서는
+    // 이 자리에 ciphertext가 온다(전용 sensitive-values.test.ts가 암호문 경계를 검증).
+    expect(fake.calls[3]?.params).toEqual([
       record.customerKey,
-      record.billingKey,
+      JSON.stringify(record),
       record.method,
       record.issuedAt,
-      JSON.stringify(record.card),
-      null, // transfers null → SQL NULL (JSON 문자열 'null'이 아니다)
+      null,
+      null,
+      null,
     ]);
   });
 
-  it('card null / transfers 존재 조합도 각각 NULL·직렬화로 보낸다', async () => {
+  it('card/transfers는 보호된 record payload 밖의 JSONB 컬럼에 복사하지 않는다', async () => {
     const fake = createFakeSql();
-    const store = createPgBillingKeyStore(fake);
+    const store = createPgBillingKeyStore(fake, TEST_UNSAFE_SENSITIVE_STORE_OPTIONS);
     const transfers = [{ bankName: '토스뱅크', bankAccountNumber: '100012345678' }];
     const record = makeBillingKeyRecord({ method: '계좌이체', card: null, transfers });
 
     await store.save(record);
 
-    expect(fake.calls[0]?.params?.[4]).toBeNull();
-    expect(fake.calls[0]?.params?.[5]).toBe(JSON.stringify(transfers));
+    expect(fake.calls[3]?.params?.[1]).toBe(JSON.stringify(record));
+    expect(fake.calls[3]?.params?.[4]).toBeNull();
+    expect(fake.calls[3]?.params?.[5]).toBeNull();
+    expect(fake.calls[3]?.params?.[6]).toBeNull();
+  });
+
+  it('operationId 원문 대신 SHA-256 fingerprint만 저장한다', async () => {
+    const fake = createFakeSql();
+    const store = createPgBillingKeyStore(fake, TEST_UNSAFE_SENSITIVE_STORE_OPTIONS);
+    const operationId = 'billing-intent-operation-123';
+
+    await store.save(makeBillingKeyRecord(), { operationId });
+
+    const fingerprint = fake.calls[3]?.params?.[6];
+    expect(fingerprint).toBe(createHash('sha256').update(operationId, 'utf8').digest('hex'));
+    expect(JSON.stringify(fake.calls)).not.toContain(operationId);
   });
 });
 
 describe('§3.3 find — 복원과 null', () => {
   it('행이 없으면 null을 반환한다', async () => {
     const fake = createFakeSql();
-    const store = createPgBillingKeyStore(fake);
+    const store = createPgBillingKeyStore(fake, TEST_UNSAFE_SENSITIVE_STORE_OPTIONS);
 
     await expect(store.find(CUSTOMER_KEY)).resolves.toBeNull();
     expect(fake.calls[0]?.params).toEqual([CUSTOMER_KEY]);
   });
 
-  it('pg 스타일(jsonb → 객체) 행을 BillingKeyRecord로 복원한다 — card/transfers 왕복', async () => {
+  it('보호된 JSON payload를 BillingKeyRecord로 복원한다 — card/transfers까지 같은 경계', async () => {
     const fake = createFakeSql();
     const record = makeBillingKeyRecord();
     fake.enqueueRows([
-      {
-        billing_key: record.billingKey,
-        method: record.method,
-        issued_at: record.issuedAt,
-        card: record.card, // pg는 jsonb를 파싱된 객체로 내려준다
-        transfers: null,
-      },
+      { billing_key: JSON.stringify(record) },
     ]);
-    const store = createPgBillingKeyStore(fake);
+    const store = createPgBillingKeyStore(fake, TEST_UNSAFE_SENSITIVE_STORE_OPTIONS);
 
     await expect(store.find(CUSTOMER_KEY)).resolves.toEqual(record);
   });
 
-  it('커스텀 SqlClient 스타일(jsonb → JSON 문자열)도 동일하게 복원한다', async () => {
+  it('customerKey가 payload와 다르면 invalid-row — AAD 구현 누락/행 교체도 조용히 수용하지 않는다', async () => {
     const fake = createFakeSql();
     const record = makeBillingKeyRecord();
-    fake.enqueueRows([
-      {
-        billing_key: record.billingKey,
-        method: record.method,
-        issued_at: record.issuedAt,
-        card: JSON.stringify(record.card),
-        transfers: null,
-      },
-    ]);
-    const store = createPgBillingKeyStore(fake);
+    fake.enqueueRows([{ billing_key: JSON.stringify({ ...record, customerKey: 'other-customer' }) }]);
+    const store = createPgBillingKeyStore(fake, TEST_UNSAFE_SENSITIVE_STORE_OPTIONS);
 
-    await expect(store.find(CUSTOMER_KEY)).resolves.toEqual(record);
-  });
-
-  it('card/transfers 컬럼 undefined도 null로 정규화한다(커스텀 드라이버 수용)', async () => {
-    const fake = createFakeSql();
-    const record = makeBillingKeyRecord({ card: null, transfers: null });
-    fake.enqueueRows([
-      { billing_key: record.billingKey, method: record.method, issued_at: record.issuedAt },
-    ]);
-    const store = createPgBillingKeyStore(fake);
-
-    const found = await store.find(CUSTOMER_KEY);
-    expect(found?.card).toBeNull();
-    expect(found?.transfers).toBeNull();
+    await expect(store.find(CUSTOMER_KEY)).rejects.toMatchObject({ code: 'invalid-row' });
   });
 
   it('계약 위반 행은 invalid-row — 메시지에 billingKey·customerKey 어느 쪽도 없다', async () => {
     const fake = createFakeSql();
     fake.enqueueRows([
-      {
-        billing_key: 'bkey_leak_canary',
-        method: 'CARD', // 응답 원문은 한글 리터럴이어야 한다 — 유니언 위반
-        issued_at: '2026-08-20T12:00:00+09:00',
-        card: null,
-        transfers: null,
-      },
+      { billing_key: JSON.stringify({ ...makeBillingKeyRecord(), method: 'CARD' }) },
     ]);
-    const store = createPgBillingKeyStore(fake);
+    const store = createPgBillingKeyStore(fake, TEST_UNSAFE_SENSITIVE_STORE_OPTIONS);
 
     let thrown: unknown;
     try {
@@ -134,18 +131,12 @@ describe('§3.3 find — 복원과 null', () => {
     }
   });
 
-  it('jsonb 문자열이 손상되면 invalid-row(cause 보존) — 값은 메시지에 없다', async () => {
+  it('보호된 JSON payload가 손상되면 invalid-row — 복호화 평문 cause도 보존하지 않는다', async () => {
     const fake = createFakeSql();
     fake.enqueueRows([
-      {
-        billing_key: 'bkey_leak_canary',
-        method: '카드',
-        issued_at: '2026-08-20T12:00:00+09:00',
-        card: '{broken json',
-        transfers: null,
-      },
+      { billing_key: '{"billingKey":"bkey_leak_canary", broken' },
     ]);
-    const store = createPgBillingKeyStore(fake);
+    const store = createPgBillingKeyStore(fake, TEST_UNSAFE_SENSITIVE_STORE_OPTIONS);
 
     let thrown: unknown;
     try {
@@ -157,22 +148,361 @@ describe('§3.3 find — 복원과 null', () => {
     expect(isTossPostgresError(thrown)).toBe(true);
     if (isTossPostgresError(thrown)) {
       expect(thrown.code).toBe('invalid-row');
-      expect(thrown.cause).toBeInstanceOf(SyntaxError);
+      expect(thrown.cause).toBeUndefined();
       expect(thrown.message).not.toContain('bkey_leak_canary');
     }
   });
 });
 
-describe('§3.3 delete', () => {
-  it('customer_key 기준 DELETE를 실행한다', async () => {
+describe('§3.3 delete — 코어 조건부 compare-and-delete', () => {
+  it('현재 billing key가 일치할 때만 lock → decrypt → DELETE를 실행한다', async () => {
     const fake = createFakeSql();
-    const store = createPgBillingKeyStore(fake);
+    const record = makeBillingKeyRecord();
+    fake.respond((text) => {
+      if (norm(text).startsWith('SELECT billing_key')) {
+        return [{ billing_key: JSON.stringify(record) }];
+      }
+      if (norm(text).startsWith('DELETE FROM')) return [{ deleted: 1 }];
+      return [];
+    });
+    const store = createPgBillingKeyStore(fake, TEST_UNSAFE_SENSITIVE_STORE_OPTIONS);
 
-    await store.delete(CUSTOMER_KEY);
+    await expect(
+      store.delete({ customerKey: CUSTOMER_KEY, expectedBillingKey: record.billingKey }),
+    ).resolves.toBe(true);
 
-    expect(norm(fake.calls[0]?.text ?? '')).toBe(
-      'DELETE FROM "toss_payments".billing_keys WHERE customer_key = $1',
+    expect(normTexts(fake)).toEqual([
+      'BEGIN',
+      'SELECT pg_advisory_xact_lock(hashtext($1), hashtext($2))',
+      'SELECT billing_key, operation_fingerprint FROM "toss_payments".billing_keys WHERE customer_key = $1 FOR UPDATE',
+      'DELETE FROM "toss_payments".billing_keys WHERE customer_key = $1 RETURNING 1 AS deleted',
+      'COMMIT',
+    ]);
+    expect(fake.calls[3]?.params).toEqual([CUSTOMER_KEY]);
+  });
+});
+
+describe('§3.3 PostgreSQL conditional mutation — stale webhook/compensation CAS', () => {
+  it('replaceAndGetPrevious는 같은 transaction에서 직전 snapshot을 읽고 새 record를 저장한다', async () => {
+    const fake = createFakeSql();
+    const previous = makeBillingKeyRecord({ billingKey: 'bkey_previous' });
+    const issued = makeBillingKeyRecord({ billingKey: 'bkey_issued' });
+    fake.respond((text) =>
+      norm(text).startsWith('SELECT billing_key')
+        ? [{ billing_key: JSON.stringify(previous) }]
+        : [],
     );
-    expect(fake.calls[0]?.params).toEqual([CUSTOMER_KEY]);
+    const store = createPgBillingKeyStore(fake, TEST_UNSAFE_SENSITIVE_STORE_OPTIONS);
+
+    await expect(store.replaceAndGetPrevious(issued)).resolves.toMatchObject({ record: previous });
+
+    expect(normTexts(fake)).toEqual([
+      'BEGIN',
+      'SELECT pg_advisory_xact_lock(hashtext($1), hashtext($2))',
+      'SELECT billing_key, operation_fingerprint FROM "toss_payments".billing_keys WHERE customer_key = $1 FOR UPDATE',
+      expect.stringContaining('INSERT INTO "toss_payments".billing_keys'),
+      'COMMIT',
+    ]);
+    expect(fake.calls.every((call) => call.via === 'session')).toBe(true);
+    expect(fake.calls[3]?.params?.[1]).toBe(JSON.stringify(issued));
+  });
+
+  it('없는 행 또는 다른 billing key면 false이며 DELETE/UPDATE를 실행하지 않는다', async () => {
+    const fake = createFakeSql();
+    const current = makeBillingKeyRecord({ billingKey: 'bkey_current' });
+    fake.respond((text) =>
+      norm(text).startsWith('SELECT billing_key')
+        ? [{ billing_key: JSON.stringify(current) }]
+        : [],
+    );
+    const store = createPgBillingKeyStore(fake, TEST_UNSAFE_SENSITIVE_STORE_OPTIONS);
+
+    await expect(
+      store.deleteIfBillingKeyMatches({ customerKey: CUSTOMER_KEY, expectedBillingKey: 'bkey_stale' }),
+    ).resolves.toBe(false);
+
+    expect(normTexts(fake)).toEqual([
+      'BEGIN',
+      'SELECT pg_advisory_xact_lock(hashtext($1), hashtext($2))',
+      'SELECT billing_key, operation_fingerprint FROM "toss_payments".billing_keys WHERE customer_key = $1 FOR UPDATE',
+      'COMMIT',
+    ]);
+  });
+
+  it('matching billing key만 lock → decrypt → timing-safe compare 뒤에 DELETE한다', async () => {
+    const fake = createFakeSql();
+    const current = makeBillingKeyRecord({ billingKey: 'bkey_current' });
+    fake.respond((text) => {
+      const normalized = norm(text);
+      if (normalized.startsWith('SELECT billing_key')) {
+        return [{ billing_key: JSON.stringify(current) }];
+      }
+      if (normalized.startsWith('DELETE FROM')) return [{ deleted: 1 }];
+      return [];
+    });
+    const store = createPgBillingKeyStore(fake, TEST_UNSAFE_SENSITIVE_STORE_OPTIONS);
+
+    await expect(
+      store.deleteIfBillingKeyMatches({
+        customerKey: CUSTOMER_KEY,
+        expectedBillingKey: current.billingKey,
+      }),
+    ).resolves.toBe(true);
+
+    expect(normTexts(fake)).toEqual([
+      'BEGIN',
+      'SELECT pg_advisory_xact_lock(hashtext($1), hashtext($2))',
+      'SELECT billing_key, operation_fingerprint FROM "toss_payments".billing_keys WHERE customer_key = $1 FOR UPDATE',
+      'DELETE FROM "toss_payments".billing_keys WHERE customer_key = $1 RETURNING 1 AS deleted',
+      'COMMIT',
+    ]);
+  });
+
+  it('matching billing key만 raw replacement로 바꾸며 raw record replacement는 operation fingerprint를 비운다', async () => {
+    const fake = createFakeSql();
+    const current = makeBillingKeyRecord({ billingKey: 'bkey_issued' });
+    const previous = makeBillingKeyRecord({ billingKey: 'bkey_previous' });
+    fake.respond((text) => {
+      const normalized = norm(text);
+      if (normalized.startsWith('SELECT billing_key')) {
+        return [{ billing_key: JSON.stringify(current) }];
+      }
+      if (normalized.startsWith('UPDATE')) return [{ replaced: 1 }];
+      return [];
+    });
+    const store = createPgBillingKeyStore(fake, TEST_UNSAFE_SENSITIVE_STORE_OPTIONS);
+
+    await expect(
+      store.replaceIfBillingKeyMatches(CUSTOMER_KEY, current.billingKey, previous),
+    ).resolves.toBe(true);
+
+    expect(norm(fake.calls[3]?.text ?? '')).toContain('UPDATE "toss_payments".billing_keys');
+    expect(fake.calls[3]?.params).toEqual([
+      CUSTOMER_KEY,
+      JSON.stringify(previous),
+      previous.method,
+      previous.issuedAt,
+      null,
+      null,
+      null,
+    ]);
+  });
+
+  it('replaceAndGetPrevious snapshot 원본을 restore하면 prior operation fingerprint도 보존한다', async () => {
+    const fake = createFakeSql();
+    const priorOperationId = 'billing-intent-prior';
+    const currentOperationId = 'billing-intent-current';
+    const previous = makeBillingKeyRecord({ billingKey: 'bkey_previous' });
+    const current = makeBillingKeyRecord({ billingKey: 'bkey_current' });
+    let selectCount = 0;
+    fake.respond((text) => {
+      const normalized = norm(text);
+      if (normalized.startsWith('SELECT billing_key')) {
+        selectCount += 1;
+        return selectCount === 1
+          ? [{
+              billing_key: JSON.stringify(previous),
+              operation_fingerprint: createHash('sha256').update(priorOperationId).digest('hex'),
+            }]
+          : [{
+              billing_key: JSON.stringify(current),
+              operation_fingerprint: createHash('sha256').update(currentOperationId).digest('hex'),
+            }];
+      }
+      if (normalized.startsWith('UPDATE')) return [{ replaced: 1 }];
+      return [];
+    });
+    const store = createPgBillingKeyStore(fake, TEST_UNSAFE_SENSITIVE_STORE_OPTIONS);
+
+    const snapshot = await store.replaceAndGetPrevious(current, { operationId: currentOperationId });
+    if (snapshot === null) throw new Error('previous snapshot expected');
+    await expect(
+      store.replaceIfBillingKeyMatches(CUSTOMER_KEY, current.billingKey, snapshot),
+    ).resolves.toBe(true);
+
+    expect(fake.calls[8]?.params?.[6]).toBe(
+      createHash('sha256').update(priorOperationId).digest('hex'),
+    );
+  });
+
+  it('snapshot을 상속·재구성한 객체는 prior operation fingerprint를 복원할 수 없다', async () => {
+    const fake = createFakeSql();
+    const priorOperationId = 'billing-intent-prior-sealed';
+    const current = makeBillingKeyRecord({ billingKey: 'bkey_current-sealed' });
+    const previous = makeBillingKeyRecord({ billingKey: 'bkey_previous-sealed' });
+    let selectCount = 0;
+    fake.respond((text) => {
+      const normalized = norm(text);
+      if (normalized.startsWith('UPDATE')) return [{ replaced: 1 }];
+      if (!normalized.startsWith('SELECT billing_key')) return [];
+      selectCount += 1;
+      return selectCount === 1
+        ? [{
+            billing_key: JSON.stringify(previous),
+            operation_fingerprint: createHash('sha256').update(priorOperationId).digest('hex'),
+          }]
+        : [{ billing_key: JSON.stringify(current) }];
+    });
+    const store = createPgBillingKeyStore(fake, TEST_UNSAFE_SENSITIVE_STORE_OPTIONS);
+
+    const snapshot = await store.replaceAndGetPrevious(current);
+    if (snapshot === null) throw new Error('previous snapshot expected');
+    // `Object.create`는 public record를 상속할 수 있어도 module-local WeakMap identity에는 없다.
+    const inheritedCopy = Object.assign(Object.create(snapshot), previous);
+    await expect(
+      store.replaceIfBillingKeyMatches(CUSTOMER_KEY, current.billingKey, inheritedCopy),
+    ).resolves.toBe(true);
+
+    expect(fake.calls[8]?.params?.[6]).toBeNull();
+  });
+
+  it('locked current-operation check은 raw operationId를 저장/반환하지 않고 current row에서만 판정한다', async () => {
+    const fake = createFakeSql();
+    const record = makeBillingKeyRecord();
+    const operationId = 'billing-intent-current';
+    fake.respond((text) =>
+      norm(text).startsWith('SELECT billing_key')
+        ? [{
+            billing_key: JSON.stringify(record),
+            operation_fingerprint: createHash('sha256').update(operationId).digest('hex'),
+          }]
+        : [],
+    );
+    const store = createPgBillingKeyStore(fake, TEST_UNSAFE_SENSITIVE_STORE_OPTIONS);
+
+    await expect(
+      store.withMutationLock(CUSTOMER_KEY, (mutation) => mutation.isCurrentOperationId(operationId)),
+    ).resolves.toBe(true);
+    await expect(
+      store.withMutationLock(CUSTOMER_KEY, (mutation) => mutation.isCurrentOperationId('other-intent')),
+    ).resolves.toBe(false);
+    expect(JSON.stringify(fake.calls)).not.toContain(operationId);
+  });
+
+  it('lock handle은 customerKey 하나에 고정되고 다른 record를 write하지 않는다', async () => {
+    const fake = createFakeSql();
+    const store = createPgBillingKeyStore(fake, TEST_UNSAFE_SENSITIVE_STORE_OPTIONS);
+    const otherCustomerRecord = makeBillingKeyRecord({
+      customerKey: 'cust_other' as typeof CUSTOMER_KEY,
+    });
+
+    await expect(
+      store.withMutationLock(CUSTOMER_KEY, async (mutation) => mutation.save(otherCustomerRecord)),
+    ).rejects.toThrow('customerKey는 대상 customerKey와 같아야 합니다.');
+
+    expect(normTexts(fake)).toEqual([
+      'BEGIN',
+      'SELECT pg_advisory_xact_lock(hashtext($1), hashtext($2))',
+      'ROLLBACK',
+    ]);
+  });
+
+  it('lock callback이 throw하면 그 callback의 generic write는 rollback된다', async () => {
+    const fake = createFakeSql();
+    const previous = makeBillingKeyRecord({ billingKey: 'bkey_previous' });
+    const issued = makeBillingKeyRecord({ billingKey: 'bkey_issued' });
+    fake.respond((text) =>
+      norm(text).startsWith('SELECT billing_key')
+        ? [{ billing_key: JSON.stringify(previous) }]
+        : [],
+    );
+    const store = createPgBillingKeyStore(fake, TEST_UNSAFE_SENSITIVE_STORE_OPTIONS);
+    const projectionFailed = new Error('projection failed');
+
+    await expect(
+      store.withMutationLock(CUSTOMER_KEY, async (mutation) => {
+        await mutation.replaceAndGetPrevious(issued);
+        throw projectionFailed;
+      }),
+    ).rejects.toBe(projectionFailed);
+
+    expect(normTexts(fake)).toEqual([
+      'BEGIN',
+      'SELECT pg_advisory_xact_lock(hashtext($1), hashtext($2))',
+      'SELECT billing_key, operation_fingerprint FROM "toss_payments".billing_keys WHERE customer_key = $1 FOR UPDATE',
+      expect.stringContaining('INSERT INTO "toss_payments".billing_keys'),
+      'ROLLBACK',
+    ]);
+  });
+});
+
+describe('§3.3 opaque lifecycle + customer mutation combined lock', () => {
+  it('pool max=1 fake에서도 하나의 connection/transaction에 opaque → customer → mutation handle 순서를 강제한다', async () => {
+    const base = createFakeSql();
+    let connectionHeld = false;
+    const maxOneSql: SqlClient = {
+      query: (text, params) => base.query(text, params),
+      async withConnection(operation) {
+        if (connectionHeld) {
+          throw new Error('pool max=1: nested withConnection would deadlock');
+        }
+        connectionHeld = true;
+        try {
+          return await base.withConnection(operation);
+        } finally {
+          connectionHeld = false;
+        }
+      },
+    };
+    const store = createPgBillingKeyStore(maxOneSql, TEST_UNSAFE_SENSITIVE_STORE_OPTIONS);
+    const opaqueBlindIndex = 'v1:billing-credential:nonsecret-blind-index';
+    const record = makeBillingKeyRecord();
+    let callsWhenCallbackStarted = -1;
+
+    await store.withOpaqueMutationLock(
+      createOpaqueAdvisoryLockKey(opaqueBlindIndex),
+      CUSTOMER_KEY,
+      async (mutation) => {
+        callsWhenCallbackStarted = base.calls.length;
+        await mutation.save(record);
+      },
+    );
+
+    // BEGIN + opaque xact lock + customer mutation xact lock을 모두 잡은 뒤에만 callback이 시작한다.
+    expect(callsWhenCallbackStarted).toBe(3);
+    expect(base.connections).toBe(1);
+    expect(normTexts(base)).toEqual([
+      'BEGIN',
+      'SELECT pg_advisory_xact_lock(hashtext($1), hashtext($2))',
+      'SELECT pg_advisory_xact_lock(hashtext($1), hashtext($2))',
+      expect.stringContaining('INSERT INTO "toss_payments".billing_keys'),
+      'COMMIT',
+    ]);
+    expect(base.calls.every((call) => call.via === 'session')).toBe(true);
+    // First advisory query is opaque lock and receives a fingerprint, never the app blind-index raw value.
+    expect(base.calls[1]?.params?.[0]).toBe(
+      '@gj-kit/toss-payments-postgresql:opaque-advisory-lock:toss_payments',
+    );
+    expect(base.calls[1]?.params?.[1]).toMatch(/^[0-9a-f]{64}$/);
+    expect(base.calls[1]?.params).not.toContain(opaqueBlindIndex);
+    expect(JSON.stringify(base.calls)).not.toContain(opaqueBlindIndex);
+    // Second advisory query is the pre-existing customer mutation lock on the same session.
+    expect(base.calls[2]?.params).toEqual([
+      '@gj-kit/toss-payments-postgresql:billing-key:',
+      `toss_payments:${CUSTOMER_KEY}`,
+    ]);
+  });
+
+  it('combined callback failure는 두 lock을 보유한 같은 transaction을 rollback한다', async () => {
+    const fake = createFakeSql();
+    const store = createPgBillingKeyStore(fake, TEST_UNSAFE_SENSITIVE_STORE_OPTIONS);
+    const cause = new Error('host projection failed');
+
+    await expect(
+      store.withOpaqueMutationLock(
+        createOpaqueAdvisoryLockKey('v1:billing-credential:rollback-blind-index'),
+        CUSTOMER_KEY,
+        async () => {
+          throw cause;
+        },
+      ),
+    ).rejects.toBe(cause);
+
+    expect(normTexts(fake)).toEqual([
+      'BEGIN',
+      'SELECT pg_advisory_xact_lock(hashtext($1), hashtext($2))',
+      'SELECT pg_advisory_xact_lock(hashtext($1), hashtext($2))',
+      'ROLLBACK',
+    ]);
   });
 });

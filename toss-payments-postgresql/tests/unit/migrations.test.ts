@@ -39,7 +39,10 @@ describe('§4 migrate — 신규 적용 절차', () => {
     const fake = createFakeSql();
     const result = await migrate(fake);
 
-    expect(result).toEqual({ applied: ['0001_init'], skipped: [] });
+    expect(result).toEqual({
+      applied: ['0001_init', '0002_billing_key_operation_fingerprint'],
+      skipped: [],
+    });
     expect(fake.connections).toBe(1); // 전 과정 단일 커넥션
 
     const texts = normTexts(fake);
@@ -52,13 +55,13 @@ describe('§4 migrate — 신규 적용 절차', () => {
     expect(texts[4]).toBe('SELECT id FROM "toss_payments".toss_pg_migrations');
     // 마지막 두 문: 버전 테이블 INSERT → COMMIT
     expect(texts.at(-2)).toBe('INSERT INTO "toss_payments".toss_pg_migrations (id) VALUES ($1)');
-    expect(fake.calls.at(-2)?.params).toEqual(['0001_init']);
+    expect(fake.calls.at(-2)?.params).toEqual(['0002_billing_key_operation_fingerprint']);
     expect(texts.at(-1)).toBe('COMMIT');
     // 모든 문이 세션(withConnection) 경유다 — 풀 직행이 하나라도 있으면 원자성이 깨진다
     expect(fake.calls.every((call) => call.via === 'session')).toBe(true);
   });
 
-  it('0001_init은 테이블 7종 + 인덱스 2종을 스키마 한정으로 생성한다', async () => {
+  it('0001_init은 테이블 7종 + 인덱스 2종을 스키마 한정으로 생성하고 0002가 lifecycle fingerprint를 추가한다', async () => {
     const fake = createFakeSql();
     await migrate(fake, { schema: 'custom_schema' });
 
@@ -76,17 +79,23 @@ describe('§4 migrate — 신규 적용 절차', () => {
     }
     expect(all).toContain('CREATE INDEX audit_entries_trace_id_idx');
     expect(all).toContain('CREATE INDEX audit_entries_recorded_at_idx');
+    expect(all).toContain('ALTER TABLE "custom_schema".billing_keys ADD COLUMN operation_fingerprint text');
     expect(fake.calls[1]?.params).toEqual([EXPECTED_LOCK_KEYS.custom_schema.toString()]);
   });
 
   it('이미 적용된 id는 skip하고 DDL을 다시 실행하지 않는다(멱등 재실행)', async () => {
     const fake = createFakeSql((text) =>
-      text.includes('SELECT id FROM') ? [{ id: '0001_init' }] : [],
+      text.includes('SELECT id FROM')
+        ? [{ id: '0001_init' }, { id: '0002_billing_key_operation_fingerprint' }]
+        : [],
     );
 
     const result = await migrate(fake);
 
-    expect(result).toEqual({ applied: [], skipped: ['0001_init'] });
+    expect(result).toEqual({
+      applied: [],
+      skipped: ['0001_init', '0002_billing_key_operation_fingerprint'],
+    });
     const texts = normTexts(fake);
     expect(texts).toHaveLength(6); // BEGIN, lock, 스키마, 버전 테이블, SELECT, COMMIT
     expect(texts.at(-1)).toBe('COMMIT');

@@ -1,4 +1,4 @@
-import { describe, it } from 'vitest';
+import { describe, expectTypeOf, it } from 'vitest';
 
 import { createBillingFlow, recoverBillingKeyRecord } from '../../src/server';
 import type {
@@ -6,11 +6,13 @@ import type {
   BillingFlow,
   BillingFlowBase,
   BillingKeyStore,
+  BillingKeySaveOptions,
   BillingOrder,
   BillingProfile,
   DirectCardIssueInput,
   IdempotencyKey,
   PendingBillingAuth,
+  RevokeBillingKeyOutcome,
   SealedBillingKeyRecord,
   TossEvents,
   TossServerClient,
@@ -75,6 +77,29 @@ describe('§3.3 billing — 오용 = 컴파일 에러', () => {
 
     // @ts-expect-error 봉인 record를 store.save에 직접 넣을 수 없다 — billingKey 부재
     void forge<BillingKeyStore>().save(sealed);
+  });
+
+  it('BillingKeyStore delete는 required request로 expected raw key를 강제하고 revoke 결과는 현재-row 삭제 여부를 노출한다', () => {
+    const store = forge<BillingKeyStore>();
+    const record = forge<import('../../src/server').BillingKeyRecord>();
+    const options: BillingKeySaveOptions = { operationId: 'billing-intent-123' };
+    void store.save(record, options);
+    void store.delete({ customerKey: profile.customerKey, expectedBillingKey: record.billingKey });
+    // @ts-expect-error customerKey만으로 삭제하면 stale profile이 최신 key를 지울 수 있어 금지
+    void store.delete(profile.customerKey);
+    // @ts-expect-error old two-argument shape is intentionally not structurally compatible
+    void store.delete(profile.customerKey, record.billingKey);
+    const legacyUnsafeStore: BillingKeyStore = {
+      save: async () => undefined,
+      find: async () => null,
+      // @ts-expect-error a legacy delete(customerKey) adapter cannot structurally drop expectedBillingKey
+      delete: async (_customerKey: string) => true,
+    };
+    void legacyUnsafeStore;
+
+    expectTypeOf(basicFlow.revoke(profile)).toEqualTypeOf<
+      Promise<import('../../src/server').Result<RevokeBillingKeyOutcome, import('../../src/server').RevokeBillingKeyError>>
+    >();
   });
 });
 

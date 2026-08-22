@@ -35,7 +35,8 @@ interface MigrationDef {
 }
 
 /**
- * v1 = 0001_init 1건: 스키마 + 테이블 7종 + 인덱스 (설계 §3 DDL 정본).
+ * 0001_init은 스키마 + 테이블 7종 + 인덱스의 append-only 정본이며, 이후 스키마 변경은
+ * 반드시 새 id로만 추가한다(현재 0002_billing_key_operation_fingerprint).
  *
  * 컬럼 원칙: 코어가 string으로 준 시각(createdAt, issuedAt, at)은 **원문 text 보존** —
  * 계약이 string 왕복이므로 timestamptz 재직렬화 손실을 금지한다. 운영 관측용
@@ -115,6 +116,15 @@ const MIGRATIONS: readonly MigrationDef[] = [
   first_received_at timestamptz NOT NULL DEFAULT now(),
   last_received_at  timestamptz NOT NULL DEFAULT now()
 )`,
+    ],
+  },
+  {
+    // 0001은 이미 배포 가능한 append-only migration이다. lifecycle fence용 새 컬럼은
+    // 반드시 별도 id로만 추가한다.
+    id: '0002_billing_key_operation_fingerprint',
+    statements: (qs) => [
+      `ALTER TABLE ${qs}.billing_keys
+ADD COLUMN operation_fingerprint text`,
     ],
   },
 ];

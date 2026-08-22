@@ -33,12 +33,13 @@ const fixture = (name, directory) => ({
   fixtureDirectory: join(workoutsDirectory, 'tests', 'fixtures', directory),
   placeholder: 'file:__GJ_KIT_EXPO_WORKOUTS_TARBALL__',
   platforms: ['web', 'ios', 'android'],
-  // (a) The web bundle must not carry the native branch. `GjKitWorkouts` is the
-  // native module name and appears in `dist/index.{js,mjs}` only, so finding it
-  // in a web export means the `browser` condition did not fork. Native SDK
-  // bundles are Hermes bytecode, so text-searching those would be a false
-  // negative — successful Metro resolution is the native-branch proof there.
-  forbiddenBundleText: { web: ['GjKitWorkouts', 'requireOptionalNativeModule'] },
+  // (a) The web bundle must not carry the native branch. Its unique runtime
+  // boundary is `requireOptionalNativeModule`; the module name itself also
+  // occurs in the public config-plugin guidance (`withGjKitWorkouts`), so it is
+  // not a valid branch sentinel. Native SDK bundles are Hermes bytecode, so
+  // text-searching those would be a false negative — successful Metro
+  // resolution is the native-branch proof there.
+  forbiddenBundleText: { web: ['requireOptionalNativeModule'] },
   // (b) Importing the package specifier under plain Node must not throw, and
   // all twelve members must settle as `unavailable`.
   nodeChecks: [{ name: 'import safety', args: ['./checks/import-safety.cjs'] }],

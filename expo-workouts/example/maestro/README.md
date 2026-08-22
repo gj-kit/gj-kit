@@ -25,6 +25,7 @@ by its **adb serial**, not its AVD name.
 ```sh
 cd expo-workouts/example
 export IOS_SIMULATOR_UDID='<booted iPhone simulator UDID>'
+export ANDROID_AVD='<your Health Connect-capable AVD>'
 export ANDROID_SERIAL='emulator-5556'
 maestro --device "$IOS_SIMULATOR_UDID" test maestro/00-smoke.yaml
 maestro --device "$ANDROID_SERIAL" test maestro/00-smoke.yaml
@@ -120,7 +121,6 @@ npx expo run:ios --device "$IOS_SIMULATOR_UDID"
 ### Android
 
 ```sh
-export ANDROID_AVD='<your Health Connect-capable AVD>'
 export JDK_17_HOME='<absolute path to a JDK 17 installation>'
 $ANDROID_HOME/emulator/emulator -avd "$ANDROID_AVD" -port 5556 &
 JAVA_HOME="$JDK_17_HOME" npx expo run:android --device "$ANDROID_AVD"

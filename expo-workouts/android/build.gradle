@@ -1,0 +1,67 @@
+// @gj-kit/expo-workouts — Android library (설계 §2.1, 미션 §4.1).
+//
+// expo-module-template@57.0.8의 android/build.gradle을 각색했다. 템플릿과의 차이는 셋뿐이다:
+//   1. minSdk 26   — connect-client 1.1.0의 AAR이 강제한다 (index f3, D7).
+//   2. connect-client 1.1.0 **핀 고정** — 범위 지정(`1.1.+`)은 f109/f116 같은 실측을 무효화한다.
+//   3. group/namespace = kit.gj.workouts (미션 §4.1의 naming-guard가 문자열로 단언한다).
+//
+// ⚠ 이 디렉토리에 `gradle.properties`를 만들지 않는다. 이 머신에서 Gradle은 Java 26을 집고
+//   Kotlin 2.1.20이 거기서 죽지만(f128), 그 픽스는 **머신 고유 절대 경로**(org.gradle.java.home)라
+//   패키징하면 안 된다(설계 §10.1 · §9.5-4). 로컬 빌드는 `JAVA_HOME=<JDK 17> ./gradlew …` 또는
+//   `~/.gradle/gradle.properties`로 핀한다.
+plugins {
+  id 'com.android.library'
+  id 'expo-module-gradle-plugin'
+}
+
+group = 'kit.gj.workouts'
+version = '0.1.0'
+
+android {
+  namespace 'kit.gj.workouts'
+
+  defaultConfig {
+    // expo-module-gradle-plugin은 rootProject.ext.minSdkVersion(기본 24)을 먼저 넣는다.
+    // 이 블록이 plugins{} 이후에 평가되므로 26이 최종값이다.
+    //
+    // 소비자 앱이 24로 남아 있으면 manifest merger가 이렇게 실패한다:
+    //   uses-sdk:minSdkVersion 24 cannot be smaller than version 26 declared in library
+    //   [androidx.health.connect:connect-client:1.1.0] …
+    // 플러그인은 이것을 **고치지 않는다**(설계 §7.2, D7) — README가 expo-build-properties를 안내한다.
+    minSdk 26
+
+    versionCode 1
+    versionName '0.1.0'
+  }
+
+  lintOptions {
+    abortOnError false
+  }
+
+  // JVM 단위 테스트 (설계 §9.4). `android/src/test/**`는 `package.json`의 `files`에 없으므로
+  // tarball에 들어가지 않는다 — `check-pack-contents.mjs`가 `android/src/main`만 요구한다.
+  //
+  // 테스트는 `tests/fixtures/*.json`의 **공유 골든 벡터**를 읽는다. TS 단위 테스트 · XCTest ·
+  // 이 JUnit이 같은 파일에 대해 단언하지 못하면 매핑이 3방향으로 조용히 표류한다.
+  testOptions {
+    unitTests.all { test ->
+      test.systemProperty 'gjkit.fixtures', new File(projectDir, '../tests/fixtures').canonicalPath
+      test.testLogging { events 'passed', 'failed', 'skipped' }
+    }
+  }
+}
+
+dependencies {
+  // 핀 고정. Phase 0의 모든 Android 실측(f88–f124)이 정확히 이 버전에서 나왔다.
+  implementation 'androidx.health.connect:connect-client:1.1.0'
+  // androidx.activity(ActivityResultContract)는 connect-client가 api로 노출한다.
+  // kotlinx-coroutines는 expo-modules-core가 api로 노출한다. 둘 다 여기서 다시 선언하지 않는다.
+
+  // 아래 둘은 **테스트 전용**이며 소비자의 런타임 그래프에 들어가지 않는다.
+  //  - junit        : `android/src/test/**`의 러너
+  //  - org.json     : Android SDK의 org.json은 단위 테스트에서 스텁이라 던진다. 실물로 덮는다.
+  // suspend seam은 coroutines-core의 `runBlocking`으로 돈다 — 그것은 expo-modules-core가 이미
+  // api로 노출하므로 새 의존성이 아니다.
+  testImplementation 'junit:junit:4.13.2'
+  testImplementation 'org.json:json:20180813'
+}

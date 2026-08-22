@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  설계 §7.1 분할 규칙 — **introspect 스냅샷이 증명해야 하는 것은 전부 config plugin이 쓴다.**
+
+  라이브러리 매니페스트에 놓인 항목은 Gradle 병합 시점에는 합쳐지지만
+  `expo config`의 introspect 스냅샷에는 보이지 않는다(index f10). 그래서 릴리스 게이트가 단언해야 하는
+  것 — uses-permission 전부 · READ_EXERCISE_ROUTES · READ_HEALTH_DATA_HISTORY · <queries> ·
+  PRIVACY_POLICY_URL meta-data · activity-alias 2종 — 은 **하나도 여기에 없다**. 플러그인이 쓴다.
+
+  여기에 남는 것은 props에 의존하지 않는 모듈의 고정 부품, 즉 alias 두 개의 타깃 Activity 하나뿐이다.
+  스냅샷이 증명할 것은 alias의 존재이지 타깃 클래스의 존재가 아니며, alias와 타깃은 병합 시점에
+  함께 검증된다.
+-->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+  <application>
+    <!--
+      Android 14+의 "See app data" / 권한 사용 화면이 여는 activity-alias 두 개의 타깃(f123).
+      exported=false — alias 쪽이 android.permission.START_VIEW_PERMISSION_USAGE로 보호된
+      exported alias다. 이 Activity 자신은 외부에서 직접 시작될 수 없다.
+
+      theme/noHistory/excludeFromRecents는 §7.1 표에 없는 추가분이다. 이 Activity는 화면을 그리지
+      않고 개인정보처리방침 URL로 바로 넘긴 뒤 finish하므로, 빈 화면이 최근 앱 목록에 남지 않게 한다.
+      Theme.NoDisplay는 onResume 전에 finish하지 않으면 크래시하므로 쓰지 않는다.
+    -->
+    <activity
+      android:name="kit.gj.workouts.PermissionUsageActivity"
+      android:exported="false"
+      android:excludeFromRecents="true"
+      android:noHistory="true"
+      android:theme="@android:style/Theme.Translucent.NoTitleBar" />
+  </application>
+
+</manifest>

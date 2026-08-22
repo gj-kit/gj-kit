@@ -1,0 +1,70 @@
+# Phase 2 boot smoke — platform-agnostic. Proves the dev client launches, the JS layer imports
+# without throwing, and every stub function REJECTS with a typed `WorkoutsError` code instead of
+# crashing. It touches no permission UI, so it is the one flow that is safe to run unattended on a
+# fresh simulator/emulator.
+#
+#   cd expo-workouts/example && maestro --device <serial-or-udid> test maestro/00-smoke.yaml
+#
+# iOS prerequisite (f126): boot the simulator WINDOWED — `open -a Simulator` — or anything that
+# later reaches a HealthKit sheet hangs forever with no sheet in the XCUI hierarchy.
+appId: kit.gj.workouts.example
+---
+- launchApp:
+    clearState: false
+
+# expo-dev-client shows a one-time "developer menu" onboarding sheet over the app on the first
+# launch of a fresh install, and on this version dismissing it with "Continue" leaves the dev menu
+# itself open (close button `id: xmark`). Both are DEV-CLIENT artifacts, not part of this library,
+# so both are dismissed optionally and neither is ever asserted.
+- tapOn:
+    text: '^Continue$'
+    optional: true
+- tapOn:
+    id: 'xmark'
+    optional: true
+
+
+# The dev client downloads the JS bundle from Metro on every cold start, and a cold bundle takes
+# seconds. Wait for the app's own root instead of asserting it instantly — a blank white screen with
+# "id: title not found" is almost always an unreachable Metro, not a regression (see maestro/README).
+- extendedWaitUntil:
+    visible:
+      id: 'title'
+    timeout: 60000
+- takeScreenshot: 00-01-boot
+
+# `getAvailability()` NEVER rejects — it is the one function that answers "is there a store here?"
+# without throwing. On a Phase 2 stub build it reads `unavailable/notSupported`; once the native
+# lanes land it reads `available` on both platforms.
+- assertVisible:
+    id: 'availability'
+- assertVisible:
+    id: 'authorization'
+
+# Every remaining button is a stub. We assert the button exists and that pressing it produces a LOG
+# LINE — the line's content differs per phase, so the flow asserts the shape, not the verdict.
+- tapOn:
+    id: 'list-workouts'
+- tapOn:
+    id: 'sync-workouts'
+- tapOn:
+    id: 'get-route'
+- tapOn:
+    id: 'read-heart-rate'
+- tapOn:
+    id: 'read-steps'
+- tapOn:
+    id: 'save-workout'
+- assertNotVisible:
+    text: '\(empty\)'
+- takeScreenshot: 00-02-stub-log
+
+# The privacy rule (design §9.2): no coordinate, no heart-rate value, no kcal ever reaches the UI or
+# a log line. The screen prints key SHAPES and error CODES. If a future change starts printing
+# values, these three assertions fail.
+- assertNotVisible:
+    text: '37\.566'
+- assertNotVisible:
+    text: '126\.97'
+- assertNotVisible:
+    text: 'kcal'

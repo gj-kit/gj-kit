@@ -1,0 +1,31 @@
+{
+  "name": "gj-kit-expo-workouts-example",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Dev-client smoke harness for @gj-kit/expo-workouts. NOT a workspace package, NOT packed.",
+  "main": "index.js",
+  "scripts": {
+    "start": "expo start --dev-client",
+    "ios": "expo run:ios",
+    "android": "expo run:android",
+    "prebuild": "expo prebuild --clean",
+    "introspect": "expo config --type introspect",
+    "typecheck": "tsc --noEmit",
+    "build": "echo \"(example) no build step\"",
+    "test": "echo \"(example) no tests\"",
+    "test:types": "echo \"(example) no type tests\""
+  },
+  "dependencies": {
+    "@gj-kit/expo-workouts": "file:..",
+    "expo": "~57.0.15",
+    "expo-build-properties": "~57.0.13",
+    "expo-dev-client": "~57.0.14",
+    "react": "19.2.3",
+    "react-native": "0.86.2"
+  },
+  "devDependencies": {
+    "@types/react": "~19.2.18",
+    "babel-preset-expo": "~57.0.7",
+    "typescript": "~6.0.3"
+  }
+}

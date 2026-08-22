@@ -1,0 +1,9 @@
+{
+  "platforms": ["ios", "android"],
+  "ios": {
+    "modules": ["GjKitWorkoutsModule"]
+  },
+  "android": {
+    "modules": ["kit.gj.workouts.GjKitWorkoutsModule"]
+  }
+}

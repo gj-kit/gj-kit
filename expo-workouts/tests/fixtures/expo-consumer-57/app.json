@@ -1,0 +1,22 @@
+{
+  "expo": {
+    "name": "gj-kit expo-workouts SDK 57 release smoke",
+    "slug": "gj-kit-expo-workouts-sdk-57-release-smoke",
+    "version": "1.0.0",
+    "platforms": ["ios", "android", "web"],
+    "ios": { "bundleIdentifier": "kit.gj.workouts.releasesmoke" },
+    "android": { "package": "kit.gj.workouts.releasesmoke" },
+    "web": { "bundler": "metro", "output": "single" },
+    "plugins": [
+      [
+        "@gj-kit/expo-workouts",
+        {
+          "privacyPolicyUrl": "https://gj-kit.example/privacy",
+          "read": ["workouts", "distance", "activeEnergy", "elevation", "routes", "heartRate", "steps"],
+          "write": ["workouts", "distance", "activeEnergy", "routes", "heartRate"],
+          "history": true
+        }
+      ]
+    ]
+  }
+}

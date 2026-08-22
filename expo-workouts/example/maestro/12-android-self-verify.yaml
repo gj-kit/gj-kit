@@ -1,0 +1,82 @@
+# Android — the **self-verifying loop** of design §9.5-1, as a Maestro gate.
+#
+# Phase 2 could not run this: every data function was an honest stub, so the loop's first step
+# rejected. Phase 3 makes it real, and this flow is the difference between "the app boots" and
+# "the library round-trips a 3 600-point route through Health Connect".
+#
+# What the button behind `id: self-check` does, in order (SelfCheck.ts):
+#   0 checkpoint -> 1 save v1 (3 600-point route) -> 2 listWorkouts -> 2b totals
+#   -> 3 sync sees it as own -> 4 getRoute round trip -> 5 save v2 -> 6 sync reports replaced
+#   -> 7 delete -> 8 sync reports removed -> 9 nothing left behind
+#
+# The flow asserts the two things a screenshot cannot: that **no step printed FAIL**, and that the
+# last line reports nothing left behind. It also re-asserts the privacy rule — the loop writes
+# distance, calories, steps and 3 600 coordinates, and **none of them may reach the screen**.
+#
+#   cd expo-workouts/example && maestro --device emulator-5556 test maestro/12-android-self-verify.yaml
+#
+# Prerequisites: run 10-android-authorize.yaml first (the loop needs the WRITE scopes), and note
+# that step 7 deletes everything it wrote — a half-finished run is recovered by pressing again,
+# because a re-save at the same version is idempotent.
+#
+# Measured on Pixel_9a_hcprobe (API 36, HealthFitness APEX 360526040) on 2026-08-22: all 11 lines
+# PASS, `4 getRoute round trip: wrote=3600 read=3600 mismatches=0`, and Health Connect showed
+# exactly one `gj-kit workouts example` entry carrying an exercise-route icon while it existed.
+appId: kit.gj.workouts.example
+---
+- launchApp:
+    clearState: false
+
+# expo-dev-client furniture on the first launch of a fresh install — dismissed, never asserted.
+- tapOn:
+    text: '^Continue$'
+    optional: true
+- tapOn:
+    id: 'xmark'
+    optional: true
+
+- extendedWaitUntil:
+    visible:
+      id: 'title'
+    timeout: 60000
+
+# The loop needs the store to be present. `available` is the only value from which the rest of this
+# flow means anything — on an `unavailable` device the loop would legitimately reject.
+- assertVisible:
+    id: 'availability'
+
+- tapOn:
+    id: 'self-check'
+
+# The loop performs ~6 IPC round trips plus a 3 600-point route write and read. f116 measured a
+# route-carrying page read at 435–792 ms, so seconds are normal and a minute is the safe ceiling.
+- extendedWaitUntil:
+    visible:
+      text: '.*9 nothing left behind.*'
+    timeout: 120000
+- takeScreenshot: 12-01-self-verify
+
+# The verdict. `SelfCheck.ts` prints exactly one of `PASS` / `FAIL` per step, so a single
+# assertNotVisible on `FAIL` is the whole gate — it cannot pass by the loop dying early, because the
+# step above already waited for the LAST line.
+- assertNotVisible:
+    text: '.*selfCheck FAIL.*'
+- assertVisible:
+    text: '.*4 getRoute round trip: wrote=3600 read=3600 mismatches=0.*'
+- assertVisible:
+    text: '.*9 nothing left behind: remaining=0.*'
+
+# §4.6's Android row, on the device: an upsert reuses the UUID, so a replacement emits NO removal.
+# iOS mints a new uuid and emits `removed{replaced:true}` instead — this line is the Android half.
+- assertVisible:
+    text: '.*6 sync reports replaced: added=1 removed=0 replaced=0.*'
+
+# The privacy rule (design §9.2) under the heaviest load this harness produces: 3 600 coordinates,
+# a distance, a calorie count and a step count all crossed the bridge in this run and NONE of them
+# may be renderable.
+- assertNotVisible:
+    text: '37\.566'
+- assertNotVisible:
+    text: '126\.97'
+- assertNotVisible:
+    text: 'kcal'

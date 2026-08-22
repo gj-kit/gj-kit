@@ -1,0 +1,17 @@
+{
+  "name": "@gj-kit/expo-workouts-release-consumer",
+  "version": "0.0.0",
+  "private": true,
+  "main": "expo/AppEntry",
+  "dependencies": {
+    "@gj-kit/expo-workouts": "file:__GJ_KIT_EXPO_WORKOUTS_TARBALL__",
+    "expo": "~56.0.20",
+    "react": "19.2.3",
+    "react-dom": "19.2.3",
+    "react-native": "0.85.3",
+    "react-native-web": "~0.21.2"
+  },
+  "devDependencies": {
+    "expo-modules-autolinking": "~56.0.22"
+  }
+}

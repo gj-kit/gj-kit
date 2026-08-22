@@ -21,6 +21,22 @@ const packages = [
   { directory: 'toss-payments', requirePrepack: true, requireProvenance: true },
   { directory: 'toss-payments-nestjs', requirePrepack: true, requireProvenance: true },
   { directory: 'toss-payments-postgresql', requirePrepack: true, requireProvenance: true },
+  {
+    directory: 'expo-workouts',
+    requirePrepack: true,
+    requireProvenance: true,
+    // An Expo native module publishes files that no export map mentions:
+    // autolinking reads `expo-module.config.json`, prebuild reads
+    // `app.plugin.js`, and Gradle/CocoaPods read the platform trees. Miss one
+    // and the tarball still installs — it just never links, which a consumer
+    // discovers during their own native build.
+    requiredFiles: ['expo-module.config.json', 'app.plugin.js', 'android/build.gradle'],
+    requiredPrefixes: ['dist/', 'ios/', 'android/src/main/', 'plugin/build/'],
+    forbiddenPrefixes: ['example/', 'android/build/', 'android/.gradle/', 'tests/', 'ios/build/'],
+    // Machine-specific absolute paths live here (`org.gradle.java.home` must be
+    // pinned to a local JDK 17 on this machine). Never publish them.
+    forbiddenFiles: ['android/gradle.properties', 'android/local.properties'],
+  },
 ];
 
 function collectExportTargets(value, targets) {
@@ -129,6 +145,30 @@ for (const packageConfig of packages) {
   const missingFromTarball = targets.filter((target) => !files.has(target.replace(/^\.\//, '')));
   if (missingFromTarball.length > 0) {
     throw new Error(`${manifest.name}: packed tarball is missing: ${missingFromTarball.join(', ')}`);
+  }
+
+  // The four assertions below are opt-in: a package that declares none of these
+  // options behaves exactly as it did before they existed.
+  const missingRequiredFiles = (packageConfig.requiredFiles ?? []).filter((file) => !files.has(file));
+  if (missingRequiredFiles.length > 0) {
+    throw new Error(`${manifest.name}: packed tarball is missing required files: ${missingRequiredFiles.join(', ')}`);
+  }
+
+  const missingRequiredPrefixes = (packageConfig.requiredPrefixes ?? []).filter(
+    (prefix) => ![...files].some((file) => file.startsWith(prefix)),
+  );
+  if (missingRequiredPrefixes.length > 0) {
+    throw new Error(`${manifest.name}: packed tarball has no files under: ${missingRequiredPrefixes.join(', ')}`);
+  }
+
+  const forbiddenHits = [
+    ...(packageConfig.forbiddenPrefixes ?? []).flatMap((prefix) =>
+      [...files].filter((file) => file.startsWith(prefix)),
+    ),
+    ...(packageConfig.forbiddenFiles ?? []).filter((file) => files.has(file)),
+  ];
+  if (forbiddenHits.length > 0) {
+    throw new Error(`${manifest.name}: packed tarball must not contain: ${[...new Set(forbiddenHits)].sort().join(', ')}`);
   }
 
   const distCount = [...files].filter((file) => file.startsWith('dist/')).length;

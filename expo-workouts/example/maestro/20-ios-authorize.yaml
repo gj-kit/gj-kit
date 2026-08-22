@@ -1,0 +1,154 @@
+# iOS — drive the HealthKit authorization sheet.
+#
+#   open -a Simulator                                   # MANDATORY, see below
+#   xcrun simctl boot F852C6FF-2BA6-40C2-A36F-ED0C9E47AC42   # iPhone 17
+#   cd expo-workouts/example && maestro --device F852C6FF-2BA6-40C2-A36F-ED0C9E47AC42 \
+#        test maestro/20-ios-authorize.yaml
+#
+# ⚠ PREREQUISITE, measured (f126): on a HEADLESS simulator (`xcrun simctl boot` with no
+#   Simulator.app) the HealthKit sheet NEVER enters the app's XCUI hierarchy, `requestAuthorization`
+#   hangs forever, and the run dies on timeout. `open -a Simulator` first, always. This is the iOS
+#   mirror of the Android "boot windowed and unlocked" rule.
+#   Related (f125): if you drive this through `xcodebuild test` instead of Maestro, pass
+#   `-parallel-testing-enabled NO -maximum-concurrent-test-simulator-destinations 1`, or the test
+#   runs on `Clone 1 of iPhone 17` and you will read a STALE app container.
+#   Once granted, HealthKit authorization SURVIVES REINSTALL — later iterations can skip the sheet
+#   entirely with `simctl install` + `simctl launch --console-pty`.
+#
+# ── SELECTOR PROVENANCE — T10-iOS IS CLOSED (Phase 3, 2026-08-22, iOS 26.5) ─────────────────────
+#   The sheet was dumped with `maestro hierarchy` while it was up, and every selector below is a
+#   MEASURED accessibility identifier, not a label:
+#
+#     Health Access                            the sheet's navigation bar (index f51's guess was right)
+#     UIA.Health.AuthSheet.AllCategoryButton   the "Turn On All" control
+#     UIA.Health.Allow.Button                  the primary button (DISABLED until a switch is on)
+#     UIA.Health.DoNotAllow.Button             "Don’t Allow" — note the typographic apostrophe (f124)
+#     UIA.Health.Write.<Type>.SwitchCell       one per SHARE type: ActiveEnergy · CyclingDistance ·
+#                                              Walking+RunningDistance · WorkoutRoutes · Workouts
+#     UIA.Health.Read.<Type>.SwitchCell        one per READ type
+#
+#   Identifiers are preferred over the visible labels on purpose: `Turn On All` / `Allow` /
+#   `Don’t Allow` are localised and would break the flow on a non-English simulator, while the
+#   `UIA.Health.*` identifiers are stable across locales. The visible text is asserted as well, but
+#   only as `optional: true`, so a localised device still passes.
+#
+#   ⚠ Measured and NOT explained: the dump carried five `Write.*` cells (exactly the five share
+#     identifiers the request asks for — `elevation` contributes none on iOS) but only SIX `Read.*`
+#     cells for a seven-identifier read set: `UIA.Health.Read.ActiveEnergy.SwitchCell` was absent.
+#     Nothing in this flow depends on it, and "Turn On All" covers every row either way. Recorded
+#     here rather than guessed at.
+#
+# ⚠ A COLD `launchApp` LANDS ON THE DEV-CLIENT LAUNCHER, not on the app. It starts the dev client
+#   with no URL, so the client renders "Searching for development servers…" and every `id:` selector
+#   below then fails against a screen that is not this app at all. The recovery block after
+#   `launchApp` taps the most recent `http://localhost:<port>` entry in "Recently opened", which is
+#   port-independent — this machine has had 8081 taken by another project's Metro, so hard-coding a
+#   port here would be wrong.
+#
+#   ⚠ Do NOT try to solve it with `openLink` plus `${METRO_PORT}` interpolation: Maestro 2.8.0 on
+#     this machine fails any `${…}` with
+#     `java.lang.IllegalArgumentException: Could not find option with name js.strict` before the
+#     command runs. Its JS engine is unusable here — measured, Phase 3.
+#     A literal `openLink` works; only interpolation does not.
+appId: kit.gj.workouts.example
+---
+- launchApp:
+    clearState: false
+
+# Give the client time to render EITHER the app or its launcher before deciding which one it is.
+# Without this wait the recovery block below runs against a still-blank screen, skips, and the flow
+# then fails on `id: title` — measured here twice.
+- extendedWaitUntil:
+    visible:
+      id: 'title'
+    timeout: 25000
+    optional: true
+
+# Dev-client launcher recovery — see the note above. `optional` so it costs nothing when the app is
+# already on screen.
+- runFlow:
+    when:
+      visible:
+        text: 'Enter URL manually'
+    commands:
+      # Maestro text selectors are WHOLE-STRING regexes, so the trailing `.*` is load-bearing:
+      # `http://localhost:` alone matches nothing at all and the tap silently WARNs.
+      - tapOn:
+          text: 'http://localhost:.*'
+          optional: true
+
+# expo-dev-client furniture on the first launch of a fresh install — dismissed, never asserted.
+- tapOn:
+    text: '^Continue$'
+    optional: true
+- tapOn:
+    id: 'xmark'
+    optional: true
+
+# The dev client downloads the JS bundle from Metro on every cold start, and a cold bundle takes
+# seconds. Wait for the app's own root instead of asserting it instantly — a blank white screen with
+# "id: title not found" is almost always an unreachable Metro, not a regression (see maestro/README).
+- extendedWaitUntil:
+    visible:
+      id: 'title'
+    timeout: 60000
+- takeScreenshot: 20-01-before-request
+
+- tapOn:
+    id: 'request-authorization'
+
+# MEASURED (Phase 3): the sheet's navigation bar really is `Health Access`.
+#
+# ⚠ THE SHEET APPEARS ONLY ONCE PER SIMULATOR. HealthKit never re-asks about a type it has already
+#   recorded an answer for, and that answer SURVIVES REINSTALL (f126) — so on the second run of this
+#   flow `requestAuthorization` resolves with no sheet at all, which is correct behaviour and not a
+#   regression. The whole sheet block is therefore conditional. To see it again:
+#
+#     xcrun simctl shutdown F852C6FF-2BA6-40C2-A36F-ED0C9E47AC42
+#     xcrun simctl erase    F852C6FF-2BA6-40C2-A36F-ED0C9E47AC42   # the ONLY reset — `simctl
+#                                                                  # privacy` has no `health` service
+- extendedWaitUntil:
+    visible:
+      id: 'Health Access'
+    timeout: 20000
+    optional: true
+- runFlow:
+    when:
+      visible:
+        id: 'Health Access'
+    commands:
+      - assertVisible:
+          text: 'Turn On All'
+          optional: true
+      - takeScreenshot: 20-02-health-sheet
+      # `Allow` is DISABLED until at least one switch is on, so the order here is not cosmetic:
+      # tapping `Allow` first is a no-op and the flow would then wait forever on a sheet that never
+      # dismissed.
+      - tapOn:
+          id: 'UIA.Health.AuthSheet.AllCategoryButton'
+      - tapOn:
+          id: 'UIA.Health.Allow.Button'
+
+- extendedWaitUntil:
+    visible:
+      id: 'authorization'
+    timeout: 60000
+- takeScreenshot: 20-03-after-request
+
+# The iOS rule that surprises everyone (design §1-5): READ authorization on iOS is PERMANENTLY
+# 'unknown'. HealthKit refuses to say whether a read scope was granted, so the library reports
+# 'unknown' rather than inventing 'granted'. A flow that asserts `read.workouts=granted` on iOS is
+# asserting a lie and will never pass.
+# Whole-string regexes again: the label is `authorization available read.workouts=… routeAccess=…`,
+# so an unanchored-looking fragment matches NOTHING and the assertion passes vacuously.
+- assertNotVisible:
+    text: '.*read\.workouts=denied.*'
+- tapOn:
+    id: 'refresh-state'
+- takeScreenshot: 20-04-state
+
+# After a grant the state settles at `read.workouts=unknown`: HealthKit answered the sheet, so
+# `wouldPrompt` is false, and a false `wouldPrompt` is what turns the permanent iOS read answer from
+# 'undetermined' ("ask") into 'unknown' ("the platform will never say").
+- assertVisible:
+    text: '.*read\.workouts=unknown.*'

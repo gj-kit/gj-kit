@@ -27,6 +27,12 @@ import { basename, join, resolve } from 'node:path';
  * @typedef {{ readonly name: string; readonly args: readonly string[] }} NodeCheck
  * @typedef {{
  *   readonly name: string;
+ *   readonly command: string;
+ *   readonly args: readonly string[];
+ *   readonly expect?: string;
+ * }} CommandCheck
+ * @typedef {{
+ *   readonly name: string;
  *   readonly fixtureDirectory: string;
  *   readonly placeholder: string;
  *   readonly platforms: readonly ExpoPlatform[];
@@ -35,6 +41,7 @@ import { basename, join, resolve } from 'node:path';
  *   readonly forbiddenBundleText?: Partial<Record<ExpoPlatform, readonly string[]>>;
  *   readonly requiredBundleText?: Partial<Record<ExpoPlatform, readonly string[]>>;
  *   readonly nodeChecks?: readonly NodeCheck[];
+ *   readonly commandChecks?: readonly CommandCheck[];
  * }} ExpoConsumerFixture
  * @typedef {{
  *   readonly packageDirectory: string;
@@ -101,6 +108,22 @@ function validateFixture(fixture) {
   if (fixture.platforms.length === 0) {
     throw new Error(`${fixture.name}: at least one Expo platform is required.`);
   }
+  // `commandChecks` runs an arbitrary executable, so a typo must fail here
+  // rather than minutes later after a pack and an install.
+  for (const check of fixture.commandChecks ?? []) {
+    if (typeof check?.name !== 'string' || check.name.length === 0) {
+      throw new Error(`${fixture.name}: every command check needs a name.`);
+    }
+    if (typeof check.command !== 'string' || check.command.length === 0) {
+      throw new Error(`${fixture.name}: ${String(check.name)} needs a command.`);
+    }
+    if (!Array.isArray(check.args) || check.args.some((arg) => typeof arg !== 'string')) {
+      throw new Error(`${fixture.name}: ${check.name} needs a string argument array.`);
+    }
+    if (check.expect !== undefined && typeof check.expect !== 'string') {
+      throw new Error(`${fixture.name}: ${check.name} expect must be a string when present.`);
+    }
+  }
 }
 
 function writeFixtureManifest({ fixture, consumerDirectory, tarball }) {
@@ -147,6 +170,18 @@ function runFixture({ fixture, consumerDirectory, tarball }) {
   for (const check of fixture.nodeChecks ?? []) {
     console.log(`${fixture.name}: Node ${check.name}…`);
     run(process.execPath, [...check.args], consumerDirectory);
+  }
+
+  // Some consumer-facing contracts are owned by tools that are not Node
+  // scripts — `expo-modules-autolinking resolve` and `expo config --type
+  // introspect` are the two that decide whether a native module links and
+  // whether its config plugin ran. `run()` already accepts any executable.
+  for (const check of fixture.commandChecks ?? []) {
+    console.log(`${fixture.name}: ${check.name}…`);
+    const output = run(check.command, [...check.args], consumerDirectory);
+    if (check.expect !== undefined && !output.includes(check.expect)) {
+      throw new Error(`${fixture.name}: ${check.name} output is missing ${check.expect}.`);
+    }
   }
 
   for (const platform of fixture.platforms) {

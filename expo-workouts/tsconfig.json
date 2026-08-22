@@ -1,0 +1,12 @@
+{
+  // 빌드·dts 정본. tsup이 읽는 유일한 tsconfig다 (설계 §2.4-C).
+  //
+  // `lib`은 `["ES2022"]`뿐이다 — 이 패키지에는 DOM 구현이 **하나도 없다**(expo-media와 다른 점).
+  // `src/native.ts`만 `expo`를 import하며 그 타입은 devDependency로 해석된다(설계 §0.3 V12).
+  "extends": "../tsconfig.base.json",
+  "compilerOptions": {
+    "lib": ["ES2022"],
+    "ignoreDeprecations": "6.0"
+  },
+  "include": ["src"]
+}

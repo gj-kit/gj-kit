@@ -1,0 +1,118 @@
+{
+  "schemaVersion": 1,
+  "$comment": "설계 §9.4 패턴의 iOS 전용 골든 벡터. `tests/unit/ios-native-vectors.test.ts`(TS)와 `ios-tests/`의 XCTest가 이 한 파일을 함께 읽는다. 다른 세 픽스처와 달리 이것은 Android가 읽지 않는다 — 담긴 두 표가 iOS 고유이기 때문이다: (1) 커서 지문이 Swift와 TS에서 바이트 동일해야 한다는 사실, (2) `RoutePoint`의 optional을 CoreLocation의 sentinel로 **쓰는** 방향(그 역방향인 읽기 sentinel 정리는 route-vectors.json의 `sentinels`가 이미 고정한다).",
+  "$schema": {
+    "scopeFingerprints": "{ name, permissions[], fingerprint } — `scopeFingerprint`(TS `src/core/sync/cursor.ts`)와 `WorkoutsScopeFingerprint.compute`(Swift)가 같은 문자열을 내야 한다. 두 구현의 의도적 기벽 두 가지(UTF-16 코드 단위 순회 · 각 단위의 하위 바이트 마스크)가 여기서 검증된다. 어긋나면 네이티브가 만든 커서를 JS가 매번 리셋한다.",
+    "writeLocations": "{ name, point, location, readBack } — `point`는 `RoutePointDto`, `location`은 그것으로 만든 `CLLocation`의 필드값, `readBack`은 그 CLLocation을 다시 읽어 `sanitizeRoutePointFromNative`를 통과시킨 결과. JSON `null`은 `undefined`(모름)를 뜻한다. HealthKit은 아무것도 거르지 않고 바이트 동일하게 되돌려주므로(f81·f83) `location`과 `readBack`은 같은 왕복의 두 지점이다."
+  },
+  "scopeFingerprints": [
+    { "name": "empty set", "permissions": [], "fingerprint": "ztntfp" },
+    { "name": "workouts only", "permissions": ["HKWorkoutTypeIdentifier"], "fingerprint": "klhgpk" },
+    {
+      "name": "workouts + routes",
+      "permissions": ["HKWorkoutTypeIdentifier", "HKWorkoutRouteTypeIdentifier"],
+      "fingerprint": "1m9rtvg"
+    },
+    {
+      "name": "every iOS identifier the scope table names",
+      "permissions": [
+        "HKQuantityTypeIdentifierActiveEnergyBurned",
+        "HKQuantityTypeIdentifierDistanceCycling",
+        "HKQuantityTypeIdentifierDistanceWalkingRunning",
+        "HKQuantityTypeIdentifierHeartRate",
+        "HKQuantityTypeIdentifierStepCount",
+        "HKWorkoutRouteTypeIdentifier",
+        "HKWorkoutTypeIdentifier"
+      ],
+      "fingerprint": "1nc88yj"
+    },
+    {
+      "name": "order independence — the same set reversed hashes identically",
+      "permissions": [
+        "HKWorkoutTypeIdentifier",
+        "HKWorkoutRouteTypeIdentifier",
+        "HKQuantityTypeIdentifierStepCount",
+        "HKQuantityTypeIdentifierHeartRate",
+        "HKQuantityTypeIdentifierDistanceWalkingRunning",
+        "HKQuantityTypeIdentifierDistanceCycling",
+        "HKQuantityTypeIdentifierActiveEnergyBurned"
+      ],
+      "fingerprint": "1nc88yj"
+    },
+    {
+      "name": "Android write set — the fingerprint is over permission STRINGS, so it is platform-agnostic",
+      "permissions": [
+        "android.permission.health.WRITE_EXERCISE",
+        "android.permission.health.WRITE_DISTANCE",
+        "android.permission.health.WRITE_ACTIVE_CALORIES_BURNED",
+        "android.permission.health.WRITE_ELEVATION_GAINED",
+        "android.permission.health.WRITE_EXERCISE_ROUTE",
+        "android.permission.health.WRITE_HEART_RATE",
+        "android.permission.health.WRITE_STEPS"
+      ],
+      "fingerprint": "k1s6v2"
+    },
+    {
+      "name": "multibyte — pins the UTF-16 code-unit walk and the low-byte mask",
+      "permissions": ["한글", "ÿ", "a"],
+      "fingerprint": "1vydkxz"
+    }
+  ],
+  "writeLocations": [
+    {
+      "name": "every optional absent — CoreLocation's own -1 sentinels carry 'unknown' across HealthKit",
+      "point": { "t": 1755000001000, "lat": 37.5, "lon": 127.0 },
+      "location": { "altitude": 0, "horizontalAccuracy": -1, "verticalAccuracy": -1, "course": -1, "speed": -1 },
+      "readBack": { "altM": 0, "hAccM": null, "vAccM": null, "speedMps": null, "courseDeg": null },
+      "$note": "altM is the ONE field that cannot survive: CoreLocation has no altitude sentinel, so an absent altitude is written as 0 with verticalAccuracy = -1 (CoreLocation's own way of saying the altitude is invalid) and reads back as 0, not undefined. Named here so it is a pinned limitation instead of a surprise."
+    },
+    {
+      "name": "every optional present — nothing is touched on the way in or out",
+      "point": {
+        "t": 1755000002000,
+        "lat": 37.5,
+        "lon": 127.0,
+        "altM": 123.45,
+        "hAccM": 4.25,
+        "vAccM": 6.5,
+        "speedMps": 3.25,
+        "courseDeg": 271.75
+      },
+      "location": {
+        "altitude": 123.45,
+        "horizontalAccuracy": 4.25,
+        "verticalAccuracy": 6.5,
+        "course": 271.75,
+        "speed": 3.25
+      },
+      "readBack": { "altM": 123.45, "hAccM": 4.25, "vAccM": 6.5, "speedMps": 3.25, "courseDeg": 271.75 }
+    },
+    {
+      "name": "explicit zeros are values, not sentinels (f83)",
+      "point": {
+        "t": 1755000003000,
+        "lat": 37.5,
+        "lon": 127.0,
+        "altM": 0,
+        "hAccM": 0,
+        "vAccM": 0,
+        "speedMps": 0,
+        "courseDeg": 0
+      },
+      "location": { "altitude": 0, "horizontalAccuracy": 0, "verticalAccuracy": 0, "course": 0, "speed": 0 },
+      "readBack": { "altM": 0, "hAccM": 0, "vAccM": 0, "speedMps": 0, "courseDeg": 0 }
+    },
+    {
+      "name": "a negative altitude is a real place (the Dead Sea), not a sentinel",
+      "point": { "t": 1755000004000, "lat": 31.5, "lon": 35.5, "altM": -430, "vAccM": 6.5 },
+      "location": { "altitude": -430, "horizontalAccuracy": -1, "verticalAccuracy": 6.5, "course": -1, "speed": -1 },
+      "readBack": { "altM": -430, "hAccM": null, "vAccM": 6.5, "speedMps": null, "courseDeg": null }
+    },
+    {
+      "name": "an altitude with no vertical accuracy still says 'this altitude is unvalidated'",
+      "point": { "t": 1755000005000, "lat": 37.5, "lon": 127.0, "altM": 12.5 },
+      "location": { "altitude": 12.5, "horizontalAccuracy": -1, "verticalAccuracy": -1, "course": -1, "speed": -1 },
+      "readBack": { "altM": 12.5, "hAccM": null, "vAccM": null, "speedMps": null, "courseDeg": null }
+    }
+  ]
+}

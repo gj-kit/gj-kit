@@ -1,0 +1,16 @@
+node_modules/
+.expo/
+dist/
+web-build/
+
+# `expo prebuild` output — regenerate it, never commit it
+ios/
+android/
+
+# Maestro / simctl screenshots (mission §10 says these are gitignored).
+# The DIRECTORY is kept so `takeScreenshot: maestro/artifacts/...` has somewhere to write.
+maestro/artifacts/*
+!maestro/artifacts/.gitkeep
+
+*.log
+.DS_Store

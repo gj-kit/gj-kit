@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!--
+	  @gj-kit/expo-workouts privacy manifest (design section 10.5).
+
+	  The LIBRARY collects nothing: it moves health data between the OS health store and the host
+	  app's own JavaScript, and never transmits, persists or aggregates it anywhere of its own.
+	  The HOST APP still has to declare Health (and Fitness, and Precise Location if it uploads
+	  routes) in its own App Store Connect privacy labels — the README carries that checklist.
+	-->
+	<key>NSPrivacyTracking</key>
+	<false/>
+	<key>NSPrivacyTrackingDomains</key>
+	<array/>
+	<key>NSPrivacyCollectedDataTypes</key>
+	<array/>
+	<!--
+	  Required-reason APIs actually called by this library: NONE.
+	  Phase 2 uses HealthKit only (HealthKit is not a required-reason API category) plus Foundation
+	  collections. We do not touch UserDefaults, file timestamps, disk space, active keyboards or
+	  system boot time. If a Phase 3 body ever reaches for one of those, this array — and this
+	  comment — must change in the same commit.
+	-->
+	<key>NSPrivacyAccessedAPITypes</key>
+	<array/>
+</dict>
+</plist>

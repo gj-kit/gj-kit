@@ -1,6 +1,6 @@
 {
   "name": "@gj-kit/expo-workouts",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "HealthKit / Health Connect workout + GPS-route bridge for Expo. Gap-free incremental sync, idempotent writes, streamed routes — protocol in pure TypeScript, zero runtime dependencies.",
   "keywords": [
     "expo",

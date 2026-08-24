@@ -42,10 +42,15 @@ describe('release artifact contract', () => {
 
   it('§2.7 최초 커밋 버전은 0.0.0이다 — changeset이 0.1.0을 만든다', () => {
     expect(manifest.name).toBe('@gj-kit/nest-operations-jobs');
-    expect(manifest.version).toBe('0.0.0');
-    expect(existsSync(join(packageRoot, '..', '.changeset', 'nest-operations-jobs-v0-1.md'))).toBe(
-      true,
-    );
+    // 릴리스 상태 불변식. 0.0.0을 하드코딩하면 `changeset version`이 돈 트리에서
+    // verify:release가 실패해 릴리스 PR의 CI가 빨개진다(2026-08-25 재현).
+    const changeset = join(packageRoot, '..', '.changeset', 'nest-operations-jobs-v0-1.md');
+    if (manifest.version === '0.0.0') {
+      expect(existsSync(changeset)).toBe(true);
+    } else {
+      expect(manifest.version).toMatch(/^\d+\.\d+\.\d+$/);
+      expect(existsSync(changeset)).toBe(false);
+    }
   });
 
   it('§4-15 exports는 3엔트리 + package.json뿐이다 — internal deep import 차단', () => {

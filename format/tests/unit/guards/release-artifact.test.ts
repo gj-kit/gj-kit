@@ -87,12 +87,18 @@ describe('package.json 배포 계약', () => {
     expect(readFileSync(licensePath, 'utf8')).toContain('MIT License');
   });
 
-  it('버전은 0.0.0이고 minor changeset이 동봉돼 있다 (03e4c50 선례)', () => {
-    expect(manifest.version).toBe('0.0.0');
+  // 릴리스 상태 불변식. 버전을 0.0.0으로 못 박으면 릴리스 파이프라인이 자기 자신을
+  // 깨뜨린다 — `changeset version`이 돈 트리에서도 verify:release가 실행되므로
+  // 버전 PR에서 CI가 빨개진다(2026-08-25 클린 스냅샷 게이트에서 재현).
+  it('릴리스 상태가 일관된다 — 0.0.0이면 changeset 대기, 버전이 매겨졌으면 소비 완료', () => {
     const changeset = join(PACKAGE_ROOT, '..', '.changeset', 'format-v0-1.md');
-    expect(existsSync(changeset)).toBe(true);
-    const text = readFileSync(changeset, 'utf8');
-    expect(text).toContain('"@gj-kit/format": minor');
+    if (manifest.version === '0.0.0') {
+      expect(existsSync(changeset)).toBe(true);
+      expect(readFileSync(changeset, 'utf8')).toContain('"@gj-kit/format": minor');
+    } else {
+      expect(manifest.version).toMatch(/^\d+\.\d+\.\d+$/);
+      expect(existsSync(changeset)).toBe(false);
+    }
   });
 });
 

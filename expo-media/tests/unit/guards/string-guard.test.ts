@@ -32,6 +32,9 @@ const SRC_DIR = join(PACKAGE_ROOT, 'src');
  */
 const EXEMPTIONS: readonly { readonly file: string; readonly code: string }[] = [
   { file: 'src/core/staging.ts', code: 'config-invalid' },
+  // `createPendingSelection({ max })`의 양의 정수 검증 — staging의 네임스페이스 검증과 동형인
+  // 부팅 시점 개발자 단언이다.
+  { file: 'src/core/pending-selection.ts', code: 'config-invalid' },
 ];
 
 describe('string-guard — new MediaError(code, strings.…)', () => {
@@ -43,7 +46,7 @@ describe('string-guard — new MediaError(code, strings.…)', () => {
       const all = mediaErrorMessageViolations(rel(file), read(file), () => false);
       return count + all.length;
     }, 0);
-    // 예외 1건(staging)만 남아야 한다 — 0이면 스캐너가 아무것도 보지 못하고 있다는 뜻이다.
+    // 예외 목록(staging · pending-selection)만 남아야 한다 — 0이면 스캐너가 아무것도 보지 못하고 있다는 뜻이다.
     expect(sites).toBe(EXEMPTIONS.length);
   });
 

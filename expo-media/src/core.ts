@@ -73,7 +73,7 @@ export type {
   MediaDebugOptions,
 } from './core/types';
 
-// ─── §5.2 에러 — 코드 16종 ──────────────────────────────────────────────────
+// ─── §5.2 에러 — 코드 17종 ──────────────────────────────────────────────────
 // ⚠ `isMediaError`가 `instanceof`의 대체다. `splitting:false`(§2.4)로 엔트리마다 코어가
 //   복제되므로 `instanceof`는 **반드시** 깨진다 — `"./device"`가 던진 에러를 `"."`이 검사하면
 //   두 클래스 객체가 서로 다르다.
@@ -187,6 +187,21 @@ export type { MediaPickOptions, MediaPickerActions } from './core/pickerActions'
 export { createMediaPickerActions } from './core/pickerActions';
 export type { PickUploadOptions, PickerFlows } from './core/upload/pickerFlows';
 export { createPickerFlows } from './core/upload/pickerFlows';
+
+// ─── Staged selection — pick now, upload later (pure, DOM 0) ────────────────
+// 바이너리 항목의 object URL 생성은 `"./web"`의 `pendingItemFromFile`이 맡는다. 여기에는 `File`이 없다.
+export type {
+  PendingAddResult,
+  PendingBinaryItem,
+  PendingMediaItem,
+  PendingPickedItem,
+  PendingRejection,
+  PendingRejectionReason,
+  PendingSelection,
+  PendingSelectionOptions,
+  PendingSelectionState,
+} from './core/pending-selection';
+export { createPendingSelection } from './core/pending-selection';
 
 // ─── §5.4-④ 기기 라이브러리 ─────────────────────────────────────────────────
 export type { DeviceLibrary, DeviceResolveOptions } from './core/device/deviceLibrary';

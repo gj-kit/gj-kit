@@ -1,4 +1,4 @@
-// 설계 문서 §5.2 — 타입 있는 에러. 코드 16종 + 업로드 실패 복구 정보.
+// 설계 문서 §5.2 — 타입 있는 에러. 코드 17종 + 업로드 실패 복구 정보.
 //
 // 전신(`packages/photo-kit/src/errors.ts`) 주석의 계약을 그대로 계승한다:
 //   "Callers classify by `code` — never by matching the user-facing Korean copy,
@@ -57,11 +57,18 @@ const MEDIA_ERROR_TAG: unique symbol = Symbol.for('@gj-kit/expo-media#MediaError
  * ESM/CJS·서브패스마다 코어 사본이 생겨도 `mediaUploadFailureInfo()`가 같은 에러를
  * 읽을 수 있어야 한다. 값은 URL·헤더·원본 예외를 절대 담지 않는 순수 메타데이터다.
  */
-const MEDIA_UPLOAD_FAILURE_TAG: unique symbol = Symbol.for(
-  // Keep the package key derived from the one allowed core purity exception above. A second
-  // package-name literal would look like an accidental optional-peer import to that guard.
-  (Symbol.keyFor(MEDIA_ERROR_TAG) ?? 'MediaError').replace('MediaError', 'MediaUploadFailure'),
-);
+/**
+ * @internal
+ * Global-symbol key `@gj-kit/expo-media#<name>` for state that must be recognised across the
+ * per-entry core copies (`splitting:false`) and across the ESM/CJS builds. Derived from the one
+ * package-name literal the core purity guard allows — a second literal would look like an
+ * accidental optional-peer import to that guard.
+ */
+export function packageGlobalKey(name: string): string {
+  return (Symbol.keyFor(MEDIA_ERROR_TAG) ?? 'MediaError').replace('MediaError', name);
+}
+
+const MEDIA_UPLOAD_FAILURE_TAG: unique symbol = Symbol.for(packageGlobalKey('MediaUploadFailure'));
 
 export class MediaError extends Error {
   readonly code: MediaErrorCode;

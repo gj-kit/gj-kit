@@ -9,7 +9,7 @@
 - **코어는 순수하다** — `src/core/**`에 `react-native`·`expo-*` import 0, DOM 전역 참조 0. 그래서 전 파이프라인이 네이티브 모킹 없이 vitest에서 돈다.
 - **문구는 전부 주입** — `MediaStrings` 22키 + 내장 `enMediaStrings`/`koMediaStrings`. 라이브러리 소스에 사용자 노출 리터럴이 없음을 정적 가드가 강제한다.
 - **운영 파이프라인 오류는 전부 `code`로 분기 가능** — 업로드·피커·기기·저장 등 공개
-  파이프라인이 만드는 실패는 `MediaError` 16코드로 정규화한다. 개발자 단언과 직접 호출한
+  파이프라인이 만드는 실패는 `MediaError` 17코드로 정규화한다. 개발자 단언과 직접 호출한
   저수준 어댑터의 오류는 이 계약 밖이며, 어댑터를 호출하는 파이프라인에서만 안전하게 감싼다.
 
 > **SDK 요구 (엔트리별로 다르다 — 이 두 줄이 전부다)**
@@ -201,14 +201,14 @@ try {
 | 엔트리 | 내용 | 정적 import하는 peer |
 |---|---|---|
 | `.` | `./core` 전체 재export + `createMediaKit` + expo 기본 어댑터 | `react-native`, `expo-file-system` |
-| `./core` | 팩토리 9종, 어댑터 계약, `MediaError`(17코드), durable-file 오류/저장, mediaTypes 테이블, EXIF 파서, 순수 TS SHA-256, `StagingCache`, 서명 URL 새니타이저 | **없음** (DOM lib도 없음) |
+| `./core` | 팩토리 9종, 어댑터 계약, `MediaError`(17코드), durable-file 오류/저장, mediaTypes 테이블, EXIF 파서, 순수 TS SHA-256, `StagingCache`, 서명 URL 새니타이저, `createPendingSelection`(업로드 전 선택 스테이징) | **없음** (DOM lib도 없음) |
 | `./picker` | `expoPicker` — OS 피커/카메라, 권한, iOS 원본 fast path | `expo-image-picker`, `react-native` |
 | `./image` | `createExpoImageProcessor` — EXIF 정규화, 비확대 축소, 회전, Android raster-aware crop | `expo-image-manipulator`, `react-native` |
 | `./image/pure` | crop 좌표 변환·축소 여부 판정 | **없음** |
 | `./device` | `expoDeviceLibrary` — granular 권한·페이지네이션·앨범·자산정보 | `expo-media-library/legacy`, `react-native` |
 | `./save` | `expoDeviceSave({ isExpoGo })` — MediaLibrary 저장 | `expo-media-library/legacy`, `react-native` |
 | `./video` | `expoVideoPoster` — 로컬 URI → 포스터 프레임 | `expo-video-thumbnails` |
-| `./web` | `webCanvasVideoPoster` · `createFetchBinaryTransport` · `createBrowserSaveTarget` · `createFetchBinarySourceLoader` | **없음** (브라우저 DOM 필요) |
+| `./web` | `webCanvasVideoPoster` · `createFetchBinaryTransport` · `createBrowserSaveTarget` · `createFetchBinarySourceLoader` · `pendingItemFromFile` | **없음** (브라우저 DOM 필요) |
 | `./testing` | 인메모리 파일시스템, 기록형 transport·telemetry, 페이크 피커·기기 라이브러리·업로드 API, EXIF·서명 URL 픽스처 | **없음** |
 | `./storage` | `createExpoDocumentFileStore` — 앱 소유 지속 파일의 byte-size 검증 복사·안전한 정리·URI-safe 오류 | `expo-file-system` |
 
@@ -368,6 +368,69 @@ const [photo] = await scannerPicker.capture({ kind: 'image' });
 const [libraryPhoto] = await scannerPicker.pick({ max: 1, kinds: ['image'] });
 ```
 
+### 업로드 전 선택 스테이징 — `createPendingSelection`
+
+"고르고 → 미리보기 → 몇 장 빼고 → 한 번에 올리기" 화면은 피커 자산과 웹 `File`을 한 목록에 섞어 들고
+있어야 한다. `createPendingSelection`은 그 목록의 **정체성·상한·preview 자원 수명주기**만 소유하는 순수
+모델이다 — state는 앱이 들고(React `useState`, store, 변수), 라이브러리는 항목을 보관하지 않는다.
+제품 문구("최대 N장", "이미 첨부한 사진")와 업로드 orchestration은 앱에 남는다.
+
+```ts
+import { createMediaPickerActions, createPendingSelection } from '@gj-kit/expo-media/core';
+import type { PendingSelectionState } from '@gj-kit/expo-media/core';
+import { expoPicker } from '@gj-kit/expo-media/picker';
+import { pendingItemFromFile } from '@gj-kit/expo-media/web';
+
+const selection = createPendingSelection({ max: 12 }); // 양의 정수가 아니면 config-invalid
+const picker = createMediaPickerActions({ picker: expoPicker() });
+let staged: PendingSelectionState = [];
+
+// 피커 결과. dedup 1차 키는 assetId다 — 스테이징 사본 uri는 resolve마다 바뀌므로 uri만으로는
+// 같은 사진을 두 번 골라도 통과해 버린다. assetId가 없는 자산(카메라·웹)만 uri로 폴백한다.
+const assets = await picker.pick({ max: Math.max(1, selection.max - staged.length) });
+staged = selection.add(staged, assets.map((asset) => ({ kind: 'picked' as const, asset }))).state;
+
+// 웹 드롭. `pendingItemFromFile`이 object URL preview와 revoke 클로저를 달아 준다.
+// HEIC/HEIF는 브라우저가 디코딩하지 못하므로 preview 없이 첨부만 된다.
+const dropped = selection.add(staged, droppedFiles.map(pendingItemFromFile));
+staged = dropped.state;
+// add는 아무것도 revoke하지 않는다 — 앱이 `releasable`을 해제한다. `rejected`가 아니라 `releasable`인
+// 이유: 거절된 duplicate가 이미 스테이징된 **바로 그 객체**일 수 있고(같은 항목을 다시 add — StrictMode
+// 이중 effect, 캐시된 항목 재첨부), 그것을 해제하면 살아 있는 preview가 죽는다. releasable은 그 객체를 뺀다.
+selection.release(dropped.releasable);
+for (const { reason } of dropped.rejected) {
+  // 'duplicate' | 'over-limit' — 닫힌 유니언이라 문구 분기가 컴파일 검사를 받는다.
+  showToast(reason === 'over-limit' ? `최대 ${selection.max}장` : '이미 첨부한 사진');
+}
+
+// 렌더링. previewUriOf가 null이면(HEIC 드롭, preview 없는 환경) 파일명 placeholder를 그린다.
+for (const item of staged) {
+  const previewUri = selection.previewUriOf(item);
+  const capturedAt = await selection.capturedAtOf(item); // 피커 EXIF 또는 JPEG 바이트에서, 실패는 null
+  void previewUri;
+  void capturedAt;
+}
+
+// 제거·초기화는 떠나는 바이너리의 revoke를 **항목 객체당 정확히 한 번** 부른다 —
+// StrictMode의 updater 이중 실행, remove 뒤 clear, 다른 selection 인스턴스, 심지어 `.`과 `./core`
+// 엔트리 사본(ESM/CJS 포함)을 오가도 두 번 불리지 않는다(레지스트리가 globalThis의 패키지 전역 심볼이다).
+const first = staged[0];
+if (first) staged = selection.remove(staged, selection.keyOf(first));
+
+// 업로드. picked는 네이티브 스트리밍 경로, binary는 fetch PUT 경로다.
+for (const asset of selection.toPickedAssets(staged)) await media.uploadPickedAsset(asset);
+for (const source of selection.toBinarySources(staged)) await media.uploadBinary({ source });
+staged = selection.clear(staged);
+```
+
+`add`는 중복을 상한보다 먼저 본다 — 가득 찬 상태에서 같은 사진을 다시 골라도 사유는 `duplicate`다.
+변화가 없으면 **같은 state 참조**를 돌려주므로 React `setState`가 bail-out한다. 결과 `{ state, added,
+rejected, releasable }`은 객체·배열·거절 항목까지 런타임 동결이다. `rejected`는 문구 분기용이고
+`releasable`은 `release`용이다 — 둘은 같은 집합이 아니다(같은 객체 재add는 `rejected`에만 있다).
+DOM `File`은 여기서만 등장한다: 코어는 `NamedBinarySource`를 감싼
+`{ kind: 'binary', source, previewUri?, revoke?, lastModified? }`만 알고, 바이너리의 dedup 키는
+`name:size:lastModified`다.
+
 ```ts
 import { createMediaKit } from '@gj-kit/expo-media';
 import { expoDeviceLibrary } from '@gj-kit/expo-media/device';
@@ -525,7 +588,7 @@ const strings: MediaStrings = {
 > **왜 `Partial<MediaStrings>`가 아닌가**
 > 부분 객체를 허용하면 라이브러리가 새 문구 키를 추가했을 때 손조립 번들이 조용히 영어로 새어 나온다. 완전 객체를 요구하면 그 순간 **컴파일 에러로 표면화**된다 — 커스텀은 언제나 스프레드가 정답이다.
 
-## 5. 에러 — `code` 16종
+## 5. 에러 — `code` 17종
 
 ```ts
 import { isMediaError, mediaErrorCode, mediaErrorUserMessage } from '@gj-kit/expo-media/core';
@@ -669,6 +732,7 @@ await uploads.uploadBinary({
 | `LocalPosterAdapter`와 `BinaryPosterAdapter`를 바꿔 끼움 | 컴파일 에러 — 입력 타입이 다르다 |
 | `SaveTarget`에 `browser` + `library` 동시 주입 | 컴파일 에러 — 판별 유니언이라 무효 조합이 표현 불가 |
 | `captureAndUpload({ max: 5 })` | 컴파일 에러 — 항상 1건이므로 `max`가 옵션에 없다 |
+| `createPendingSelection({})` · state에 `push` | 컴파일 에러 — 상한은 필수이고 state는 `readonly` 목록이다(변경은 `add`/`remove`/`clear`의 반환값) |
 | `telemetry` operation 이름 오타 | 컴파일 에러 — `MediaOperation` 리터럴 유니언 |
 | `MediaContentType` 밖의 MIME | 컴파일 에러 — 서버 유니언과 동일한 8형식 |
 | `switch`에서 새 에러 코드 누락 | `assertNeverMediaError(code)`를 `default`에 두면 컴파일 에러 |

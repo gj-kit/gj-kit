@@ -182,7 +182,7 @@ describe('`MediaErrorCode` 17종 exhaustive (§5.2)', () => {
         case 'device-timeout':
           return 'device';
         default:
-          // @ts-expect-error 나머지 16종이 남아 있으므로 `never`가 아니다
+          // @ts-expect-error 나머지 16종(17종 중 1종만 처리)이 남아 있으므로 `never`가 아니다
           return assertNeverMediaError(code);
       }
     };

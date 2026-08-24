@@ -18,4 +18,5 @@
 export { createFetchBinarySourceLoader } from './web/binarySourceLoader';
 export { createBrowserSaveTarget } from './web/browserSave';
 export { createFetchBinaryTransport } from './web/fetchTransport';
+export { pendingItemFromFile } from './web/pendingItem';
 export { webCanvasVideoPoster } from './web/videoPoster';

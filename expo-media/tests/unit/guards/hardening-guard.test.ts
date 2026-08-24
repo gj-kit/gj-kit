@@ -246,7 +246,8 @@ describe('hardening-guard ⑥ — 비네이티브 포크에 네이티브 파일 
   // `{ body:'', status:0, headers:{} }`인 **no-op**이다(V-B 실측). 태우면 업로드가
   // "조용히 성공한 것처럼" 보이고, 사용자는 올라가지 않은 사진을 올라간 줄 안다.
   it('src/web/** · 비네이티브 포크에 .upload( 0건', () => {
-    expect(NON_NATIVE_FILES.length).toBe(9);
+    // src/web/{binarySourceLoader,browserSave,fetchTransport,pendingItem,videoPoster} + 엔트리·포크 5.
+    expect(NON_NATIVE_FILES.length).toBe(10);
     const hits = NON_NATIVE_FILES.filter((file) => stripComments(read(file)).includes('.upload(')).map(rel);
     expect(hits).toEqual([]);
   });

@@ -20,6 +20,7 @@ import {
   rawPayment,
 } from './helpers';
 import { memoryCancelRetryStore } from '../../src/testing';
+import { DEFAULT_IDEMPOTENCY_REPLAY_WINDOW_MS, TOSS_IDEMPOTENCY_KEY_TTL_MS } from '../../src/index';
 
 function testClient(fetchImpl: typeof fetch, cancelRetries?: CancelRetryStore) {
   const parsed = orThrow(parseApiSecretKey('test_sk_abcdef'));
@@ -794,7 +795,7 @@ describe('cancels — transport 실패 봉인 티켓 재시도', () => {
     expect(calls).toHaveLength(0);
   });
 
-  it('15일이 지난 retry 티켓은 API 호출 전 거부한다', async () => {
+  it('재생 창(DEFAULT_IDEMPOTENCY_REPLAY_WINDOW_MS = 14일)이 지난 retry 티켓은 API 호출 전 거부한다', async () => {
     const { fetch, calls } = failingFetch(new Error('down'));
     const client = testClient(fetch);
     const failed = await client.cancels.cancelFully(settledTarget(), {
@@ -802,13 +803,71 @@ describe('cancels — transport 실패 봉인 티켓 재시도', () => {
       expectedAmount: 1000,
     });
     if (!isErr(failed) || !('retry' in failed.error)) return expect.unreachable('retry 티켓 필요');
-    const expired = {
-      ...failed.error.retry,
-      issuedAt: new Date(Date.now() - 16 * 24 * 60 * 60 * 1000).toISOString(),
-    } as CancelRetryTicket;
-    const r = await client.cancels.retry(expired);
-    expect(isErr(r)).toBe(true);
-    if (isErr(r) && 'kind' in r.error) expect(r.error.kind).toBe('retry-ticket-expired');
+    for (const ageMs of [
+      DEFAULT_IDEMPOTENCY_REPLAY_WINDOW_MS + 60_000, // 14일 + 1분 — 창 밖
+      TOSS_IDEMPOTENCY_KEY_TTL_MS - 60_000, // 14일 23시간 59분 — 이전 설계(15일)에서는 재전송되던 구간
+      16 * 24 * 60 * 60 * 1000,
+    ]) {
+      const expired = {
+        ...failed.error.retry,
+        issuedAt: new Date(Date.now() - ageMs).toISOString(),
+      } as CancelRetryTicket;
+      const r = await client.cancels.retry(expired);
+      expect(isErr(r)).toBe(true);
+      if (isErr(r) && 'kind' in r.error) expect(r.error.kind, String(ageMs)).toBe('retry-ticket-expired');
+    }
     expect(calls).toHaveLength(1);
+  });
+
+  it('재생 창 경계 — 영속 티켓 14일 - 1분은 같은 멱등키로 재전송, 14일 + 1분은 API 호출 없이 만료', async () => {
+    const canceledBody = () =>
+      rawPayment({
+        status: 'CANCELED',
+        balanceAmount: 0,
+        lastTransactionKey: 'txn-cancel-1',
+        cancels: [rawCancelTransaction()],
+      });
+    const ageRecord = async (store: CancelRetryStore, ticketId: string, ageMs: number) => {
+      const record = await store.load(ticketId);
+      if (record === null) return expect.unreachable('영속 record가 있어야 한다');
+      await store.save({ ...record, issuedAt: new Date(Date.now() - ageMs).toISOString() });
+    };
+
+    // 안: 14일 - 1분
+    {
+      const retryStore = memoryCancelRetryStore();
+      let attempt = 0;
+      const pair = mockFetch(() => {
+        attempt += 1;
+        if (attempt === 1) throw new Error('connection reset');
+        return { status: 200, body: canceledBody() };
+      });
+      const failed = await testClient(pair.fetch, retryStore).cancels.cancelFully(settledTarget(), {
+        reason: reason(),
+        expectedAmount: 1000,
+      });
+      if (!isErr(failed) || !('retry' in failed.error)) return expect.unreachable('retry 티켓 필요');
+      await ageRecord(retryStore, failed.error.retry.ticketId, DEFAULT_IDEMPOTENCY_REPLAY_WINDOW_MS - 60_000);
+      const retried = await testClient(pair.fetch, retryStore).cancels.retryById(failed.error.retry.ticketId);
+      expect(isOk(retried)).toBe(true);
+      expect(pair.calls).toHaveLength(2);
+      expect(pair.calls[1]?.headers['idempotency-key']).toBe(pair.calls[0]?.headers['idempotency-key']);
+    }
+
+    // 밖: 14일 + 1분 — 이전 설계(provider TTL 15일 그대로)에서는 재전송되던 구간
+    {
+      const retryStore = memoryCancelRetryStore();
+      const pair = failingFetch(new Error('down'));
+      const failed = await testClient(pair.fetch, retryStore).cancels.cancelFully(settledTarget(), {
+        reason: reason(),
+        expectedAmount: 1000,
+      });
+      if (!isErr(failed) || !('retry' in failed.error)) return expect.unreachable('retry 티켓 필요');
+      await ageRecord(retryStore, failed.error.retry.ticketId, DEFAULT_IDEMPOTENCY_REPLAY_WINDOW_MS + 60_000);
+      const r = await testClient(pair.fetch, retryStore).cancels.retryById(failed.error.retry.ticketId);
+      expect(isErr(r)).toBe(true);
+      if (isErr(r) && 'kind' in r.error) expect(r.error.kind).toBe('retry-ticket-expired');
+      expect(pair.calls).toHaveLength(1);
+    }
   });
 });

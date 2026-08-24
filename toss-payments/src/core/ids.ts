@@ -44,17 +44,36 @@ export type PaymentKey = string & Brand<'PaymentKey'>;
  */
 export type CancelRequestId = string & Brand<'CancelRequestId'>;
 /**
- * 멱등키 — 1–300자 (초과 시 400 INVALID_IDEMPOTENCY_KEY).
- * 처음 사용일부터 15일 유효 — TTL 초과 후 재사용하면 새 요청으로 처리된다(문서).
+ * 멱등키 — 1–300자(초과 시 400 INVALID_IDEMPOTENCY_KEY), 문자셋 `^[\x21-\x7E]+$`
+ * (공백 없는 출력 가능 ASCII — 헤더 안전 집합).
+ *
+ * 문자셋 근거: 토스 문서는 길이만 규정하지만 값은 `Idempotency-Key` **요청 헤더**로 전송된다.
+ * 비 Latin-1 문자·CR/LF는 fetch `Headers`가 TypeError로 거부해 소켓에 닿기도 전에
+ * 실패하고(그 TypeError는 transport 계층에서 NETWORK_ERROR로 오분류됨), 공백·탭·Latin-1
+ * 확장 문자는 중간 프록시가 trim/재인코딩할 수 있어 같은 키의 재전송이 다른 바이트로 도착할
+ * 위험이 있다. 생성 시점에 거부하는 쪽이 "Ok면 전송 가능"을 보장하는 유일한 길이다.
+ *
+ * 처음 사용일부터 15일 유효 — TTL 초과 뒤 같은 키는 새 요청으로 실행될 수 있다(문서는 기간만
+ * 명시하며 만료 뒤 동작은 서술하지 않음 — 안전하지 않은 것으로 취급).
  * 멱등 판정 조합은 "키 + API 키 + 주소 + 메서드"이며 **body는 포함되지 않는다**(문서 명시).
  */
 export type IdempotencyKey = string & Brand<'IdempotencyKey'>;
 
-export interface InvalidInput<Field extends string> {
+/**
+ * Validation failure of a library-owned input.
+ *
+ * `Reason` defaults to the string-constraint reasons every id/key parser uses, so all
+ * existing `InvalidInput<'orderId'>`-style references keep their exact shape. Structured
+ * inputs (e.g. `parsePaymentStateSnapshot`) instantiate it with their own reason union.
+ */
+export interface InvalidInput<
+  Field extends string,
+  Reason extends string = 'too-short' | 'too-long' | 'bad-charset' | 'empty',
+> {
   readonly source: 'library';
   readonly kind: 'invalid-input';
   readonly field: Field;
-  readonly reason: 'too-short' | 'too-long' | 'bad-charset' | 'empty';
+  readonly reason: Reason;
 }
 
 interface Constraint {
@@ -80,6 +99,8 @@ function validate<Field extends string>(
 const ORDER_ID_CHARSET = /^[A-Za-z0-9_-]+$/;
 const CUSTOMER_KEY_CHARSET = /^[A-Za-z0-9\-_=.@]+$/;
 const CANCEL_REQUEST_ID_CHARSET = /^[A-Za-z0-9\-_=]+$/;
+/** 공백 없는 출력 가능 ASCII — HTTP 헤더 값으로 어느 스택에서나 바이트 동일하게 전송된다. */
+const IDEMPOTENCY_KEY_CHARSET = /^[\x21-\x7E]+$/;
 
 export function orderId(raw: string): Result<OrderId, InvalidInput<'orderId'>> {
   const r = validate(raw, 'orderId', { min: 6, max: 64, charset: ORDER_ID_CHARSET });
@@ -152,10 +173,15 @@ export function cancelRequestId(
   return r.ok ? ok(raw as CancelRequestId) : r;
 }
 
+/**
+ * 멱등키 스마트 생성자 — 1–300자 + 헤더 안전 문자셋(`^[\x21-\x7E]+$`).
+ * 한글·공백·CR/LF 등은 `reason: 'bad-charset'`. Ok이면 그 값은 어떤 fetch 구현에서도
+ * `Idempotency-Key` 헤더로 바이트 동일하게 전송된다.
+ */
 export function idempotencyKey(
   raw: string,
 ): Result<IdempotencyKey, InvalidInput<'idempotencyKey'>> {
-  const r = validate(raw, 'idempotencyKey', { min: 1, max: 300 });
+  const r = validate(raw, 'idempotencyKey', { min: 1, max: 300, charset: IDEMPOTENCY_KEY_CHARSET });
   return r.ok ? ok(raw as IdempotencyKey) : r;
 }
 

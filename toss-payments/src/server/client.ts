@@ -93,7 +93,7 @@ export interface TossClientOptions {
 export interface CallOptions<E extends Env> {
   /**
    * ≤300자, POST 전용. 처음 사용일부터 15일 유효 — TTL 초과 후 재사용하면 새 요청으로
-   * 처리된다(문서). 멱등 판정 조합은 "키 + API 키 + 주소 + 메서드"이며 body는 포함되지
+   * 실행될 수 있다(문서는 기간만 명시 — 안전하지 않은 것으로 취급). 멱등 판정 조합은 "키 + API 키 + 주소 + 메서드"이며 body는 포함되지
    * 않는다(문서 명시) — 키 재사용 시 body 동일성은 호출자(또는 재시도 티켓)가 보장해야 한다.
    */
   readonly idempotencyKey?: IdempotencyKey;

@@ -312,7 +312,8 @@ await strict.billing.approve(profile, order, {
 
 - **키 권장**: 청구 주기 결정적 값(`sub:${period}:${customerKey}`) — 재실행 시 첫 응답 재생으로 무해합니다.
 - ⚠ **4xx 실패 후 파라미터를 고쳐 재시도할 땐 반드시 새 키**(실측 — 동일 키는 15일간 같은 에러를 재생). 일시 오류가 결정적 키에 바인딩되면 해당 주기 재청구가 15일 막힙니다 — 재시도에는 `sub:${period}:${customerKey}:retry-${attempt}`처럼 attempt suffix를 붙이세요.
-- orderId 기반 키 자동 유도는 의도적으로 제공하지 않습니다 — 결정적 키 + 4xx 재생 조합의 함정을 라이브러리가 사용자 몰래 떠안게 되기 때문입니다.
+- orderId 기반 키 **자동** 유도는 의도적으로 제공하지 않습니다 — 결정적 키 + 4xx 재생 조합의 함정을 라이브러리가 사용자 몰래 떠안게 되기 때문입니다. 명시적 유도는 `deriveIdempotencyKey({ operation, parts, attempt? })`로 합니다(§5 "멱등키 유도와 재시도 규율" — `<operation>:<parts…>#<attempt>` 형식, 서로 다른 입력은 절대 같은 키가 되지 않습니다) — attempt 접미사를 호출자가 직접 결정하므로 같은 함정이 코드에 드러납니다.
+- `idempotencyKey(raw)` 파서는 1–300자에 더해 **공백 없는 출력 가능 ASCII**(`^[\x21-\x7E]+$`)만 받습니다(`bad-charset`). 한글·공백·CR/LF가 섞인 키는 `Idempotency-Key` 헤더로 전송되지 못하거나(fetch `Headers`가 TypeError) 중간 프록시가 바꿀 수 있어, Ok인 키만 "같은 바이트로 재전송 가능"을 보장합니다.
 
 ### 3.7 `resolveConfirmFailure` — confirm 실패는 결제 실패가 아니다
 
@@ -724,6 +725,69 @@ export function inspectPaymentUpdate(previous: PaymentStateSnapshot, fresh: Paym
 
 `amountState: 'none' | 'partial' | 'full'`과 `hasPendingCancellation`은 독립 축입니다. 금액상 `full`이어도 provider 확정 전이면 lifecycle은 성공 상태가 아니라 `cancellation-pending`입니다. 따라서 `CancelOutcome.pending === true`인 응답을 곧바로 `REFUND_SUCCEEDED`로 원장에 기록하지 마세요. `CANCEL_STATUS_CHANGED` 웹훅도 `unverified` 등급이므로 payload만 믿지 말고 기존 `prefetched`/`refetch()` 경로로 최신 `Payment`를 조회한 뒤 `summarizePaymentState`를 다시 만드세요. 스냅샷에는 `schemaVersion: 1`이 있고 직렬화 가능하지만, 저장 순서·CAS·원장은 프로젝트 DB가 소유합니다. in-process 이벤트 버스를 원장으로 쓰면 안 됩니다.
 
+**최소 입력 — `PaymentStateInput`.** `summarizePaymentState`는 전체 `Payment`가 아니라 요약이 실제로 읽는 8필드 Pick(`paymentKey`/`orderId`/`status`/`totalAmount`/`balanceAmount`/`lastTransactionKey`/`isPartialCancelable`/`cancels`)을 받습니다. 시그니처는 `PaymentStateInput | Payment` 유니언이라 전체 `Payment`는 인라인 리터럴로 Payment 고유 필드를 나열한 경우(excess-property 검사)까지 포함해 그대로 할당됩니다 — 기존 호출부는 변화가 없고, `raw`/`secret`/카드 상세를 제거한 앱 소유 축약 뷰에서도 스냅샷을 만들 수 있게 된 것입니다. 단, 8필드는 실제 응답값의 충실한 사본이어야 합니다 — 타입을 맞추려고 `lastTransactionKey`나 `isPartialCancelable`을 지어내면 정합성·취소 가능 판정이 provider 상태가 아니라 그 조작을 설명하게 됩니다.
+
+**브랜드 경계 밖으로 — 직렬화와 복원.** `PaymentStateSnapshot`의 `paymentKey`/`orderId`는 브랜드 타입이라 그대로 응답 DTO·큐·저장 컬럼에 실으면 브랜드가 경계를 넘습니다. `serializePaymentStateSnapshot`이 브랜드를 벗긴 `SerializedPaymentStateSnapshot`(plain `string` id, JSON 안전)을 만들고, `parsePaymentStateSnapshot(value: unknown)`이 구조를 전수 검증한 뒤 기존 `paymentKey`/`orderId` 파서로 재브랜딩해 되돌립니다(검증 통과가 브랜드 획득의 유일한 경로 유지). 실패는 `Err`이며 `error.path`가 오염 지점을 지목합니다. 언트러스트 값의 각 own 프로퍼티는 정확히 한 번만 읽으므로(접근자 기반 바꿔치기 차단), 검증된 값이 곧 브랜드 결과에 담기는 값입니다. parse는 형태 게이트이지 재요약이 아닙니다 — 단, 장부 대조가 의존하는 단 하나의 산술 불변식(`canceledAmount === totalAmount - balanceAmount`, 두 금액이 안전 정수일 때)은 교차 검증하며, `lifecycle` 같은 나머지 파생 필드는 `schemaVersion`이 고정한 규칙으로 이미 계산된 데이터로 신뢰합니다.
+
+```ts
+import {
+  serializePaymentStateSnapshot,
+  summarizePaymentState,
+  type PaymentStateInput,
+  type SerializedPaymentStateSnapshot,
+} from '@gj-kit/toss-payments';
+
+// 게이트웨이 안: 스냅샷 생성 → 브랜드 제거 → 경계 밖(DTO/큐/컬럼)으로
+export function toStateDto(payment: PaymentStateInput): SerializedPaymentStateSnapshot {
+  return serializePaymentStateSnapshot(summarizePaymentState(payment));
+}
+```
+
+**장부 대조 — `compareLedgerRefund`.** "provider가 내 장부가 주장하는 환불을 확정했는가"를 provider 스냅샷 관점으로만 판정합니다. 누적 취소액은 `snapshot.canceledAmount`, 진행액은 `IN_PROGRESS` 취소 트랜잭션의 `cancelAmount` 합입니다. 잔액 모델은 이 절 서두와 취소 경로의 2xx 검증이 실측으로 고정한 그것입니다 — **접수된 비동기 취소는 `IN_PROGRESS` 상태에서 이미 잔액을 줄였으므로 진행액은 `canceledAmount` 안에 포함되어 있고**, `ABORTED`로 끝나면 잔액이 복원됩니다. 따라서 최종 확정액은 `[canceledAmount - pendingCancelAmount, canceledAmount]` 구간 안이며, `settled`는 "목표 일치 + 진행 중 취소 없음"일 때만 나옵니다. **장부 목표(`expectedRefundedAmount`)는 앱이 소유·검증·영속하는 값이며, 라이브러리는 유도하지도 저장하지도 않습니다.**
+
+```ts
+import { compareLedgerRefund, parsePaymentStateSnapshot } from '@gj-kit/toss-payments';
+
+const ledgerTarget = 300; // 장부 목표 — 앱 소유
+const revived = parsePaymentStateSnapshot(await db.paymentSnapshots.load('pay_1'));
+if (!revived.ok) {
+  opsAlert(revived.error); // error.path가 오염 지점을 지목
+} else {
+  const verdict = compareLedgerRefund(revived.value, { expectedRefundedAmount: ledgerTarget });
+  switch (verdict.kind) {
+    case 'settled':     // 확정 누적 취소액 = 장부 목표, 진행 중 취소 없음 → 원장 확정 가능
+      break;
+    case 'unconfirmed': // IN_PROGRESS 취소가 남아 결과가 잠정적(ABORTED로 되돌 수 있음)
+      break;            //   → 원장 확정 금지, 재조회로 최신 Payment를 받아 다시 대조
+    case 'mismatch':    // 목표가 가능한 결과 밖(direction) 또는 판정 불가('indeterminate')
+      opsAlert(verdict);
+      break;
+  }
+}
+```
+
+`unconfirmed`는 **엄격히 "취소가 provider에 접수되어 진행 중"인 경우**입니다. 앱 대사 로직이 흔히 두는 "환불 요청이 provider에 도달하지 못한 것 같다 — 봉인된 요청을 재실행해도 안전" 상태(UNCONFIRMED류)는 이 헬퍼에서 `unconfirmed`가 아니라 `mismatch`/`provider-below-ledger`로 나타납니다. 세 이름을 앱의 3분류에 1:1로 매핑하지 마세요. 대신 현재 대사 중인 단일 환불 요청 금액을 `requestedAmount`로 함께 주면, 그 mismatch에 `shortfall`이 동봉됩니다:
+
+```ts
+import { compareLedgerRefund } from '@gj-kit/toss-payments';
+
+// providerSnapshot: 재조회한 Payment의 summarizePaymentState 결과
+const verdict = compareLedgerRefund(providerSnapshot, {
+  expectedRefundedAmount: 3900, // 장부 목표 = 이전 확정 환불 + 이번 요청
+  requestedAmount: 3900,        // 이번에 대사 중인 단일 환불 요청 금액
+});
+if (verdict.kind === 'mismatch' && verdict.direction === 'provider-below-ledger') {
+  if (verdict.shortfall === 'at-prior-state') {
+    // provider가 정확히 요청 전 금액이고 진행 중 취소도 없음 — 요청이 provider에
+    // 도달하지 못했을 가능성이 높다. 봉인된(멱등) 취소 요청 재실행이 자연스러운 복구.
+  } else {
+    // 'unexplained' (또는 requestedAmount 미제공): 자동 재실행 금지, 사람에게 에스컬레이션.
+  }
+}
+```
+
+`mismatch`의 `direction: 'indeterminate'`는 스냅샷 금액이 신뢰 불가(`invalid-amount`/`balance-exceeds-total` 이슈 — `consistencyIssues`로 동봉)이거나 장부 목표 자체가 유효하지 않을 때(`invalidLedgerTarget: true`)입니다. "status CANCELED이고 totalAmount만 유효하면 전액 환불로 간주" 같은 폴백은 의도적으로 구현하지 않았습니다 — 그건 추측이고, 추측으로 원장을 확정할지는 앱의 명시적 정책이어야 합니다. 스냅샷과 장부 목표가 같은 결제의 것인지는 이 헬퍼가 검증할 수 없는 호출부 책임입니다.
+
 ### 4.3 자동결제(빌링): 인증 → 발급 → 승인
 
 #### 브라우저: 등록 인증창
@@ -813,6 +877,21 @@ async function chargeMonthly(rawCk: string, amount: number) {
 
 발급 뒤 앱 자신의 subscription/intent projection을 별도 DB에 완료해야 한다면, `billing.issue(..., { idempotencyKey })`가 같은 값을 `store.save(record, { operationId })`로 전달합니다. 이것은 **post-persistence fence용 상관관계 값**이며 provider 호출 순서를 직렬화하지는 않습니다. 해당 기능을 지원하는 저장소에서는 고유한 intent-derived idempotency key로 현재 operation을 잠금 transaction 안에서 다시 확인하고, 불일치면 finalization을 fail-closed 하세요. raw billing/auth key·카드/계좌 정보는 `operationId`에 넣지 않습니다.
 
+#### 카드 발급사 코드 → 표시명 — `cardIssuerName`
+
+발급 응답과 `Payment.card`의 `issuerCode`/`acquirerCode`는 항상 **두 자리 기관 코드**입니다(`'21'` 하나카드, `'11'` KB국민카드, `'3K'` 기업 BC …). 공식 기관 코드 표(국내 24 + 해외 6)를 `CARD_ISSUER_NAMES_KO`(동결 객체)로 전사했고, `cardIssuerName(code)`는 미등록 코드에 `undefined`를 돌려줍니다 — 폴백 문구는 앱이 정합니다. 표는 문서 전사이지 제품 copy가 아니므로, 더 짧은 라벨이 필요하면 앱 계층에서 덮어쓰세요.
+
+```ts
+import { cardIssuerName } from '@gj-kit/toss-payments';
+import type { BillingKeyRecord } from '@gj-kit/toss-payments/server';
+
+function describeBillingMethod(record: BillingKeyRecord): string {
+  if (record.card === null) return '계좌이체';
+  const issuer = cardIssuerName(record.card.issuerCode) ?? '카드';   // 토스가 기관을 추가하면 undefined — 중립 폴백
+  return `${issuer} ${record.card.number.slice(-4)}`;               // number는 토스가 마스킹한 값
+}
+```
+
 ### 4.4 웹훅 수신: raw body → verify → prefetched
 
 ```ts
@@ -897,7 +976,7 @@ if (isErr(result) && result.error.source === 'toss') {
 
 ### 취소 재시도 티켓 — 응답 유실 시 안전한 재실행
 
-취소 요청이 `network` 실패하면 응답을 못 받았을 뿐 서버에는 도달했을 수 있습니다. 에러에 동봉된 `CancelRetryTicket`에는 동일 요청을 가리키는 불투명 `ticketId`와 멱등키 메타만 있고, 실제 path/body는 `cancelRetries` 저장소에 보관됩니다. 저장소를 배선하면 **네트워크 요청 전에** record를 저장하고, 저장 실패 시 취소 요청을 보내지 않습니다. 따라서 토스 처리 직후 프로세스가 종료돼도 `retryById(ticketId)`로 **동일 멱등키 + 동일 body**를 재실행할 수 있습니다. 정상 응답 또는 확정적인 토스 오류 뒤에는 record를 제거하고, 응답 유실 때만 남깁니다. 티켓은 15일이 지나면 로컬에서 거부되어 멱등 TTL 만료 뒤 새 취소로 실행되는 사고를 막습니다.
+취소 요청이 `network` 실패하면 응답을 못 받았을 뿐 서버에는 도달했을 수 있습니다. 에러에 동봉된 `CancelRetryTicket`에는 동일 요청을 가리키는 불투명 `ticketId`와 멱등키 메타만 있고, 실제 path/body는 `cancelRetries` 저장소에 보관됩니다. 저장소를 배선하면 **네트워크 요청 전에** record를 저장하고, 저장 실패 시 취소 요청을 보내지 않습니다. 따라서 토스 처리 직후 프로세스가 종료돼도 `retryById(ticketId)`로 **동일 멱등키 + 동일 body**를 재실행할 수 있습니다. 정상 응답 또는 확정적인 토스 오류 뒤에는 record를 제거하고, 응답 유실 때만 남깁니다. 티켓은 `DEFAULT_IDEMPOTENCY_REPLAY_WINDOW_MS`(14일 — provider TTL 15일에서 하루 여유)가 지나면 로컬에서 `retry-ticket-expired`로 거부되어 멱등 TTL 만료 뒤 새 취소로 실행되는 사고를 막습니다. 만료된 티켓의 복구는 재전송이 아니라 `getPayment` 조회입니다.
 
 ```ts
 const retried = await client.cancels.retry(ticket);
@@ -905,6 +984,88 @@ const recoveredAfterRestart = await client.cancels.retryById(ticket.ticketId);
 ```
 
 confirm 실패의 복구는 §3.7 `resolveConfirmFailure`가 담당합니다 — transport 실패를 티켓 없이 조회로 확정합니다.
+
+### 멱등키 유도와 재시도 규율 — 결정적 키 · 재생 창 · 조회 우선
+
+cron·큐 소비자가 빌링 승인이나 취소를 직접 굴리면 세 가지 provider 지식을 앱마다 손으로 복제하게 됩니다: "같은 논리 이벤트는 같은 키", "15일 안에는 같은 키 재전송이 재생", "이 에러 뒤에는 조회부터". 루트 엔트리가 셋을 순수 함수로 제공합니다 — 네트워크·저장소 접근 없음, 환경 중립.
+
+| 심볼 | 역할 |
+|---|---|
+| `TOSS_IDEMPOTENCY_KEY_TTL_MS` | 문서상 멱등키 바인딩 기간 **15일**(ms). 15일 뒤 같은 키가 어떻게 처리되는지는 문서에 없으므로 "새 요청으로 실행될 수 있다"로 취급합니다. |
+| `DEFAULT_IDEMPOTENCY_REPLAY_WINDOW_MS` | 보수적 재생 창 **14일** — provider가 "15일"을 일 단위로만 밝히고 경계·시간대를 명시하지 않는 점과 양쪽 시계 편차를 하루로 흡수합니다. 전제는 `issuedAt`을 첫 네트워크 시도 **이전**에 기록하는 것(그래야 provider의 최초 사용 시각의 하한). 라이브러리 자신의 `CancelRetryTicket` 만료도 이 값입니다. |
+| `deriveIdempotencyKey({ operation, parts, attempt? })` | `<operation>:<parts…>` (+ `#<attempt>`)를 만들어 기존 `idempotencyKey` 파서로 검증합니다(1–300자). 세그먼트는 비어 있으면 `empty`, 구분자 `:`/`#`·공백·비ASCII를 포함하면 `bad-charset` — 그래서 **서로 다른 입력은 절대 같은 키가 되지 않고**(단사), Ok인 키는 항상 전송 가능합니다. 같은 입력 → 같은 키. |
+| `isWithinIdempotencyReplayWindow(issuedAt, now, windowMs?)` | `now - issuedAt < windowMs`일 때 true(상한 **배타** — 정확히 창 길이가 지나면 false). 비유한 입력(Invalid Date·NaN·±Infinity, 세 인자 모두)은 false. |
+| `OUTCOME_QUERY_FIRST_ERROR_CODES` / `mustQueryOutcomeBeforeRetry(failure)` | 재시도·실패 처리 **전에 결제 상태를 조회해야 하는** 실패 — transport 전부 + `ALREADY_PROCESSED_PAYMENT`·`IDEMPOTENT_REQUEST_PROCESSING`·`FORBIDDEN_CONSECUTIVE_REQUEST`·TRANSIENT 계열(`PROVIDER_ERROR`, `FAILED_INTERNAL_SYSTEM_PROCESSING` 등). source/code로만 판정하며 HTTP status는 보지 않습니다. 불변식 "retryable 코드 전부 포함"은 코드 테이블의 키 `CLASSIFIED_TOSS_ERROR_CODES`에 대해 테스트로 고정됩니다. |
+
+```ts
+import {
+  deriveIdempotencyKey, isDone, isErr, isWithinIdempotencyReplayWindow, mustQueryOutcomeBeforeRetry,
+} from '@gj-kit/toss-payments';
+
+const subscriptionId = 'sub_01';
+const periodStart = new Date('2026-09-01T00:00:00+09:00');
+
+// [1] 결정적 키 — 같은 논리 이벤트(구독 × 청구 주기)는 프로세스가 재시작돼도 같은 키를 재현한다.
+//     형식 <operation>:<parts…>(#<attempt>). 세그먼트에 `:`/`#`·공백·비ASCII가 있으면 bad-charset이라
+//     서로 다른 입력이 같은 키로 뭉치는 일이 없다. attempt 생략 = "재생 의도" — 4xx를 받고 파라미터를
+//     고쳐 다시 보낼 때만 새 attempt(UUID 등)를 붙인다.
+const derived = deriveIdempotencyKey({
+  operation: 'subscription_renewal',
+  parts: [subscriptionId, String(periodStart.getTime())],               // ISO 문자열(`:` 포함)이 아니라 epoch
+});
+if (isErr(derived)) return opsAlert(derived.error);                    // empty / bad-charset / too-long — 구성 오류. Ok면 전송 가능
+
+// [2] provider 호출 **전에** 제출 시각을 남긴다 — 응답 유실 뒤 "재생 가능한가"의 기준 시각(provider 최초 사용의 하한)
+await db.charges.markSubmitted(order.orderId, derived.value, new Date());
+
+const paid = await billing.approve(profile, order, { idempotencyKey: derived.value });
+if (isErr(paid)) {
+  if (paid.error.source === 'library') return showFailure(paid.error); // API 미도달 — 조회할 결과가 없다
+  if (!mustQueryOutcomeBeforeRetry(paid.error)) return showFailure(paid.error); // 확정 거절(REJECT/AUTH/REQUEST 계열)
+
+  // [3] 조회 우선 — 응답 유실·처리 중·일시 오류 뒤에는 돈이 이미 나갔을 수 있다. FAILED로 먼저 적지 않는다.
+  const looked = await client.getPaymentByOrderId(order.orderId);
+  if (!isErr(looked)) {
+    const payment = looked.value;
+    if (isDone(payment)) return completeOrder(payment);                // DONE — 성공 확정
+    if (payment.status === 'ABORTED' || payment.status === 'EXPIRED' || payment.status === 'CANCELED') {
+      return showFailure(paid.error);                                  // 종결 실패 — 실패 확정
+    }
+    return retryQueue.push({ orderId: order.orderId });                // READY/IN_PROGRESS 등 비종결 — 아직 진행 중. 실패로 적지 말고 재판정
+  }
+
+  // 원 요청이 아직 실행 중일 수 있는 경우 — transport 실패, 409 IDEMPOTENT_REQUEST_PROCESSING,
+  // 403 FORBIDDEN_CONSECUTIVE_REQUEST — 에는 조회 NOT_FOUND가 "실행 안 됨"의 증거가 아니다.
+  // 새 attempt가 아니라 **같은 키**를 지연 후 재전송한다(아래 워커) — 재생이거나 1회 실행이라 안전.
+  const stillRunning = paid.error.source === 'network' || paid.error.category === 'CONCURRENCY';
+  if (stillRunning) return retryQueue.push({ orderId: order.orderId });
+
+  if (looked.error.source === 'toss' && looked.error.code === 'NOT_FOUND_PAYMENT') {
+    return showFailure(paid.error);                                   // 응답을 받은 TRANSIENT 오류 뒤 NOT_FOUND — 기록조차 없음, 새 attempt로 재청구 가능
+  }
+  return opsAlert({ orderId: order.orderId, error: looked.error });   // 조회도 실패 = 진실 미확정 — 큐에 넣어 나중에 재판정
+}
+```
+
+나중에 재판정하는 워커는 **창 안이면 같은 키 재전송, 창 밖이면 조회만**입니다. 창 안의 재전송은 요청이 토스에 도달했었다면 첫 응답을 바이트 동일 재생하고(처리 중이면 다시 409 — 다음 턴에 재시도), 미도달이었다면 지금 1회 실행합니다(실측). 창 밖에서는 같은 키가 **새 요청**으로 실행될 수 있으므로 재전송이 곧 이중 과금 위험입니다.
+
+```ts
+import { isWithinIdempotencyReplayWindow, type IdempotencyKey } from '@gj-kit/toss-payments';
+
+const submitted: { idempotencyKey: IdempotencyKey; at: Date } = await db.charges.submission(order.orderId);
+
+if (isWithinIdempotencyReplayWindow(submitted.at, Date.now())) {       // 기본 창 14일
+  await billing.approve(profile, order, { idempotencyKey: submitted.idempotencyKey }); // 재생 또는 1회 실행
+} else {
+  await client.getPaymentByOrderId(order.orderId);                     // 재전송 금지 — 조회로만 확정
+}
+```
+
+- `attempt`가 존재하는 이유: **4xx 에러 응답도 같은 키에 15일 재생**됩니다(§5 위). 결정적 키만 쓰면 일시 오류 한 번이 그 청구 주기를 15일 잠급니다. 재시도는 `attempt: crypto.randomUUID()`처럼 **새 attempt를 명시**하세요 — 라이브러리는 사용자 몰래 키를 바꾸지 않습니다. 단, 원 요청이 아직 실행 중일 수 있는 transport 실패·`IDEMPOTENT_REQUEST_PROCESSING`·`FORBIDDEN_CONSECUTIVE_REQUEST` 뒤에는 attempt를 **바꾸지 말고** 같은 키를 재전송하세요.
+- `parts`에는 `orderId`·`customerKey`·`cancelRequestId`·UUID·epoch처럼 라이브러리가 이미 검증하는 문자셋의 값이 그대로 들어갑니다(`_ . @ = -` 허용). 구분자 `:`/`#`가 필요한 값(ISO 타임스탬프 등)은 epoch나 날짜만으로 바꾸세요 — 키는 `reason: 'bad-charset'`으로 구성 시점에 거부됩니다.
+- `parts`에 raw billingKey·authKey·카드/계좌번호를 넣지 마세요 — 키는 요청 헤더와 audit 기록에 실립니다.
+- `mustQueryOutcomeBeforeRetry`는 미등록 코드에 false를 돌려줍니다(라이브러리가 보증할 수 없는 코드). 알 수 없는 5xx에 대한 보수 정책은 앱이 한 줄로 덧붙이세요. 확정 표는 `OUTCOME_QUERY_FIRST_ERROR_CODES`로, 라이브러리가 분류하는 코드 전체는 `CLASSIFIED_TOSS_ERROR_CODES`로 export 되어 감사·버전 관리 대상입니다.
+- confirm 경로에는 §3.7 `resolveConfirmFailure`가 이미 같은 규율(조회로 확정)을 내장하고 있습니다 — 이 절의 헬퍼는 취소·빌링 승인·앱 소유 큐처럼 라이브러리가 조회를 대신할 수 없는 경로용입니다.
 
 ---
 
@@ -1018,6 +1179,26 @@ const sink = memoryAuditSink();
 
 `TEST_BILLING_CARD`(`9410001234567890`)는 테스트 환경에서 빌링키 발급(신용/개인)과 승인(DONE)이 **모두 성공하는 실측 확인 카드**입니다 — 문서의 BIN 6자리 단독은 400 `INVALID_CARD_NUMBER`, 다른 테스트 번호는 발급은 되지만 승인이 거절됩니다(`NOT_SUPPORTED_CARD_TYPE`).
 
+### 부작용 없는 상태 단정 — readonly inspection
+
+memory 스토어 5종은 `memoryAuditSink().entries`와 같은 관례의 **부작용 없는 inspection**을 제공합니다. 특히 dedupe는 이것 없이는 상태 단정에 `claim()` 프로브를 다시 불러야 했는데, release 뒤의 프로브는 키를 `processing`으로 재점유해 이후 단정을 오염시킵니다. `stateOf`는 조회만 하고 항목을 만들지 않습니다.
+
+```ts
+import {
+  memoryBillingKeyStore, memoryCancelRetryStore, memoryDedupeStore,
+  memoryDepositSecretStore, memoryOrderStore,
+} from '@gj-kit/toss-payments/testing';
+
+const dedupeStore = memoryDedupeStore();
+dedupeStore.stateOf('tx-1');               // 'processing' | 'completed' | undefined(미점유·release됨)
+memoryOrderStore().orderOf('order_1');     // StoredOrder | undefined
+memoryBillingKeyStore().recordOf('cust');  // BillingKeyRecord | undefined
+memoryDepositSecretStore().secretOf('order_1'); // string | undefined
+memoryCancelRetryStore().recordOf('ticket');    // CancelRetryRecord | undefined
+```
+
+반환 객체는 **방어적 복사**(빌링키 레코드는 중첩 `card`/`transfers`까지 깊은 복사)라 테스트가 변이해도 스토어가 오염되지 않고, 타입 수준에서도 전 필드 readonly입니다. 기존 스토어 메서드 시그니처는 그대로입니다.
+
 ---
 
 ## 8. 기존 빌링키 이관 — `billing.import`
@@ -1058,7 +1239,7 @@ if (imported.ok) {
 둘 다 맞고, 서로 다른 구간입니다. **30분** = 결제창 실행부터 구매자 인증까지(라이브러리 통제 밖), **10분** = 인증 완료(successUrl 리다이렉트)부터 confirm 호출까지. 어느 쪽이든 초과하면 `EXPIRED`로 전이되고 이후 confirm은 404 `NOT_FOUND_PAYMENT_SESSION`입니다. `createConfirmFlow`의 `approvalWindowMs`(기본 10분)가 후자를 로컬에서 선판정하고, 초과가 이미 벌어졌다면 `resolveFailure`(§3.7)가 `retry-payment` 분기로 안내합니다.
 
 **Q. 멱등키는 얼마나 유지되나요?**
-최초 사용일부터 **15일**입니다. 15일이 지난 키의 재사용은 새 요청으로 처리됩니다(중복 실행 위험). 멱등 판정 조합은 "키 + API 키 + 주소 + 메서드"이고 **body는 포함되지 않으므로**, 같은 키로 다른 body를 보내는 실수는 라이브러리의 취소 재시도 티켓 봉인이 방지합니다. confirm은 멱등키를 기본 부착하지 않습니다 — 필요 시 `options.idempotencyKey`로 명시하세요(retry 옵션의 자동 재시도도 이 명시가 전제입니다 — §3.4). **4xx 에러 응답도 같은 키에 15일 재생됩니다** — 파라미터를 고쳐 재시도할 땐 반드시 새 키를 쓰세요(§5).
+최초 사용일부터 **15일**입니다(`TOSS_IDEMPOTENCY_KEY_TTL_MS`). 큐 재처리의 "같은 키 재전송 가능" 판정은 하루 여유를 둔 `isWithinIdempotencyReplayWindow(issuedAt, now)`(기본 14일)로 하세요(§5). 15일이 지난 키의 재사용은 새 요청으로 실행될 수 있습니다(문서는 기간만 밝히므로 안전하지 않은 것으로 취급 — 중복 실행 위험). 멱등 판정 조합은 "키 + API 키 + 주소 + 메서드"이고 **body는 포함되지 않으므로**, 같은 키로 다른 body를 보내는 실수는 라이브러리의 취소 재시도 티켓 봉인이 방지합니다. confirm은 멱등키를 기본 부착하지 않습니다 — 필요 시 `options.idempotencyKey`로 명시하세요(retry 옵션의 자동 재시도도 이 명시가 전제입니다 — §3.4). **4xx 에러 응답도 같은 키에 15일 재생됩니다** — 파라미터를 고쳐 재시도할 땐 반드시 새 키를 쓰세요(§5).
 
 **Q. 위젯 키와 API 키는 뭐가 다른가요?**
 연동 방식이 다릅니다. 결제위젯은 위젯 키 쌍(`gck`/`gsk`), API 개별 연동(빌링 포함)은 API 키 쌍(`ck`/`sk`)을 씁니다. 위젯으로 결제한 건의 confirm에 API 시크릿 키를 쓰면 400 `INVALID_API_KEY`입니다. 이 라이브러리는 키 4종을 별도 타입으로 분리하고 클라이언트에 키 종류를 각인해, 잘못된 조합(위젯 키로 빌링 플로우 생성 등)을 컴파일 에러로 만듭니다 — 파사드에서는 아예 오버로드 불충족입니다(§2).

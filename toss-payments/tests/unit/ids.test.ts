@@ -136,12 +136,32 @@ describe('cancelRequestId — 6-64자, ^[A-Za-z0-9\\-_=]+$ (중국·동남아 �
   });
 });
 
-describe('idempotencyKey — 1-300자 (초과 시 서버 400 INVALID_IDEMPOTENCY_KEY)', () => {
+describe('idempotencyKey — 1-300자 (초과 시 서버 400 INVALID_IDEMPOTENCY_KEY) + 헤더 안전 문자셋', () => {
   it('경계', () => {
     expect(isOk(idempotencyKey('sub:2026-08:user-1'))).toBe(true);
     expect(isOk(idempotencyKey('a'.repeat(300)))).toBe(true);
     expect(reasonOf(idempotencyKey('a'.repeat(301)))).toBe('too-long');
     expect(reasonOf(idempotencyKey(''))).toBe('empty');
+  });
+
+  it('문자셋 — 공백 없는 출력 가능 ASCII(0x21–0x7E)만 허용: Ok ⇒ Idempotency-Key 헤더로 전송 가능', () => {
+    // 출력 가능 ASCII 전 범위가 통과한다 (구분자 후보 `:`/`#` 포함)
+    let visible = '';
+    for (let c = 0x21; c <= 0x7e; c++) visible += String.fromCharCode(c);
+    expect(isOk(idempotencyKey(visible))).toBe(true);
+    expect(isOk(idempotencyKey('op:x#attempt-1'))).toBe(true);
+
+    // fetch Headers가 TypeError로 거부하는 값 (비 Latin-1, CR/LF)
+    expect(reasonOf(idempotencyKey('구독-01'))).toBe('bad-charset');
+    expect(reasonOf(idempotencyKey('a\r\nb'))).toBe('bad-charset');
+    expect(reasonOf(idempotencyKey('a\nb'))).toBe('bad-charset');
+    // 전송은 되지만 중간 프록시가 trim/재인코딩할 수 있는 값 (공백·탭·Latin-1 확장·DEL·NUL)
+    expect(reasonOf(idempotencyKey('a b'))).toBe('bad-charset');
+    expect(reasonOf(idempotencyKey(' a'))).toBe('bad-charset');
+    expect(reasonOf(idempotencyKey('a\tb'))).toBe('bad-charset');
+    expect(reasonOf(idempotencyKey('café'))).toBe('bad-charset');
+    expect(reasonOf(idempotencyKey('a\x7fb'))).toBe('bad-charset');
+    expect(reasonOf(idempotencyKey('a\0b'))).toBe('bad-charset');
   });
 
   it('generateIdempotencyKey는 항상 유효', () => {

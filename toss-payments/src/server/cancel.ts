@@ -7,6 +7,7 @@
 import type { Brand } from '../core/brand';
 import type { CancelErrorCode, TossApiFailure, TransportFailure } from '../core/errors';
 import type { InternalTossEmit } from '../core/events';
+import { DEFAULT_IDEMPOTENCY_REPLAY_WINDOW_MS } from '../core/idempotency';
 import {
   generateIdempotencyKey,
   idempotencyKey as parseIdempotencyKey,
@@ -257,7 +258,8 @@ export interface CancelOutcome {
 /**
  * transport 실패 시 발급되는 불투명 재시도 티켓. 같은 프로세스에서는 비열거 봉인을,
  * 재시작 뒤에는 CancelRetryStore의 암호화 record를 사용해 동일 멱등키+body를 복원한다.
- * issuedAt 기준 15일이 지난 티켓은 새 요청으로 처리될 위험이 있어 로컬에서 거부한다.
+ * issuedAt 기준 `DEFAULT_IDEMPOTENCY_REPLAY_WINDOW_MS`(14일 — provider TTL 15일에서 하루 여유)가
+ * 지난 티켓은 새 요청으로 실행될 위험이 있어 로컬에서 `retry-ticket-expired`로 거부한다.
  */
 export interface CancelRetryTicket extends Brand<'CancelRetryTicket'> {
   readonly ticketId: string;
@@ -445,7 +447,10 @@ interface SealedCancelRequest {
   readonly previousBalanceAmount: number;
 }
 
-const CANCEL_RETRY_TTL_MS = 15 * 24 * 60 * 60 * 1000;
+// 공개 헬퍼와 같은 보수적 재생 창(14일 = provider TTL 15일 - 하루 여유). 라이브러리 자신의
+// 재시도 경로가 소비자에게 권하는 창보다 넓게 열려 있지 않도록 단일 출처(core/idempotency.ts)를 쓴다.
+// 창 밖 티켓은 retry-ticket-expired — 문서화된 복구는 조회(getPayment)뿐이다.
+const CANCEL_RETRY_TTL_MS = DEFAULT_IDEMPOTENCY_REPLAY_WINDOW_MS;
 
 function restoreSealedRecord(record: CancelRetryRecord): SealedCancelRequest | null {
   const parsedPaymentKey = parsePaymentKey(record.paymentKey);

@@ -191,8 +191,17 @@ export function isDone(p: Payment): p is Payment & { status: 'DONE'; approvedAt:
  * status가 `PARTIAL_CANCELED`로 남는다(balanceAmount 0). 따라서 CANCELED 문자열만
  * 검사하지 않고, `balanceAmount === 0`과 취소 상태/이력 신호를 함께 본다. 취소 신호가
  * 없는 READY의 잔액 0은 완전 취소가 아니다.
+ *
+ * The parameter is the structural subset this predicate actually reads (`status`,
+ * `balanceAmount`, `cancels`), so callers that only hold a reduced payment snapshot
+ * (see `PaymentStateInput`) can use it too. A full `Payment` is always assignable —
+ * including a fresh inline object literal: the explicit `| Payment` union member exists
+ * solely so the excess-property check accepts literals spelling out non-Pick `Payment`
+ * fields. Existing call sites compile unchanged.
  */
-export function isFullyCanceled(p: Payment): boolean {
+export function isFullyCanceled(
+  p: Pick<Payment, 'status' | 'balanceAmount' | 'cancels'> | Payment,
+): boolean {
   return (
     p.balanceAmount === 0 &&
     (p.status === 'CANCELED' ||

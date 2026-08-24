@@ -173,6 +173,7 @@ declare const orders: import('@gj-kit/toss-payments/server').OrderStore;
 declare const dedupe: import('@gj-kit/toss-payments/webhook').WebhookDedupeStore;
 declare const profile: import('@gj-kit/toss-payments/server').BillingProfile;
 declare const verified: import('@gj-kit/toss-payments/server').VerifiedCheckout;
+declare const providerSnapshot: import('@gj-kit/toss-payments').PaymentStateSnapshot;
 // 풀 배선 파사드 kit — 옵션 카탈로그 프래그먼트가 스코프에 있다고 가정하는 값
 declare const toss: import('@gj-kit/toss-payments/server').TossPaymentsKit<
   __Env,

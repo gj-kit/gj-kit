@@ -172,6 +172,19 @@ const ERROR_CODE_TABLE: Readonly<Record<string, ErrorCodeClassification>> = {
   INVALID_REQUEST: { category: 'REQUEST', ...NO_RETRY },
 };
 
+/**
+ * Every Toss error code the library has a classification for — the keys of the internal
+ * code table, frozen, in table order. `classifyTossErrorCode(code)` returns a non-`UNKNOWN`
+ * category exactly for these codes.
+ *
+ * Exposed so that derived tables (e.g. `OUTCOME_QUERY_FIRST_ERROR_CODES`) and consumer audits
+ * can be checked against the single source instead of a hand-copied list — adding a code to
+ * the table is then a visible, testable event.
+ */
+export const CLASSIFIED_TOSS_ERROR_CODES: readonly string[] = Object.freeze(
+  Object.keys(ERROR_CODE_TABLE),
+);
+
 /** 미등록 코드 → UNKNOWN + 비재시도(보수 판정). 원문 code/message/httpStatus는 호출부가 무손실 보존한다. */
 export function classifyTossErrorCode(code: string): ErrorCodeClassification {
   return ERROR_CODE_TABLE[code] ?? { category: 'UNKNOWN', retryable: false };

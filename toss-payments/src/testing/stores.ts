@@ -18,8 +18,16 @@ import type {
 import type { CancelRetryRecord, CancelRetryStore } from '../server/cancel';
 import type { WebhookDedupeStore } from '../webhook/verifier';
 
-/** orderId 키 인메모리 OrderStore — saveOrder는 같은 orderId를 덮어쓴다. */
-export function memoryOrderStore(): OrderStore {
+/**
+ * orderId 키 인메모리 OrderStore — saveOrder는 같은 orderId를 덮어쓴다.
+ *
+ * `orderOf` is a side-effect-free inspection hook for assertions (mirrors the
+ * `memoryAuditSink().entries` convention): it never creates, claims or mutates an entry, and
+ * it returns a defensive copy — mutating the returned object cannot corrupt the store.
+ */
+export function memoryOrderStore(): OrderStore & {
+  orderOf(orderId: string): StoredOrder | undefined;
+} {
   const orders = new Map<string, StoredOrder>();
   return {
     async saveOrder(order) {
@@ -27,6 +35,10 @@ export function memoryOrderStore(): OrderStore {
     },
     async loadOrder(orderId) {
       return orders.get(orderId) ?? null;
+    },
+    orderOf(orderId) {
+      const order = orders.get(orderId);
+      return order === undefined ? undefined : { ...order };
     },
   };
 }
@@ -38,7 +50,9 @@ export function memoryOrderStore(): OrderStore {
  * 삭제가 원자적이다. 다중 프로세스/인스턴스 환경에는 DB CAS 또는 transaction 구현을
  * 써야 하며, 이 테스트용 구현을 프로덕션에 사용하면 안 된다.
  */
-export function memoryBillingKeyStore(): BillingKeyStore {
+export function memoryBillingKeyStore(): BillingKeyStore & {
+  recordOf(customerKey: string): BillingKeyRecord | undefined;
+} {
   const records = new Map<string, BillingKeyRecord>();
   return {
     async save(record) {
@@ -46,6 +60,22 @@ export function memoryBillingKeyStore(): BillingKeyStore {
     },
     async find(customerKey) {
       return records.get(customerKey) ?? null;
+    },
+    /**
+     * Side-effect-free readonly inspection — returns a deep defensive copy (nested `card`
+     * object and `transfers` array included), so mutating it cannot corrupt the store.
+     */
+    recordOf(customerKey) {
+      const record = records.get(customerKey);
+      if (record === undefined) return undefined;
+      return {
+        ...record,
+        card: record.card === null ? null : { ...record.card },
+        transfers:
+          record.transfers === null
+            ? null
+            : record.transfers.map((transfer) => ({ ...transfer })),
+      };
     },
     async delete({ customerKey, expectedBillingKey }) {
       const current = records.get(customerKey);
@@ -61,7 +91,9 @@ export function memoryBillingKeyStore(): BillingKeyStore {
  * confirm측 자동 저장 + 웹훅측 getSecret 대조를 한 객체로 배선하는 §3.1 인터페이스의
  * 테스트용 구현이다.
  */
-export function memoryDepositSecretStore(): DepositSecretStore {
+export function memoryDepositSecretStore(): DepositSecretStore & {
+  secretOf(orderId: string): string | undefined;
+} {
   const secrets = new Map<string, string>();
   return {
     async saveSecret(orderId, secret) {
@@ -69,6 +101,10 @@ export function memoryDepositSecretStore(): DepositSecretStore {
     },
     async getSecret(orderId) {
       return secrets.get(orderId) ?? null;
+    },
+    /** Side-effect-free readonly inspection — `undefined` when no secret was stored. */
+    secretOf(orderId) {
+      return secrets.get(orderId);
     },
   };
 }
@@ -87,8 +123,16 @@ export function memoryAuditSink(): AuditSink & { readonly entries: readonly Audi
   };
 }
 
-/** 인메모리 dedupe — 단일 프로세스 한정. 분산 환경은 Redis `SET NX` 등으로 대체할 것. */
-export function memoryDedupeStore(): WebhookDedupeStore {
+/**
+ * 인메모리 dedupe — 단일 프로세스 한정. 분산 환경은 Redis `SET NX` 등으로 대체할 것.
+ *
+ * `stateOf` answers "what state is this key in right now?" without the side effect a probing
+ * `claim()` has (a claim after `release` would re-occupy the key as `processing` and poison
+ * later assertions). `undefined` means the key is unknown or was released — i.e. claimable.
+ */
+export function memoryDedupeStore(): WebhookDedupeStore & {
+  stateOf(dedupeKey: string): 'processing' | 'completed' | undefined;
+} {
   const states = new Map<string, 'processing' | 'completed'>();
   return {
     claim(dedupeKey) {
@@ -106,11 +150,20 @@ export function memoryDedupeStore(): WebhookDedupeStore {
       if (states.get(dedupeKey) === 'processing') states.delete(dedupeKey);
       return Promise.resolve();
     },
+    stateOf(dedupeKey) {
+      return states.get(dedupeKey);
+    },
   };
 }
 
-/** 취소 재시도 레코드 인메모리 저장소 — 단위 테스트/프로토타입 전용. */
-export function memoryCancelRetryStore(): CancelRetryStore {
+/**
+ * 취소 재시도 레코드 인메모리 저장소 — 단위 테스트/프로토타입 전용.
+ *
+ * `recordOf` is a side-effect-free readonly inspection returning a defensive copy.
+ */
+export function memoryCancelRetryStore(): CancelRetryStore & {
+  recordOf(ticketId: string): CancelRetryRecord | undefined;
+} {
   const records = new Map<string, CancelRetryRecord>();
   return {
     async save(record) {
@@ -121,6 +174,10 @@ export function memoryCancelRetryStore(): CancelRetryStore {
     },
     async delete(ticketId) {
       records.delete(ticketId);
+    },
+    recordOf(ticketId) {
+      const record = records.get(ticketId);
+      return record === undefined ? undefined : { ...record };
     },
   };
 }

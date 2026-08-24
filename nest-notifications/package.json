@@ -1,6 +1,6 @@
 {
   "name": "@gj-kit/nest-notifications",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "description": "내구성 알림 파이프라인 — 소스 트랜잭션 outbox → 릴레이(조용시간·배치·선호도) → 디스패치(inbox 메시지·푸시 fan-out). 순수 코어는 프레임워크·전송·저장소를 모르고, at-least-once 배달 계약과 저장소 원자성 의무를 명세로 강제한다. 런타임 의존성 0",
   "keywords": [
     "nestjs",

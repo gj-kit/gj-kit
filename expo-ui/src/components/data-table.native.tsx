@@ -9,7 +9,12 @@ import {
   useWindowDimensions,
   View,
 } from "react-native";
-import type { GestureResponderEvent, TextStyle, ViewStyle } from "react-native";
+import type {
+  GestureResponderEvent,
+  StyleProp,
+  TextStyle,
+  ViewStyle,
+} from "react-native";
 import type { Theme } from "../theme/tokens";
 import { Checkbox } from "./controls";
 import {
@@ -390,6 +395,58 @@ export function DataTable<
     if (striped && row.rowIndex % 2 === 1) return theme.colors.surfaceSubtle;
     return theme.colors.surface;
   };
+
+  // 활성 행(활성 = 상세 표면이 열린 행)은 네이티브에서 시각으로만 표현된다 —
+  // aria-current 대응물이 없고 가짜 selected 상태를 만들지 않는다. 어떤 레코드가
+  // 열려 있는지는 상세 표면 자체가 보조기술에 전달해야 한다.
+  const isActiveRow = (rowKey: RowKey): boolean =>
+    props.activeRow !== undefined &&
+    props.activeRow.key !== null &&
+    props.activeRow.key === rowKey;
+  const activeRowLayers = (
+    row: ValidatedDataTableRow<Row, ColumnId, RowKey>,
+    rowPresentation: "table" | "list"
+  ): readonly (StyleProp<ViewStyle> | null)[] => {
+    const active = isActiveRow(row.rowKey);
+    // activeRow.style은 기본 활성 시각(primarySoft wash + accent)을 통째로 대체한다.
+    const activeLayer = active
+      ? props.activeRow?.style === undefined
+        ? { backgroundColor: theme.colors.primarySoft }
+        : props.activeRow.style
+      : null;
+    const rowHookStyle =
+      props.rowStyle?.(row.row, {
+        rowKey: row.rowKey,
+        rowIndex: row.rowIndex,
+        active,
+        presentation: rowPresentation,
+      }) ?? null;
+    return [activeLayer, rowHookStyle];
+  };
+  const showRowAccent = (rowKey: RowKey): boolean =>
+    isActiveRow(rowKey) && props.activeRow?.style === undefined;
+  const renderRowAccent = (
+    row: ValidatedDataTableRow<Row, ColumnId, RowKey>
+  ): ReactElement => (
+    <View
+      accessibilityElementsHidden
+      aria-hidden
+      importantForAccessibility="no-hide-descendants"
+      style={{
+        backgroundColor: theme.colors.primary,
+        bottom: 0,
+        position: "absolute",
+        start: 0,
+        top: 0,
+        width: theme.spacing.xs,
+      }}
+      testID={
+        testID === undefined
+          ? undefined
+          : `${testID}-row-${String(row.rowKey)}-active-accent`
+      }
+    />
+  );
 
   const renderSelectionControl = (
     row: ValidatedDataTableRow<Row, ColumnId, RowKey>
@@ -818,6 +875,7 @@ export function DataTable<
           borderBottomColor: theme.colors.line,
           minHeight: metrics.minHeight,
         },
+        ...activeRowLayers(row, "table"),
       ]}
       testID={
         testID === undefined ? undefined : `${testID}-row-${String(row.rowKey)}`
@@ -888,6 +946,9 @@ export function DataTable<
                 : `${testID}-cell-${String(row.rowKey)}-${column.id}`
             }
           >
+            {column.id === rowHeaderColumnId && showRowAccent(row.rowKey)
+              ? renderRowAccent(row)
+              : null}
             {column.renderCell !== undefined ? (
               <>
                 <RNText
@@ -926,7 +987,10 @@ export function DataTable<
 
   const terminalState = renderTerminalState();
 
-  const table = (
+  // list 표현에서 table 트리를 미리 만들면 rowStyle 같은 소비자 콜백이
+  // presentation: "table" 컨텍스트로 헛돌게 된다 — 실제 표현일 때만 구성한다.
+  const table =
+    presentation === "table" ? (
     <ScrollView
       horizontal
       accessibilityHint={description}
@@ -954,7 +1018,7 @@ export function DataTable<
         {terminalState ?? validatedRows.map(renderTableRow)}
       </View>
     </ScrollView>
-  );
+    ) : null;
 
   const listCellsFor = (
     row: ValidatedDataTableRow<Row, ColumnId, RowKey>
@@ -1118,6 +1182,7 @@ export function DataTable<
             paddingHorizontal: metrics.paddingHorizontal,
             paddingVertical: metrics.paddingVertical,
           },
+          ...activeRowLayers(row, "list"),
         ]}
         testID={
           testID === undefined
@@ -1125,6 +1190,7 @@ export function DataTable<
             : `${testID}-row-${String(row.rowKey)}`
         }
       >
+        {showRowAccent(row.rowKey) ? renderRowAccent(row) : null}
         {renderSelectionControl(row)}
         {wrapRowCells(row, "list", rendered)}
       </View>

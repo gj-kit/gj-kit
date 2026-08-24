@@ -166,11 +166,13 @@ import {
   Chip,
   Collapsible,
   DataTable,
+  DateField,
   FloatingActionButton,
   FormField,
   KeyValueList,
   Link,
   Menu,
+  MonthCalendar,
   Pagination,
   Popover,
   Select,
@@ -190,11 +192,13 @@ void Card;
 void Chip;
 void Collapsible;
 void DataTable;
+void DateField;
 void FloatingActionButton;
 void FormField;
 void KeyValueList;
 void Link;
 void Menu;
+void MonthCalendar;
 void Pagination;
 void Popover;
 void Select;
@@ -737,6 +741,61 @@ export function MembersTable({
 
 웹 표는 `table-layout: fixed` + `width: 100%`로 scroll region(컨테이너) 폭을 따르고, `minTableWidth`(기본 640) 아래에서만 region이 가로 스크롤한다. 긴 이메일 하나가 표 전체를 max-content로 키우는 손수 만든 flex 표의 결함은 실제 `<table>`에는 없다.
 
+**행 하이라이트 — `activeRow`와 행 단위 `rowStyle`.** 관리 콘솔은 행을 눌러 상세 Sheet/패널을 열고 "지금 열려 있는 행"을 표에 표시해야 한다. `activeRow={{ key }}`가 그 행을 지정하며(`key: null`은 없음), 기본 시각은 토큰에서 온다 — `colors.primarySoft` 행 전체 wash(선택 체크박스 셀 포함)와 `colors.primary` start-edge accent bar. accent는 표 표현에서는 행 헤더 셀에, list 표현에서는 행 컨테이너 start edge에 절대 위치로 그려져 콘텐츠를 밀지 않고 `showColumnBorders`와도 충돌하지 않는다. 활성 list 행은 기본 accent가 보이는 동안 자신의 rounded 코너(`radius.sm`)로 accent를 클립하므로 `variant="outline"`의 hairline 경계 밖으로 바가 칠해지지 않는다(`activeRow.style`로 대체하거나 비활성이면 클립도 없다). 활성 행은 **선택이 아니다**: `aria-selected`는 이 정적 표가 주장하지 않는 grid/listbox 의미론을 요구하므로, 웹의 활성 `<tr>`(표 표현)과 listitem(list 표현)은 어떤 요소에서도 유효한 `aria-current="true"`를 대신 받는다. 네이티브 표현은 활성 행에 어떤 접근성 상태도 가장하지 않는 시각 전용 표시이므로, 어떤 레코드가 열렸는지는 상세 표면 자체(Sheet 제목 등)가 보조기술에 전달해야 한다. `activeRow.style`은 기본 wash+accent를 통째로 대체한다(`aria-current`는 유지). key와 style이 한 객체로 묶인 것은 selection prop과 같은 규율이다 — key 없는 style이라는 오용이 구조적으로 불가능하고, 평면 prop 쌍처럼 판별 유니언 항을 늘려 `DataTableProps` 스프레드의 소스 호환성을 해치지 않는다.
+
+`rowStyle(row, { rowKey, rowIndex, active, presentation })`은 일반 행 단위 style hook이다. 모든 내장 행 시각(striped, 활성 wash, `activeRow.style`) **뒤에** 겹쳐 양 플랫폼의 table 행과 list 행 모두에 적용되며, `undefined`를 반환한 행은 그대로 둔다. 웹 table 표현에서는 실제 `<table>`의 행 박스가 불투명한 셀 위에 칠할 수 없으므로 결과가 행의 각 셀에 적용된다. `selectedRowKeys`(체크박스 선택)·`onRowPress`·`striped`와는 서로 독립적으로 조합된다.
+
+```tsx
+import { useState } from 'react';
+import { DataTable } from '@gj-kit/expo-ui';
+import type { DataTableColumn } from '@gj-kit/expo-ui';
+
+type Job = { readonly id: string; readonly name: string; readonly failures: number };
+
+const jobColumns = [
+  { id: 'name', header: '작업', flex: 2, getTextValue: ({ row }) => row.name },
+  {
+    id: 'failures',
+    header: '실패',
+    width: 96,
+    align: 'end',
+    getTextValue: ({ row }) => String(row.failures),
+  },
+] as const satisfies readonly DataTableColumn<Job, 'name' | 'failures', string>[];
+
+export function JobsTable({
+  jobs,
+  onOpen,
+  openJobId,
+}: {
+  jobs: readonly Job[];
+  /** 상세 Sheet를 여는 앱 콜백 — Sheet 제목이 열린 레코드를 보조기술에 전달한다. */
+  onOpen: (id: string) => void;
+  openJobId: string | null;
+}) {
+  return (
+    <DataTable
+      accessibilityLabel="작업"
+      state={{ status: 'ready', rows: jobs }}
+      columns={jobColumns}
+      getRowKey={(row) => row.id}
+      rowHeaderColumnId="name"
+      onRowPress={(row) => onOpen(row.id)}
+      getRowAccessibilityLabel={(row) => `${row.name} 상세 열기`}
+      activeRow={{ key: openJobId }}
+      rowStyle={(row, { active }) =>
+        !active && row.failures > 0 ? { opacity: 0.86 } : undefined
+      }
+    />
+  );
+}
+
+export function JobsScreen({ jobs }: { jobs: readonly Job[] }) {
+  const [openJobId, setOpenJobId] = useState<string | null>(null);
+  return <JobsTable jobs={jobs} onOpen={setOpenJobId} openJobId={openJobId} />;
+}
+```
+
 #### Pagination — 전체 개수와 opaque cursor를 섞지 않는 탐색
 
 `Pagination`은 `mode="numbered" | "cursor"`가 필수인 controlled navigation이다. numbered의 공개 page는 **1-based**다. `countMode="items"`는 `totalItemCount`와 `pageSize`로 page count를 계산하고 callback detail에 `offset`, `endOffsetExclusive`, `visibleItemCount`를 함께 전달한다. `countMode="pages"`는 이미 계산한 `pageCount`만 받는다. 두 count branch의 입력은 `never`로 교차 사용을 막으며, 결과가 0페이지면 controlled sentinel은 `page={1}`이다.
@@ -849,6 +908,105 @@ export function MemberFilters({ onExport }: { onExport: () => void }) {
 }
 ```
 
+#### MonthCalendar — 달·선택·"오늘"까지 앱이 소유하는 clock-free 월 그리드
+
+`MonthCalendar`는 표시 달(`month`), 선택된 날(`value`/`onValueChange`), 심지어 "오늘"(`today`)까지 전부 앱이 소유하는 controlled 월 그리드다. 라이브러리는 시계를 읽지 않는다 — 어느 시간대의 오늘인지는 앱 결정이므로, `today`를 생략하면 오늘 링과 웹 `aria-current="date"`가 그려지지 않을 뿐이다. 날짜 값은 평면 객체 `CalendarDate`(`{ year, month(1-12), day }`)이며 JS `Date`는 공개 API 어디에도 등장하지 않는다 — `Date`는 시간대에 따라 읽히는 날이 바뀌는 순간값이라 달력 계약이 될 수 없다.
+
+요일 약어와 달 제목은 required `labels` prop으로 앱이 넘긴다. UiStrings 확장이 아닌 prop인 이유: 요일 약어와 달 제목은 로케일·달력 표기 정책이고 달 제목은 매달 바뀌는 동적 문자열이라 정적 2-로케일 번들이 소유할 수 없다. `labels.weekdays`는 **항상 일요일 시작(index 0 = 일요일)** 7개 tuple이고, 표시 순서는 `weekStartsOn`(`0 | 1`, 기본 1 = 월요일)이 재배열한다 — 주 시작을 바꿔도 배열은 하나로 충분하다.
+
+그리드는 달이 실제로 차지하는 주 수(4~6주)만 만든다 — 유령 여섯째 주를 채우지 않는다. 첫·마지막 주의 인접 달 날짜는 `inMonth: false` 패딩 셀로 렌더된다: 선택·포커스 불가이고, 웹에선 **이름 없는 비활성 `gridcell`로 트리에 남는다**(콘텐츠만 숨김) — 셀 자체를 `aria-hidden`하면 스크린리더가 노출된 셀 위치로 요일 열을 계산해 첫/마지막 주의 헤더 매핑이 무너지기 때문이다(APG date-picker와 같은 선택). 네이티브는 열 산술이 없어 패딩 셀을 접근성 트리에서 통째로 숨긴다. `renderDay`에는 패딩 셀도 전달되어 흐린 날짜를 그릴 수 있다. `renderDay`는 날 **콘텐츠**만 바꾸는 슬롯이다 — gridcell/버튼 의미론, 포커스, press 처리는 키트가 소유하므로 소비자 슬롯이 접근성을 떨어뜨릴 수 없다. 날의 접근성 이름 기본값은 로케일 중립 ISO key(`"2026-08-24"`)이고 실서비스에선 `getDayAccessibilityLabel`로 현지화한다.
+
+웹 의미론: `role="grid"`(필수 `accessibilityLabel`이 이름) > `row` > `columnheader`/`gridcell`. 선택이 가능하거나(`onValueChange`) `value`가 주어지면 달 안 셀에 `aria-selected`가 실리고(grid 패턴이 이를 정당화한다), `minDate`/`maxDate` 밖 날은 `aria-disabled`로 남되 **포커스는 가능**하고 활성화만 무시된다. roving tabindex 키보드로 구현된 것은 정확히 다음이다: 화살표 ±1일/±7일(표시 달 안에서만 — 달을 벗어나는 이동은 무시), Home/End(포커스된 주의 달 안 첫/마지막 날), PageUp/PageDown(`onMonthChange`로 이전/다음 달 요청 + 같은 일자로 포커스 복원, 짧은 달은 마지막 날로 클램프 — 연도 공간 1~9999의 가장자리 달에선 throw 없이 무시), Enter/Space(선택). `onValueChange`가 없으면 정적 표시라 셀은 포커스·키보드·press를 갖지 않는다.
+
+네이티브 의미론: 각 날은 완전한 날짜 레이블과 selected/disabled 상태를 가진 정직한 버튼이고, 요일 헤더는 소음이라 접근성 트리에서 숨긴다. 내장 이전/다음 달 버튼은 없다 — 달 이동 UI는 앱이 `Toolbar`+`Button`으로 조합하며, 네이티브에서 `onMonthChange`를 부르는 것은 그 앱 버튼들뿐이다(PageUp/PageDown은 웹 전용).
+
+순수 달력 수학도 루트 엔트리에서 함께 제공한다: `buildMonthGrid`(주 단위 레이아웃), `addCalendarDays`/`addCalendarMonths`, `compareCalendarDates`/`isSameCalendarDate`/`clampCalendarDate`, `daysInCalendarMonth`/`isCalendarLeapYear`/`isValidCalendarDate`, 그리고 ISO `"YYYY-MM-DD"` 직렬화 `formatCalendarDateKey`/`parseCalendarDateKey`. 이 모듈은 react를 import하지 않고 시계를 읽지 않아 서버 코드·스크립트에서도 안전하다. 경계 캐비앗 하나: 연도 공간(1~9999)의 가장자리 두 달(1년 1월·9999년 12월)에서는 `buildMonthGrid`의 패딩 셀이 공간 밖 날짜(0년·10000년)를 담는다 — 그리드와 `MonthCalendar`는 그대로 렌더되지만, 그 패딩 날짜는 `isValidCalendarDate`가 거부하므로 확인 없이 달력 API에 되넘기지 않는다.
+
+다음은 관리자 결제 예정 캘린더 레시피다 — 서버 집계(`ISO date key → 건수`)를 `renderDay` 배지로 얹고, 달 이동은 앱 버튼과 키보드가 같은 상태를 공유한다.
+
+```tsx
+import { useMemo, useState } from 'react';
+import { View } from 'react-native';
+import {
+  Button,
+  MonthCalendar,
+  Text,
+  Toolbar,
+  addCalendarMonths,
+  formatCalendarDateKey,
+  parseCalendarDateKey,
+} from '@gj-kit/expo-ui';
+import type { CalendarDate, CalendarMonth } from '@gj-kit/expo-ui';
+
+// 시간대는 앱 결정 — KST의 "오늘"을 앱이 계산해 today prop으로 넘긴다.
+function kstToday(): CalendarDate {
+  const key = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Seoul' }).format(new Date());
+  const parsed = parseCalendarDateKey(key);
+  if (parsed === null) throw new Error('unreachable: en-CA emits YYYY-MM-DD');
+  return parsed;
+}
+
+const WEEKDAYS = ['일', '월', '화', '수', '목', '금', '토'] as const;
+
+export function BillingCalendar({
+  scheduledByDate,
+  onDaySelect,
+}: {
+  scheduledByDate: ReadonlyMap<string, number>;
+  onDaySelect: (dateKey: string) => void;
+}) {
+  const today = useMemo(kstToday, []);
+  const [month, setMonth] = useState<CalendarMonth>({ year: today.year, month: today.month });
+  const [selected, setSelected] = useState<CalendarDate | null>(today);
+
+  return (
+    <View>
+      <Toolbar accessibilityLabel="캘린더 달 이동">
+        <Button label="이전 달" size="sm" onPress={() => setMonth(addCalendarMonths(month, -1))} />
+        <Button
+          label="이번 달"
+          size="sm"
+          onPress={() => setMonth({ year: today.year, month: today.month })}
+        />
+        <Button label="다음 달" size="sm" onPress={() => setMonth(addCalendarMonths(month, 1))} />
+      </Toolbar>
+      <MonthCalendar
+        month={month}
+        onMonthChange={setMonth}
+        value={selected}
+        onValueChange={(date) => {
+          setSelected(date);
+          onDaySelect(formatCalendarDateKey(date));
+        }}
+        today={today}
+        weekStartsOn={0}
+        labels={{ weekdays: WEEKDAYS, monthTitle: `${month.year}년 ${month.month}월` }}
+        accessibilityLabel="결제 예정 캘린더"
+        getDayAccessibilityLabel={({ date, selected: isSelected }) => {
+          const count = scheduledByDate.get(formatCalendarDateKey(date)) ?? 0;
+          const summary = count > 0 ? `결제 예정 ${count}건` : '결제 예정 없음';
+          return `${date.month}월 ${date.day}일, ${summary}${isSelected ? ', 선택됨' : ''}`;
+        }}
+        renderDay={({ date, inMonth, selected: isSelected }) => {
+          if (!inMonth) return null;
+          const count = scheduledByDate.get(formatCalendarDateKey(date));
+          return (
+            <>
+              <Text role="body" color={isSelected ? 'primary' : 'text'}>
+                {String(date.day)}
+              </Text>
+              {count !== undefined ? (
+                <Text role="caption" color="textMuted">{`${count}건`}</Text>
+              ) : null}
+            </>
+          );
+        }}
+      />
+    </View>
+  );
+}
+```
+
 #### Link — 목적지 이동과 앱 라우팅을 분리
 
 `Link`의 children은 안정적인 문자열이고, 다음 두 branch는 상호 배타적이다.
@@ -954,6 +1112,46 @@ export function EmailField() {
         />
       )}
     </FormField>
+  );
+}
+```
+
+#### DateField — Date 없는 세그먼트 날짜 입력
+
+`DateField`는 연·월·일 세 세그먼트로 날짜를 타이핑하는 controlled 입력이다: `value: CalendarDate | null` ↔ `onValueChange`, 표시 순서는 `segmentOrder`(기본 `['year', 'month', 'day']`, 순열이 아니면 런타임 config 오류). 네이티브 피커 peer는 의도적으로 없다 — 순수 키보드 입력이라 런타임 의존성 0이 유지되고, MonthCalendar와 마찬가지로 JS `Date`는 공개 API에 등장하지 않는다.
+
+커밋 의미론은 좁게 고정돼 있고 정확히 이대로 테스트된다.
+
+- 타이핑은 세그먼트별 **로컬 draft**다. 연 4자리·월 2자리·일 2자리가 모두 채워지는 순간에만 커밋한다.
+- 커밋 시 클램프: 월 → 1~12, 일 → 그 달의 실제 길이(2월 31일 → 28/29일), 결과 → `minDate`/`maxDate`. `onValueChange`는 결과가 `value`와 다를 때만 호출된다.
+- 세 세그먼트를 전부 비우면 `null`을 커밋한다(이미 null이면 다시 부르지 않는다). 일부만 비우면 커밋 없이 로컬에 머문다.
+- blur는 한 자리 월·일만 0-pad한다(`"8"` → `"08"`). 짧은 연도는 **세기 추측 없이** 미커밋 draft로 남는다. 완성된 draft는 blur에 폐기되어 표시가 controlled `value`로 스냅백한다 — 커밋이 수락됐다면 같은 표시, 부모가 거부했다면 되돌아간다.
+- 부모의 `value` 변경(커밋 반영 포함)은 로컬 draft를 폐기한다.
+
+세그먼트는 숫자 키보드(`number-pad` + `inputMode="numeric"`)이고, 이어질 수 없는 첫 자리는 즉시 완성된다(월 2~9, 일 4~9 → `"0X"` + 자동 전진). 완성된 세그먼트는 다음 세그먼트로 자동 전진하고, 빈 세그먼트의 Backspace는 이전 세그먼트로 되돌아간다. 웹 ArrowUp/Down은 세그먼트 범위 안에서 증감한다(연 1~9999, 월 1~12, 일은 연·월이 알려지면 그 달의 실제 길이) — 완전히 빈 세그먼트는 반응하지 않고(clock-free라 시드할 "오늘"이 없다), 미완성 연도 draft(`"26"`)도 그대로 둔다: 화살표가 4자리로 pad하면 `"26"`이 0027년으로 완성·커밋되어 blur가 지키는 세기-추측-금지 계약이 깨지기 때문이다.
+
+의미론: 웹 그룹은 `role="group"` + label 연결이고 각 세그먼트는 `role="spinbutton"` + `aria-valuemin`/`aria-valuemax`/`aria-valuenow`다 — 일 세그먼트의 `aria-valuemax`는 연·월이 알려지면 그 달의 실제 길이(4월 30, 2월 28/29)로 스텝 로직과 같은 규칙으로 계산되고, 알 수 없을 때만 31이다. helper/error 연결(`aria-describedby`/`aria-errormessage`)은 TextField처럼 실제 포커스 대상인 각 세그먼트에 실린다 — `aria-errormessage`는 `aria-invalid=true`인 요소에서만 유효하기 때문이다. 네이티브는 `"결제 기준일, 년"`처럼 필드 label과 결합된 명확한 레이블의 입력 3개다. 세그먼트 이름은 UiStrings의 새 키 `dateFieldYear`/`dateFieldMonth`/`dateFieldDay`에서 오고(손조립 번들은 세 키를 추가해야 한다 — 문서화된 완전 객체 진화 경로), 필드 단위로는 `segmentLabels`가 덮어쓴다. `label`/`error`/`helperText` 배선은 TextField와 같고, `nativeID`·`aria-*` passthrough를 받아 `FormField`의 render prop 계약과도 호환된다.
+
+```tsx
+import { useState } from 'react';
+import { DateField } from '@gj-kit/expo-ui';
+import type { CalendarDate } from '@gj-kit/expo-ui';
+
+export function BillingAnchorField() {
+  const [anchor, setAnchor] = useState<CalendarDate | null>(null);
+  const shortMonthRisk = anchor !== null && anchor.day > 28;
+
+  return (
+    <DateField
+      label="결제 기준일"
+      value={anchor}
+      onValueChange={setAnchor}
+      minDate={{ year: 2024, month: 1, day: 1 }}
+      maxDate={{ year: 2030, month: 12, day: 31 }}
+      helperText="구독 결제가 매월 이 날짜에 시도됩니다."
+      error={shortMonthRisk ? '29~31일은 짧은 달에 마지막 날로 앞당겨집니다.' : undefined}
+      segmentPlaceholders={{ year: 'YYYY', month: 'MM', day: 'DD' }}
+    />
   );
 }
 ```
@@ -1318,7 +1516,7 @@ export function ReleaseChannelSelect() {
 }
 ```
 
-두 컴포넌트의 웹 표현은 anchor collision·flip·shift와 detached anchor 종료를 처리하고 긴 목록을 자체 viewport에서 스크롤한다. 네이티브 `presentation="auto" | "bottom" | "center"`, `bottomInset`, `keyboardOverlap`은 ActionSheet와 같은 adaptive 규칙을 쓰며 `keyboardOverlap > 0`이면 이미 safe area를 포함한 값으로 보고 `bottomInset`보다 우선한다.
+두 컴포넌트의 웹 표현은 anchor collision·flip·shift와 detached anchor 종료를 처리하고 긴 목록을 자체 viewport에서 스크롤한다. 네이티브 `presentation`은 `"auto" | "bottom" | "center" | "anchored"`다 — 시트 계열(auto/bottom/center)은 ActionSheet와 같은 adaptive 규칙을 쓰고, `bottomInset`·`keyboardOverlap`은 시트 전용이다(`keyboardOverlap > 0`이면 이미 safe area를 포함한 값으로 보고 `bottomInset`보다 우선하며, `"anchored"`에서는 둘 다 무시된다 — 아래 anchored 레시피 참고).
 
 트리거는 컴포넌트가 소유하지만 테스트·시안 계약을 위한 탈출구는 연다. `triggerTestID`는 **실제 press 대상인 trigger pressable**에 testID를 붙인다(루트 컨테이너의 `testID`와 별개 — `fireEvent.press(getByTestId('album-sort-button'))` 계약이 그대로 성립한다; 웹 Select에서는 파생 `${testID}-trigger`를 대체한다). `triggerHoverStyle`/`itemHoverStyle`은 pointer가 올라가 있는 동안 trigger/항목에 겹쳐지는 스타일이다 — 각각 `triggerStyle`/`itemStyle` **뒤에** 적용되고, disabled 대상에는 적용하지 않으며, hover가 없는 터치 플랫폼에서는 아무 일도 하지 않는다.
 
@@ -1346,6 +1544,44 @@ export function AlbumSortSelect() {
       triggerTestID="album-sort-button"
       triggerHoverStyle={{ backgroundColor: '#F1F3F5' }}
       itemHoverStyle={{ backgroundColor: '#edeff0' }}
+    />
+  );
+}
+```
+
+트리거 시각 전체가 앱 소유여야 하면(시안 고정 정렬 버튼, absolute 배치 more-vertical 아이콘 등) `renderTrigger` 슬롯을 쓴다. 킷은 동작·접근성이 소유하는 모든 것을 **주입한다** — `ref`, `onPress`, `disabled`, role(Menu는 button, 웹 Select는 combobox), `accessibilityState`/`aria-expanded`, 웹의 `aria-haspopup`/`aria-controls` id·키보드 핸들러 배선, `triggerTestID`, anchored 측정이 쓰는 `onLayout` — 그리고 소비자는 **시각만** 소유한다. 주입 객체는 선언된 키 외에 플랫폼 배선 키도 실어 나르므로 반환하는 **하나의 Pressable에 객체 전체를 spread**해야 한다 — 호스트는 press(와 키보드 활성화)를 실제로 전달하는 Pressable 또는 동급 pressability 래퍼여야 하며, 일반 View는 `onPress`를 조용히 버려 "읽히지만 눌리지 않는" 버튼이 되므로 호스트가 될 수 없다(웹 트리거의 Enter/Space/Arrow 오픈은 주입 키보드 핸들러가 직접 소유해 Pressable의 키 에뮬레이션에 기대지 않는다). 오용 강제는 2단계다: 주입 `ref`가 열기 전에 붙지 않으면 양 플랫폼 모두 **throw하고**, 웹은 open 전이 시점에 ref가 붙은 노드에 주입 배선(role·`aria-expanded`·접근 가능한 이름)이 실제로 도달했는지까지 검증해 부분 spread·래퍼에 ref만 파킹한 오용도 **throw한다**. 네이티브는 RN 호스트 props를 런타임에 읽을 수 없어 ref 부착까지만 강제된다 — 네이티브 전용 부분 spread는 조용히 접근성을 잃으므로, 같은 renderTrigger를 웹 렌더(테스트 포함)에 한 번 통과시키는 것을 권장한다. `renderTrigger`가 있으면 owned 트리거 시각 prop(`variant`/`size`/`triggerStyle`/`triggerHoverStyle`/`iconOnly`/`leading`/`valueStyle` 등)은 타입 유니언이 컴파일에서 거부하고, JS 호출자는 렌더 전에 `TypeError`로 거부된다. Select의 label 행과 helper/error 텍스트는 트리거 밖에서 계속 킷이 렌더한다.
+
+네이티브 `presentation="anchored"`는 bottom/center 모달 대신 **측정된 트리거에 붙는 딤 없는 패널**을 투명 Modal 안에 띄운다. 웹과 같은 `placement`/`sideOffset`/`alignOffset`/`collisionPadding` 어휘로 위치를 잡고 창 경계에 clamp하며(넘치는 목록은 패널 내부에서 스크롤), `"auto"`는 기존처럼 bottom/center로만 해석된다(`bottomInset`/`keyboardOverlap`은 시트 전용이라 anchored에서는 무시). 정직한 제약: 투명 Modal이 화면 전체의 제스처를 소유하므로 **패널이 열린 동안 밑 콘텐츠는 스크롤되지 않는다 — 바깥 터치(스크롤 시도 포함)는 곧 dismiss다**(재배치가 아니라 dismiss-on-scroll을 채택). 바깥 press·Escape·하드웨어 Back·접근성 escape dismissal은 시트와 동일하게 유지되고, 시트의 취소 버튼은 없다(딤 없는 팝오버 표면의 계약). 재측정된 트리거가 collision boundary를 벗어나면 웹과 동일하게 `anchor-detached` 사유로 닫는다(`dismissDisabled`는 웹처럼 이 정리도 보류한다). Android에서는 anchored Modal이 status/navigation bar 아래까지 그려지도록 `statusBarTranslucent`/`navigationBarTranslucent`를 켜 Modal 창 좌표계를 `measureInWindow` 좌표계와 일치시킨다 — jsdom이 Android Modal 창을 모델링하지 못해 실기기 검증은 잔존 리스크로 추적한다(설계 문서 §12). 두 prop은 `Dialog`의 공개 prop으로도 열려 있어 앱이 자체 anchored 표면을 만들 때 같은 보정을 쓸 수 있다.
+
+```tsx
+import { useState } from 'react';
+import { Pressable, Text } from 'react-native';
+import { Menu } from '@gj-kit/expo-ui';
+
+export function RowMoreMenu() {
+  const [open, setOpen] = useState(false);
+  const items = [
+    { kind: 'action', value: 'rename', label: '이름 변경' },
+    { kind: 'action', value: 'delete', label: '삭제', destructive: true },
+  ] as const;
+
+  return (
+    <Menu
+      triggerLabel="더보기"
+      items={items}
+      open={open}
+      onOpenChange={(next) => setOpen(next)}
+      onSelect={(detail) => void detail.value}
+      presentation="anchored"
+      placement="bottom-end"
+      sideOffset={4}
+      collisionPadding={16}
+      triggerTestID="row-more-button"
+      renderTrigger={(trigger) => (
+        <Pressable {...trigger} style={{ padding: 8 }}>
+          <Text>⋮</Text>
+        </Pressable>
+      )}
     />
   );
 }
@@ -1664,6 +1900,7 @@ preset 입력도 브랜드 `Theme`이다 — 손조립 토큰으로 preset을 �
 | literal columns tuple의 non-sortable ID를 `DataTable sort.columnId`에 지정 | 컴파일 에러 — `sortable: true` 열만 추론 |
 | `DataTable presentation="list" | "auto"`에 `renderListRow` 누락 | 컴파일 에러 — compact row를 앱이 명시 |
 | `DataTable getRowAccessibilityLabel`을 `onRowPress` 없이 지정 | 컴파일 에러 — 정적 행에는 이름 붙일 대상이 없음 |
+| `DataTable activeRow`에 `key` 없이 `style`만 지정 | 컴파일 에러 — 활성 행이 없으면 칠할 대상이 없음 |
 | `KeyValueList` item `value`에 `null`/`undefined`/boolean | 컴파일 에러 — 빈 값은 행을 빼는 것으로 표현 |
 | `StatGrid` item `value`에 숫자 | 컴파일 에러 — 포맷은 앱이 소유, `value: string` |
 | `StatGrid tone="error"` | 컴파일 에러 — `danger`가 tone 이름 |
@@ -1672,6 +1909,12 @@ preset 입력도 브랜드 `Theme`이다 — 손조립 토큰으로 preset을 �
 | `Pagination`에 `accessibilityLabel` 누락 | 컴파일 에러 — navigation 목적 이름 필수 |
 | items `Pagination`에 `pageCount`도 지정 | 컴파일 에러 — items/pages count branch 배타 |
 | cursor `Pagination`에 `page`·`onPageChange` 지정 | 컴파일 에러 — opaque cursor에 숫자 위치를 발명하지 않음 |
+| `MonthCalendar`에 `accessibilityLabel` 또는 `labels` 누락 | 컴파일 에러 — 그리드 이름과 요일·달 제목 copy는 앱 소유 |
+| `MonthCalendar`/`DateField` `value`에 JS `Date` | 컴파일 에러 — 평면 `CalendarDate`만 (시간대 정직성) |
+| `MonthCalendar weekStartsOn={2}` | 컴파일 에러 — 0(일요일)·1(월요일)만 |
+| `MonthCalendar labels.weekdays`에 7개 미만 배열 | 컴파일 에러 — 요일 7개 tuple 강제 |
+| `DateField`에 `value` 또는 `onValueChange` 누락 | 컴파일 에러 — controlled 전용 |
+| `DateField segmentOrder`에 오타 | 컴파일 에러 (중복·누락 순열은 런타임 config 오류) |
 | 임의 문자열로 Toast `update`/`dismiss` | 컴파일 에러 — `show`가 반환한 branded `ToastId`만 허용 |
 | Toast `action`에 `label` 또는 `onPress` 누락 | 컴파일 에러 — 죽은 action 차단 |
 

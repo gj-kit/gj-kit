@@ -139,6 +139,41 @@ export interface DataTableRowPressContext<RowKey extends DataTableRowKey> {
   readonly originalEvent?: unknown;
 }
 
+export interface DataTableRowStyleContext<RowKey extends DataTableRowKey> {
+  readonly rowKey: RowKey;
+  readonly rowIndex: number;
+  /** True when this row's key equals activeRow.key. */
+  readonly active: boolean;
+  /** "table" for the semantic web table and the native visual table; "list" for compact presentations. */
+  readonly presentation: "table" | "list";
+}
+
+/**
+ * App-driven "current row" highlight for consoles where activating a row opens
+ * a detail surface (Sheet, side panel) that stays in sync with the table. This
+ * is deliberately not selection: the row is not aria-selected, because that
+ * would claim grid/listbox semantics this static table does not have. On the
+ * web the active body row — the `<tr>` in the table presentation and the
+ * listitem in the list presentation — carries `aria-current="true"` instead,
+ * which is valid on any element. Native presentations expose no extra
+ * accessibility state for the active row, so the detail surface itself must
+ * also convey which record is open. Grouping key and style in one object makes
+ * a style without a key impossible by construction, the same shape discipline
+ * as the selection prop.
+ */
+export interface DataTableActiveRow<RowKey extends DataTableRowKey> {
+  /** Key of the row currently open in a detail surface; null means none. */
+  readonly key: RowKey | null;
+  /**
+   * Replaces the default active visual (primarySoft full-row wash + primary
+   * start-edge accent on the row-header cell or list row container). Layered
+   * onto the active row after built-in row styles; the web table presentation
+   * applies it to each of the row's cells, because a real <table> row box
+   * cannot paint above its opaque cells. `aria-current` stays either way.
+   */
+  readonly style?: StyleProp<ViewStyle> | undefined;
+}
+
 /**
  * Row activation is optional and additive, and consumer row content is never
  * nested inside a button. On the web the table body row stays a real focusable
@@ -345,6 +380,20 @@ interface DataTableBaseProps<
   readonly listClassName?: string | undefined;
   readonly listRowStyle?: StyleProp<ViewStyle> | undefined;
   readonly listRowClassName?: string | undefined;
+  readonly activeRow?: DataTableActiveRow<NoInfer<RowKey>> | undefined;
+  /**
+   * Per-row style hook, layered after every built-in row visual (stripes, the
+   * active wash, activeRow.style). Applied to table rows and list rows on
+   * both platforms; the web table presentation applies the result to each of
+   * the row's cells, because a real <table> row box cannot paint above its
+   * opaque cells. Return undefined to leave a row unchanged.
+   */
+  readonly rowStyle?:
+    | ((
+        row: Row,
+        context: DataTableRowStyleContext<RowKey>
+      ) => StyleProp<ViewStyle> | undefined)
+    | undefined;
   readonly unstyled?: never;
 }
 

@@ -53,6 +53,12 @@ export interface UiStrings {
   readonly ratingValue: (value: number, maxRating: number) => string;
   /** The Rating custom accessibility action that clears a selected value. */
   readonly clearRating: string;
+  /** The DateField year segment name. */
+  readonly dateFieldYear: string;
+  /** The DateField month segment name. */
+  readonly dateFieldMonth: string;
+  /** The DateField day segment name. */
+  readonly dateFieldDay: string;
 }
 
 export const enStrings: UiStrings = {
@@ -77,6 +83,9 @@ export const enStrings: UiStrings = {
   ratingNoValue: "No rating",
   ratingValue: (value, maxRating) => `${value} out of ${maxRating}`,
   clearRating: "Clear rating",
+  dateFieldYear: "Year",
+  dateFieldMonth: "Month",
+  dateFieldDay: "Day",
 };
 
 export const koStrings: UiStrings = {
@@ -101,4 +110,7 @@ export const koStrings: UiStrings = {
   ratingNoValue: "평점 없음",
   ratingValue: (value, maxRating) => `${value}점 / ${maxRating}점`,
   clearRating: "평점 지우기",
+  dateFieldYear: "년",
+  dateFieldMonth: "월",
+  dateFieldDay: "일",
 };

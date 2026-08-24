@@ -794,7 +794,8 @@
       {
         "name": "leading",
         "type": "ReactNode | RenderIcon",
-        "required": false
+        "required": false,
+        "conditional": true
       },
       {
         "name": "placement",
@@ -805,6 +806,13 @@
         "name": "presentation",
         "type": "SelectPresentation",
         "required": false
+      },
+      {
+        "name": "renderTrigger",
+        "type": "(trigger: TriggerRenderProps) => ReactElement<unknown, string | JSXElementConstructor<any>>",
+        "required": false,
+        "description": "Replaces the owned trigger visuals with an app-owned element. The kit\ninjects everything behavior and accessibility own — ref, onPress,\ndisabled, combobox/button semantics, expanded/busy state, the displayed\nvalue text, testID, web aria wiring, and the measurement hook anchoring\nneeds; spread every injected prop onto a single Pressable — or an\nequivalent host that forwards RN press handling (a plain View drops the\ninjected onPress and renders an inoperable announced combobox) — and\nstyle it freely. The injected ref must reach the returned host element:\nthe select throws when it opens without it, and on web it also throws\nwhen the injected role/expanded/name wiring did not land on that node.\nOwned trigger-visual props are rejected while this slot is present\n(compile-time via this union, and again at render for JS callers). The\nlabel row and helper/error text stay kit-rendered outside the trigger.",
+        "conditional": true
       },
       {
         "name": "required",
@@ -819,7 +827,8 @@
       {
         "name": "size",
         "type": "SelectSize",
-        "required": false
+        "required": false,
+        "conditional": true
       },
       {
         "name": "style",
@@ -834,18 +843,21 @@
       {
         "name": "triggerClassName",
         "type": "string",
-        "required": false
+        "required": false,
+        "conditional": true
       },
       {
         "name": "triggerHoverStyle",
         "type": "StyleProp<ViewStyle>",
         "required": false,
-        "description": "Applied to the trigger while a pointer hovers it (web and pointer-equipped devices). Layered after triggerStyle."
+        "description": "Applied to the trigger while a pointer hovers it (web and pointer-equipped devices). Layered after triggerStyle.",
+        "conditional": true
       },
       {
         "name": "triggerStyle",
         "type": "StyleProp<ViewStyle>",
-        "required": false
+        "required": false,
+        "conditional": true
       },
       {
         "name": "triggerTestID",
@@ -856,12 +868,14 @@
       {
         "name": "valueClassName",
         "type": "string",
-        "required": false
+        "required": false,
+        "conditional": true
       },
       {
         "name": "valueStyle",
         "type": "StyleProp<TextStyle>",
-        "required": false
+        "required": false,
+        "conditional": true
       }
     ]
   },
@@ -2857,6 +2871,11 @@
         "conditional": true
       },
       {
+        "name": "activeRow",
+        "type": "DataTableActiveRow<NoInfer<RowKey>>",
+        "required": false
+      },
+      {
         "name": "caption",
         "type": "string",
         "required": false,
@@ -2970,6 +2989,12 @@
         "type": "(context: DataTableListRowContext<Row, RowKey, ColumnId>) => ReactElement<unknown, string | JSXElementConstructor<any>>",
         "required": false,
         "conditional": true
+      },
+      {
+        "name": "rowStyle",
+        "type": "(row: Row, context: DataTableRowStyleContext<RowKey>) => StyleProp<ViewStyle>",
+        "required": false,
+        "description": "Per-row style hook, layered after every built-in row visual (stripes, the\nactive wash, activeRow.style). Applied to table rows and list rows on\nboth platforms; the web table presentation applies the result to each of\nthe row's cells, because a real <table> row box cannot paint above its\nopaque cells. Return undefined to leave a row unchanged."
       },
       {
         "name": "selection",
@@ -3347,6 +3372,12 @@
         "description": "The outer layout of the inline presentation only. contentStyle is identical across both presentations."
       },
       {
+        "name": "navigationBarTranslucent",
+        "type": "boolean",
+        "required": false,
+        "description": "Android companion of statusBarTranslucent for the navigation bar (RN forwards it only alongside statusBarTranslucent)."
+      },
+      {
         "name": "overlayId",
         "type": "string",
         "required": false
@@ -3361,6 +3392,12 @@
         "type": "DialogPresentation | 'modal' | 'inline'",
         "required": false,
         "conditional": true
+      },
+      {
+        "name": "statusBarTranslucent",
+        "type": "boolean",
+        "required": false,
+        "description": "Android modal presentation only — draws the modal window under the status\nbar so its coordinate space matches `measureInWindow` frames (anchored\nsurfaces position by them). Other platforms ignore it."
       },
       {
         "name": "testID",
@@ -4285,6 +4322,13 @@
         "required": false
       },
       {
+        "name": "renderTrigger",
+        "type": "(trigger: TriggerRenderProps) => ReactElement<unknown, string | JSXElementConstructor<any>>",
+        "required": false,
+        "description": "Replaces the owned trigger visuals with an app-owned element. The kit\ninjects everything behavior and accessibility own — ref, onPress,\ndisabled, role, expanded/busy state, testID, web aria wiring, and the\nmeasurement hook anchoring needs; spread every injected prop onto a\nsingle Pressable — or an equivalent host that forwards RN press handling\n(a plain View drops the injected onPress and renders an inoperable\nannounced button) — and style it freely. The injected ref must reach the\nreturned host element: the menu throws when it opens without it, and on\nweb it also throws when the injected role/expanded/name wiring did not\nland on that node. Owned trigger-visual props are rejected while this\nslot is present (compile-time via this union, and again at render for JS\ncallers).",
+        "conditional": true
+      },
+      {
         "name": "sideOffset",
         "type": "number",
         "required": false
@@ -4292,7 +4336,8 @@
       {
         "name": "size",
         "type": "MenuTriggerSize",
-        "required": false
+        "required": false,
+        "conditional": true
       },
       {
         "name": "style",
@@ -4307,13 +4352,15 @@
       {
         "name": "triggerClassName",
         "type": "string",
-        "required": false
+        "required": false,
+        "conditional": true
       },
       {
         "name": "triggerHoverStyle",
         "type": "StyleProp<ViewStyle>",
         "required": false,
-        "description": "Applied to the trigger while a pointer hovers it (web and pointer-equipped devices). Layered after triggerStyle."
+        "description": "Applied to the trigger while a pointer hovers it (web and pointer-equipped devices). Layered after triggerStyle.",
+        "conditional": true
       },
       {
         "name": "triggerIcon",
@@ -4324,17 +4371,20 @@
       {
         "name": "triggerLabelClassName",
         "type": "string",
-        "required": false
+        "required": false,
+        "conditional": true
       },
       {
         "name": "triggerLabelStyle",
         "type": "StyleProp<TextStyle>",
-        "required": false
+        "required": false,
+        "conditional": true
       },
       {
         "name": "triggerStyle",
         "type": "StyleProp<ViewStyle>",
-        "required": false
+        "required": false,
+        "conditional": true
       },
       {
         "name": "triggerTestID",
@@ -4345,7 +4395,8 @@
       {
         "name": "variant",
         "type": "MenuTriggerVariant",
-        "required": false
+        "required": false,
+        "conditional": true
       }
     ]
   },

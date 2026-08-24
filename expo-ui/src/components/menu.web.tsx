@@ -28,6 +28,11 @@ import { useOptionalOverlayStack } from './overlay/provider';
 import { useOverlayParentId } from './overlay/layer';
 import { WebPopover } from './overlay/web-popover.web';
 import type { WebPopoverElement } from './overlay/web-popover.web';
+import {
+  assertRenderTriggerRefAttached,
+  assertRenderTriggerWebWiringAttached,
+} from './trigger-render';
+import type { TriggerRenderProps } from './trigger-render';
 
 type Focusable = { focus?: () => void };
 
@@ -212,6 +217,7 @@ export function Menu<const T extends string>(props: MenuProps<T>): ReactElement 
     triggerLabel,
     iconOnly = false,
     triggerIcon,
+    renderTrigger,
     accessibilityLabel,
     disabled = false,
     busy = false,
@@ -263,6 +269,9 @@ export function Menu<const T extends string>(props: MenuProps<T>): ReactElement 
   const itemRefs = useRef<Array<Focusable | null>>([]);
   const typeaheadRef = useRef(createTypeaheadState());
   const restoreTriggerRef = useRef(false);
+  // RNW PressResponder synthesizes onPress on keyboard keyup. Enter/Space are
+  // handled on keydown below, so the generated second activation is consumed.
+  const suppressKeyboardPressRef = useRef(false);
   // Treat an initially controlled-open menu as an opening transition too.
   const wasOpenRef = useRef(false);
   const pendingOpenFocusRef = useRef<'first' | 'last' | null>(null);
@@ -393,6 +402,10 @@ export function Menu<const T extends string>(props: MenuProps<T>): ReactElement 
   }, [dismissDisabled, requestOpenChange]);
 
   const handleTriggerPress = useCallback((event: unknown): void => {
+    if (suppressKeyboardPressRef.current) {
+      suppressKeyboardPressRef.current = false;
+      return;
+    }
     if (disabled || (open && dismissDisabled)) return;
     pendingOpenFocusRef.current = 'first';
     requestOpenChange(!open, { reason: 'trigger-press', originalEvent: event });
@@ -400,11 +413,41 @@ export function Menu<const T extends string>(props: MenuProps<T>): ReactElement 
 
   const handleTriggerKeyDown = useCallback((event: WebKeyboardEvent): void => {
     if (disabled || open) return;
-    if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') return;
+    if (
+      event.key !== 'ArrowDown' &&
+      event.key !== 'ArrowUp' &&
+      event.key !== 'Enter' &&
+      event.key !== ' '
+    ) {
+      return;
+    }
     event.preventDefault();
+    if (event.key === 'Enter' || event.key === ' ') {
+      // 킷이 Enter/Space 오픈을 직접 소유한다 — RNW Pressable의 role=button
+      // 키보드 press 에뮬레이션에 의존하면 에뮬레이션이 없는 renderTrigger
+      // 호스트에서 키보드 활성화가 조용히 죽는다. Pressable 호스트에서는
+      // keyup에 합성되는 두 번째 활성화를 억제 플래그로 소비한다.
+      suppressKeyboardPressRef.current = true;
+    }
     pendingOpenFocusRef.current = event.key === 'ArrowUp' ? 'last' : 'first';
     requestOpenChange(true, { reason: 'trigger-press', originalEvent: originalEvent(event) });
   }, [disabled, open, requestOpenChange]);
+
+  const handleTriggerKeyUp = useCallback((event: WebKeyboardEvent): void => {
+    if (event.key !== 'Enter' && event.key !== ' ') return;
+    // Keep the flag through the whole keyup propagation. PressResponder's
+    // generated onPress may run before or after this user handler.
+    void Promise.resolve().then(() => {
+      suppressKeyboardPressRef.current = false;
+    });
+  }, []);
+
+  const handleTriggerBlur = useCallback((): void => {
+    // A key sequence can be interrupted before keyup (window switch, the open
+    // transition moving focus into the menu). Never let that stale guard
+    // consume a later pointer press.
+    suppressKeyboardPressRef.current = false;
+  }, []);
 
   const handleItemKeyDown = useCallback((index: number, event: WebKeyboardEvent): void => {
     const item = items[index];
@@ -473,14 +516,38 @@ export function Menu<const T extends string>(props: MenuProps<T>): ReactElement 
     'aria-disabled': disabled,
     'aria-busy': busy,
     onKeyDown: handleTriggerKeyDown,
+    onKeyUp: handleTriggerKeyUp,
+    onBlur: handleTriggerBlur,
   });
 
-  return (
-    <View
-      testID={testID}
-      {...nativeWindProps(className)}
-      style={[styles.root, style]}
-    >
+  const setTriggerNode = useCallback((node: unknown): void => {
+    triggerRef.current = node as WebPopoverElement | null;
+  }, []);
+  const hasRenderTrigger = renderTrigger !== undefined;
+  useLayoutEffect(() => {
+    if (!open || !hasRenderTrigger) return;
+    // renderTrigger 계약 강제: 주입 ref가 open 전에 붙지 않았으면 조용한
+    // 앵커링/포커스 복원 실패 대신 즉시 실패한다.
+    assertRenderTriggerRefAttached('Menu', triggerRef.current);
+    // 같은 커밋이 aria-expanded="true"를 썼다 — 주입 배선이 ref가 붙은 그
+    // 노드에 실제로 도달했는지도 검증한다(부분 spread·래퍼에 ref만 파킹한
+    // 오용이 role/이름/expanded를 조용히 잃는 것을 시끄럽게 만든다).
+    assertRenderTriggerWebWiringAttached('Menu', triggerRef.current, 'button');
+  }, [hasRenderTrigger, open]);
+  // 주입 계약: 선언된 키에 더해 웹 aria 배선·키보드 핸들러를 런타임 키로 싣는다.
+  const injectedTriggerProps = {
+    ref: setTriggerNode,
+    onPress: handleTriggerPress,
+    disabled,
+    accessibilityRole: 'button',
+    accessibilityLabel: triggerLabel,
+    accessibilityState: { disabled, expanded: open, busy },
+    testID: triggerTestID,
+    ...triggerWebProps,
+  } as unknown as TriggerRenderProps;
+
+  const ownedTrigger =
+    renderTrigger !== undefined ? null : (
       <Pressable
         ref={(node) => {
           triggerRef.current = node as unknown as WebPopoverElement | null;
@@ -538,6 +605,17 @@ export function Menu<const T extends string>(props: MenuProps<T>): ReactElement 
           </RNText>
         )}
       </Pressable>
+    );
+
+  return (
+    <View
+      testID={testID}
+      {...nativeWindProps(className)}
+      style={[styles.root, style]}
+    >
+      {renderTrigger === undefined
+        ? ownedTrigger
+        : renderTrigger(injectedTriggerProps)}
 
       <WebPopover
         open={open}

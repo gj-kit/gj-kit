@@ -228,6 +228,20 @@ const getStyles = themedStyles((theme: Theme) => ({
   },
 }));
 
+// 활성 행 start-edge accent. 절대 위치라 콘텐츠를 밀지 않고 showColumnBorders의
+// 셀 border와도 충돌하지 않는다. 등록된 StyleSheet가 아니라 inline이어야
+// 소비자 테스트가 토큰 해석 결과를 DOM에서 그대로 단정할 수 있다.
+function activeAccentStyle(theme: Theme): ViewStyle {
+  return {
+    backgroundColor: theme.colors.primary,
+    bottom: 0,
+    position: "absolute",
+    start: 0,
+    top: 0,
+    width: theme.spacing.xs,
+  };
+}
+
 function rowPadding(
   theme: Theme,
   size: NonNullable<DataTableProps<unknown, string, DataTableRowKey>["size"]>
@@ -563,6 +577,27 @@ function DataTableList<
                   "DataTable renderListRow must return one valid React element."
                 );
               }
+              const active =
+                props.activeRow !== undefined &&
+                props.activeRow.key !== null &&
+                props.activeRow.key === rowKey;
+              const rowHookStyle = props.rowStyle?.(row, {
+                rowKey,
+                rowIndex,
+                active,
+                presentation: "list",
+              });
+              // activeRow.style은 기본 활성 시각(primarySoft wash + accent)을
+              // 통째로 대체한다. aria-current는 어느 쪽이든 유지된다.
+              const activeLayer = active
+                ? props.activeRow?.style === undefined
+                  ? { backgroundColor: theme.colors.primarySoft }
+                  : props.activeRow.style
+                : null;
+              const showAccent = active && props.activeRow?.style === undefined;
+              const currentProps: Record<string, unknown> = active
+                ? { "aria-current": "true" }
+                : {};
               const onRowPress = props.onRowPress;
               const activate = (event: RawDomEvent): void => {
                 onRowPress?.(row, {
@@ -600,6 +635,7 @@ function DataTableList<
                 <View
                   key={reactRowKey(rowKey)}
                   role="listitem"
+                  {...currentProps}
                   {...nativeWindProps(mergeClassNames(props.listRowClassName))}
                   {...activationProps}
                   style={[
@@ -621,8 +657,24 @@ function DataTableList<
                       ? null
                       : { cursor: "pointer" as const },
                     props.listRowStyle,
+                    activeLayer,
+                    // 기본 accent가 보일 때만 행의 rounded silhouette로 클립한다 —
+                    // 사각 accent 바(spacing.xs)가 radius.sm 코너 곡선과 outline
+                    // hairline 밖으로 칠해지지 않게. 조건부라 activeRow가 없거나
+                    // activeRow.style로 대체된 렌더는 그대로다(additive 보장).
+                    // overflow는 자손만 클립하므로 listitem 자신의 포커스 링(UA
+                    // outline)은 영향받지 않는다.
+                    showAccent ? { overflow: "hidden" as const } : null,
+                    rowHookStyle,
                   ]}
                 >
+                  {showAccent ? (
+                    <View
+                      aria-hidden
+                      importantForAccessibility="no-hide-descendants"
+                      style={activeAccentStyle(theme)}
+                    />
+                  ) : null}
                   {selection === undefined ? null : (
                     <Checkbox
                       checked={selected}
@@ -945,6 +997,28 @@ export function DataTable<
     rowModels.forEach((rowModel) => {
       const { row, rowKey, rowIndex, selectionDisabled, selectionLabel } =
         rowModel;
+      const active =
+        props.activeRow !== undefined &&
+        props.activeRow.key !== null &&
+        props.activeRow.key === rowKey;
+      const rowHookStyle = props.rowStyle?.(row, {
+        rowKey,
+        rowIndex,
+        active,
+        presentation: "table",
+      });
+      // activeRow.style은 기본 활성 시각(primarySoft wash + accent)을 통째로
+      // 대체한다. 실제 <table>의 행 박스는 불투명한 셀 위에 칠할 수 없으므로
+      // 행 레이어는 각 셀에 펼친다. 두 prop 모두 없으면 빈 객체 — DOM 불변.
+      const rowLayer: RawStyle = {
+        ...(active
+          ? props.activeRow?.style === undefined
+            ? { backgroundColor: theme.colors.primarySoft }
+            : rawDomStyle(props.activeRow.style)
+          : null),
+        ...rawDomStyle(rowHookStyle),
+      };
+      const showAccent = active && props.activeRow?.style === undefined;
       const cells: ReactNode[] = [];
       if (selection !== undefined) {
         cells.push(
@@ -967,6 +1041,7 @@ export function DataTable<
                 ...rawDomStyle(props.cellStyle),
                 boxSizing: "border-box",
                 width: theme.metrics.control.lg,
+                ...rowLayer,
               },
             },
             <View style={styles.selectionCell}>
@@ -1025,6 +1100,9 @@ export function DataTable<
           </View>
         );
         const tag = column.id === props.rowHeaderColumnId ? "th" : "td";
+        // 활성 행의 start-edge accent는 행 헤더 셀 안에 절대 위치로 그린다 —
+        // border와 달리 콘텐츠를 밀지 않고 showColumnBorders와도 충돌하지 않는다.
+        const withAccent = tag === "th" && showAccent;
         cells.push(
           rawElement(
             tag,
@@ -1054,8 +1132,22 @@ export function DataTable<
                 ...rawDomStyle(column.cellStyle),
                 ...columnRawStyle(column, flexibleTotal, reservedWidth),
                 verticalAlign: "middle",
+                ...rowLayer,
+                ...(withAccent ? { position: "relative" } : null),
               },
             },
+            // 자식 구조를 두 슬롯으로 고정한다(accent 자리는 비활성일 때 null).
+            // 가변 배열로 넘기면 withAccent 토글 때 cellInner의 암묵 key가
+            // ".0"과 ".1" 사이를 오가며 remount되어, 행 헤더 셀 안의 소비자
+            // 포커스·입력 상태가 날아간다. null 슬롯이면 cellInner는 항상 ".1"이다.
+            withAccent ? (
+              <View
+                key="internal:active-accent"
+                aria-hidden
+                importantForAccessibility="no-hide-descendants"
+                style={activeAccentStyle(theme)}
+              />
+            ) : null,
             cellInner
           )
         );
@@ -1100,7 +1192,17 @@ export function DataTable<
               },
             };
       bodyRows.push(
-        rawElement("tr", { key: reactRowKey(rowKey), ...pressProps }, ...cells)
+        rawElement(
+          "tr",
+          {
+            key: reactRowKey(rowKey),
+            // 활성 행은 aria-selected가 아니라 aria-current다 — 이 표는 grid
+            // 의미론을 주장하지 않고, aria-current는 어떤 요소에서도 유효하다.
+            ...(active ? { "aria-current": "true" } : {}),
+            ...pressProps,
+          },
+          ...cells
+        )
       );
     });
   }

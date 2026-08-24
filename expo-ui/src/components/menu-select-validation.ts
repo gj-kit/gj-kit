@@ -42,6 +42,49 @@ function assertGeometry(
   }
 }
 
+// 타입 유니언이 이미 컴파일에서 막지만, JS 소비자와 spread 우회를 위해 렌더
+// 전에 한 번 더 강제한다 — renderTrigger가 있으면 트리거 시각 prop은 전부 금지.
+const MENU_RENDER_TRIGGER_CONFLICTS = [
+  'iconOnly',
+  'triggerIcon',
+  'size',
+  'variant',
+  'triggerHoverStyle',
+  'triggerStyle',
+  'triggerClassName',
+  'triggerLabelStyle',
+  'triggerLabelClassName',
+] as const;
+
+const SELECT_RENDER_TRIGGER_CONFLICTS = [
+  'size',
+  'leading',
+  'triggerHoverStyle',
+  'triggerStyle',
+  'triggerClassName',
+  'valueStyle',
+  'valueClassName',
+] as const;
+
+function assertRenderTriggerExclusivity(
+  props: Record<string, unknown>,
+  conflicts: readonly string[],
+  component: string,
+): void {
+  const renderTrigger = props.renderTrigger;
+  if (renderTrigger === undefined) return;
+  if (typeof renderTrigger !== 'function') {
+    throw new TypeError(`${component} renderTrigger must be a function.`);
+  }
+  for (const key of conflicts) {
+    if (props[key] !== undefined) {
+      throw new TypeError(
+        `${component} ${key} cannot be combined with renderTrigger — the custom trigger owns all trigger visuals; remove ${key}.`,
+      );
+    }
+  }
+}
+
 function assertItemCopy(
   item: MenuItem<string> | SelectItem<string>,
   component: string,
@@ -55,6 +98,11 @@ function assertItemCopy(
 export function assertMenuProps<T extends string>(props: MenuProps<T>): void {
   assertNonEmptyString(props.triggerLabel, 'Menu triggerLabel');
   assertOptionalNonEmptyString(props.accessibilityLabel, 'Menu accessibilityLabel');
+  assertRenderTriggerExclusivity(
+    props as unknown as Record<string, unknown>,
+    MENU_RENDER_TRIGGER_CONFLICTS,
+    'Menu',
+  );
   assertGeometry(
     props.placement,
     props.direction,
@@ -104,6 +152,11 @@ export function assertMenuProps<T extends string>(props: MenuProps<T>): void {
 
 export function assertSelectProps<T extends string>(props: SelectProps<T>): void {
   assertNonEmptyString(props.label ?? props.accessibilityLabel, 'Select accessible label');
+  assertRenderTriggerExclusivity(
+    props as unknown as Record<string, unknown>,
+    SELECT_RENDER_TRIGGER_CONFLICTS,
+    'Select',
+  );
   assertOptionalNonEmptyString(props.label, 'Select label');
   assertOptionalNonEmptyString(props.accessibilityLabel, 'Select accessibilityLabel');
   assertNonEmptyString(props.placeholder, 'Select placeholder');

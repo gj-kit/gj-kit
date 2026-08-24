@@ -1,15 +1,22 @@
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 import type { ReactElement, ReactNode } from "react";
-import { Pressable, StyleSheet, Text as RNText, View } from "react-native";
+import {
+  I18nManager,
+  Pressable,
+  StyleSheet,
+  Text as RNText,
+  View,
+} from "react-native";
 import type { GestureResponderEvent, StyleProp, TextStyle } from "react-native";
 import type { Theme } from "../theme/tokens";
 import { PRESSABLE_FEEDBACK_CLASS } from "./button";
 import type { DialogFocusRef } from "./dialog";
 import { renderIconSlot } from "./icons";
 import { mergeClassNames, nativeWindProps, themedStyles } from "./internal";
+import { NativeAnchoredMenuSelectPanel } from "./menu-select-anchored.native";
+import type { NativeAnchoredMenuSelectDismissDetails } from "./menu-select-anchored.native";
 import { assertSelectProps } from "./menu-select-validation";
 import { NativeMenuSelectSheet } from "./menu-select-sheet.native";
-import type { NativeMenuSelectDismissDetails } from "./menu-select-sheet.native";
 import { useOptionalOverlayStack } from "./overlay/provider";
 import { useIcons, useTheme } from "./provider";
 import type {
@@ -18,6 +25,8 @@ import type {
   SelectProps,
 } from "./select.types";
 import { roleTextStyle } from "./text";
+import { assertRenderTriggerRefAttached } from "./trigger-render";
+import type { TriggerRenderProps } from "./trigger-render";
 
 const getStyles = themedStyles((theme: Theme) => ({
   root: {
@@ -143,10 +152,16 @@ export function Select<const T extends string>(
     busy = false,
     dismissDisabled = false,
     presentation = "auto",
+    placement = "bottom-start",
+    direction = I18nManager.isRTL ? "rtl" : "ltr",
+    sideOffset = 0,
+    alignOffset = 0,
+    collisionPadding,
     bottomInset = 0,
     keyboardOverlap = 0,
     size = "md",
     leading,
+    renderTrigger,
     triggerTestID,
     triggerHoverStyle,
     itemHoverStyle,
@@ -192,6 +207,21 @@ export function Select<const T extends string>(
     // stale hover 하이라이트를 남기지 않는다.
     if (!open) setHoveredItemIndex(null);
   }, [open]);
+  const anchored = presentation === "anchored";
+  const [anchorLayoutVersion, setAnchorLayoutVersion] = useState(0);
+  const bumpAnchorLayoutVersion = useCallback((): void => {
+    setAnchorLayoutVersion((version) => version + 1);
+  }, []);
+  const setTriggerNode = useCallback((node: unknown): void => {
+    triggerRef.current = node as View | null;
+  }, []);
+  const hasRenderTrigger = renderTrigger !== undefined;
+  useEffect(() => {
+    if (!open || !hasRenderTrigger) return;
+    // renderTrigger 계약 강제: 주입 ref가 open 전에 붙지 않았으면 조용한
+    // 앵커링/포커스 복원 실패 대신 즉시 실패한다.
+    assertRenderTriggerRefAttached("Select", triggerRef.current);
+  }, [hasRenderTrigger, open]);
   const selectedItem = items.find((item) => item.value === value) ?? null;
   const selectedEnabledIndex = items.findIndex(
     (item) =>
@@ -228,7 +258,8 @@ export function Select<const T extends string>(
   );
 
   const handleSheetDismiss = useCallback(
-    (details: NativeMenuSelectDismissDetails): void => {
+    // anchored 표면은 시트 어휘에 웹 패리티 'anchor-detached'를 더해 닫힌다.
+    (details: NativeAnchoredMenuSelectDismissDetails): void => {
       const reason =
         details.reason === "backdrop-press" ? "outside-press" : details.reason;
       requestOpenChange(false, {
@@ -250,6 +281,140 @@ export function Select<const T extends string>(
       });
     },
     [busy, disabled, onValueChange, requestOpenChange, value]
+  );
+
+  // 주입 계약: 킷이 동작·접근성을 전부 소유한다 — 소비자는 시각만 소유한다.
+  const injectedTriggerProps: TriggerRenderProps = {
+    ref: setTriggerNode,
+    onPress: handleTriggerPress,
+    disabled,
+    accessibilityRole: "button",
+    // assertSelectProps가 label 또는 accessibilityLabel의 존재를 보장한다.
+    accessibilityLabel: accessibleName as string,
+    accessibilityHint: helper,
+    accessibilityValue: { text: displayedValue },
+    accessibilityState: { disabled, expanded: open, busy },
+    "aria-expanded": open,
+    testID: triggerTestID,
+    onLayout: anchored ? bumpAnchorLayoutVersion : undefined,
+  };
+
+  const optionsNode = (
+    <View
+      accessibilityRole="radiogroup"
+      accessibilityLabel={accessibleName}
+      accessibilityState={{ busy }}
+      style={styles.radioGroup}
+    >
+      {items.map((item, index) => {
+        const itemDisabled = disabled || busy || item.disabled === true;
+        const checked = item.value === value;
+        const foreground = itemDisabled
+          ? theme.colors.textSubtle
+          : theme.colors.text;
+        return (
+          <Pressable
+            key={item.value}
+            ref={index === initialIndex ? initialItemRef : undefined}
+            accessibilityRole="radio"
+            accessibilityLabel={item.label}
+            accessibilityHint={item.description}
+            accessibilityState={{ checked, disabled: itemDisabled, busy }}
+            aria-checked={checked}
+            disabled={itemDisabled}
+            onPress={(event) => selectItem(item, event)}
+            onHoverIn={
+              itemHoverStyle === undefined
+                ? undefined
+                : () => setHoveredItemIndex(index)
+            }
+            onHoverOut={
+              itemHoverStyle === undefined
+                ? undefined
+                : () =>
+                    setHoveredItemIndex((current) =>
+                      current === index ? null : current
+                    )
+            }
+            testID={
+              item.testID ??
+              (testID === undefined ? undefined : `${testID}-item-${index}`)
+            }
+            {...nativeWindProps(
+              mergeClassNames(PRESSABLE_FEEDBACK_CLASS, itemClassName)
+            )}
+            style={({ pressed }) => [
+              styles.item,
+              {
+                backgroundColor:
+                  pressed && !itemDisabled
+                    ? theme.colors.surfaceSubtle
+                    : checked
+                    ? theme.colors.primarySoft
+                    : theme.colors.surface,
+                borderColor: checked
+                  ? theme.colors.primary
+                  : theme.colors.textSubtle,
+                opacity: itemDisabled ? 0.52 : 1,
+              },
+              itemStyle,
+              !itemDisabled &&
+              hoveredItemIndex === index &&
+              itemHoverStyle !== undefined
+                ? itemHoverStyle
+                : null,
+            ]}
+          >
+            <View
+              accessible={false}
+              importantForAccessibility="no-hide-descendants"
+              style={[
+                styles.radio,
+                {
+                  width: theme.metrics.icon.lg,
+                  height: theme.metrics.icon.lg,
+                  borderColor: checked
+                    ? theme.colors.primary
+                    : theme.colors.textSubtle,
+                  backgroundColor: theme.colors.surface,
+                },
+              ]}
+            >
+              {checked ? (
+                <View
+                  style={[
+                    styles.radioDot,
+                    {
+                      width: theme.spacing.sm,
+                      height: theme.spacing.sm,
+                      backgroundColor: theme.colors.primary,
+                    },
+                  ]}
+                />
+              ) : null}
+            </View>
+            {item.leading === undefined ? null : (
+              <View
+                accessible={false}
+                importantForAccessibility="no-hide-descendants"
+                style={styles.triggerLeading}
+              >
+                {renderIconSlot(item.leading, {
+                  color: foreground,
+                  size: theme.metrics.icon.md,
+                })}
+              </View>
+            )}
+            <SelectItemCopy
+              item={item}
+              foreground={foreground}
+              labelStyle={itemLabelStyle}
+              labelClassName={itemLabelClassName}
+            />
+          </Pressable>
+        );
+      })}
+    </View>
   );
 
   return (
@@ -276,6 +441,12 @@ export function Select<const T extends string>(
           {required ? " *" : null}
         </RNText>
       )}
+      {renderTrigger !== undefined
+        ? renderTrigger({
+            ...injectedTriggerProps,
+            "aria-valuetext": displayedValue,
+          } as TriggerRenderProps)
+        : (
       <Pressable
         ref={triggerRef}
         accessibilityRole="button"
@@ -286,6 +457,7 @@ export function Select<const T extends string>(
         aria-valuetext={displayedValue}
         disabled={disabled}
         onPress={handleTriggerPress}
+        onLayout={anchored ? bumpAnchorLayoutVersion : undefined}
         onHoverIn={
           triggerHoverStyle === undefined
             ? undefined
@@ -373,6 +545,7 @@ export function Select<const T extends string>(
           )}
         </View>
       </Pressable>
+          )}
       {helper === undefined ? null : (
         <RNText
           {...nativeWindProps(helperClassName)}
@@ -394,142 +567,54 @@ export function Select<const T extends string>(
         </RNText>
       )}
 
-      <NativeMenuSelectSheet
-        visible={open}
-        overlayId={overlayId}
-        overlayStack={stack}
-        title={label ?? accessibilityLabel}
-        description={helper}
-        accessibilityLabel={accessibleName}
-        presentation={presentation}
-        dismissDisabled={dismissDisabled}
-        bottomInset={bottomInset}
-        keyboardOverlap={keyboardOverlap}
-        initialFocusRef={
-          initialIndex < 0 ? undefined : (initialItemRef as DialogFocusRef)
-        }
-        finalFocusRef={triggerRef as DialogFocusRef}
-        onDismiss={handleSheetDismiss}
-        contentStyle={contentStyle}
-        contentClassName={contentClassName}
-        testID={testID === undefined ? undefined : `${testID}-sheet`}
-      >
-        <View
-          accessibilityRole="radiogroup"
-          accessibilityLabel={accessibleName}
-          accessibilityState={{ busy }}
-          style={styles.radioGroup}
+      {presentation === "anchored" ? (
+        <NativeAnchoredMenuSelectPanel
+          visible={open}
+          overlayId={overlayId}
+          accessibilityLabel={accessibleName as string}
+          triggerRef={triggerRef}
+          anchorLayoutVersion={anchorLayoutVersion}
+          placement={placement}
+          direction={direction}
+          sideOffset={sideOffset}
+          alignOffset={alignOffset}
+          collisionPadding={collisionPadding}
+          dismissDisabled={dismissDisabled}
+          initialFocusRef={
+            initialIndex < 0 ? undefined : (initialItemRef as DialogFocusRef)
+          }
+          finalFocusRef={triggerRef as DialogFocusRef}
+          onDismiss={handleSheetDismiss}
+          contentStyle={contentStyle}
+          contentClassName={contentClassName}
+          testID={testID === undefined ? undefined : `${testID}-anchored`}
         >
-          {items.map((item, index) => {
-            const itemDisabled = disabled || busy || item.disabled === true;
-            const checked = item.value === value;
-            const foreground = itemDisabled
-              ? theme.colors.textSubtle
-              : theme.colors.text;
-            return (
-              <Pressable
-                key={item.value}
-                ref={index === initialIndex ? initialItemRef : undefined}
-                accessibilityRole="radio"
-                accessibilityLabel={item.label}
-                accessibilityHint={item.description}
-                accessibilityState={{ checked, disabled: itemDisabled, busy }}
-                aria-checked={checked}
-                disabled={itemDisabled}
-                onPress={(event) => selectItem(item, event)}
-                onHoverIn={
-                  itemHoverStyle === undefined
-                    ? undefined
-                    : () => setHoveredItemIndex(index)
-                }
-                onHoverOut={
-                  itemHoverStyle === undefined
-                    ? undefined
-                    : () =>
-                        setHoveredItemIndex((current) =>
-                          current === index ? null : current
-                        )
-                }
-                testID={
-                  item.testID ??
-                  (testID === undefined ? undefined : `${testID}-item-${index}`)
-                }
-                {...nativeWindProps(
-                  mergeClassNames(PRESSABLE_FEEDBACK_CLASS, itemClassName)
-                )}
-                style={({ pressed }) => [
-                  styles.item,
-                  {
-                    backgroundColor:
-                      pressed && !itemDisabled
-                        ? theme.colors.surfaceSubtle
-                        : checked
-                        ? theme.colors.primarySoft
-                        : theme.colors.surface,
-                    borderColor: checked
-                      ? theme.colors.primary
-                      : theme.colors.textSubtle,
-                    opacity: itemDisabled ? 0.52 : 1,
-                  },
-                  itemStyle,
-                  !itemDisabled &&
-                  hoveredItemIndex === index &&
-                  itemHoverStyle !== undefined
-                    ? itemHoverStyle
-                    : null,
-                ]}
-              >
-                <View
-                  accessible={false}
-                  importantForAccessibility="no-hide-descendants"
-                  style={[
-                    styles.radio,
-                    {
-                      width: theme.metrics.icon.lg,
-                      height: theme.metrics.icon.lg,
-                      borderColor: checked
-                        ? theme.colors.primary
-                        : theme.colors.textSubtle,
-                      backgroundColor: theme.colors.surface,
-                    },
-                  ]}
-                >
-                  {checked ? (
-                    <View
-                      style={[
-                        styles.radioDot,
-                        {
-                          width: theme.spacing.sm,
-                          height: theme.spacing.sm,
-                          backgroundColor: theme.colors.primary,
-                        },
-                      ]}
-                    />
-                  ) : null}
-                </View>
-                {item.leading === undefined ? null : (
-                  <View
-                    accessible={false}
-                    importantForAccessibility="no-hide-descendants"
-                    style={styles.triggerLeading}
-                  >
-                    {renderIconSlot(item.leading, {
-                      color: foreground,
-                      size: theme.metrics.icon.md,
-                    })}
-                  </View>
-                )}
-                <SelectItemCopy
-                  item={item}
-                  foreground={foreground}
-                  labelStyle={itemLabelStyle}
-                  labelClassName={itemLabelClassName}
-                />
-              </Pressable>
-            );
-          })}
-        </View>
-      </NativeMenuSelectSheet>
+          {optionsNode}
+        </NativeAnchoredMenuSelectPanel>
+      ) : (
+        <NativeMenuSelectSheet
+          visible={open}
+          overlayId={overlayId}
+          overlayStack={stack}
+          title={label ?? accessibilityLabel}
+          description={helper}
+          accessibilityLabel={accessibleName}
+          presentation={presentation}
+          dismissDisabled={dismissDisabled}
+          bottomInset={bottomInset}
+          keyboardOverlap={keyboardOverlap}
+          initialFocusRef={
+            initialIndex < 0 ? undefined : (initialItemRef as DialogFocusRef)
+          }
+          finalFocusRef={triggerRef as DialogFocusRef}
+          onDismiss={handleSheetDismiss}
+          contentStyle={contentStyle}
+          contentClassName={contentClassName}
+          testID={testID === undefined ? undefined : `${testID}-sheet`}
+        >
+          {optionsNode}
+        </NativeMenuSelectSheet>
+      )}
     </View>
   );
 }

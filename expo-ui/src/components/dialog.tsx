@@ -362,6 +362,14 @@ interface DialogBaseProps {
   contentStyle?: StyleProp<ViewStyle> | undefined;
   /** The outer layout of the inline presentation only. contentStyle is identical across both presentations. */
   inlineStyle?: StyleProp<ViewStyle> | undefined;
+  /**
+   * Android modal presentation only — draws the modal window under the status
+   * bar so its coordinate space matches `measureInWindow` frames (anchored
+   * surfaces position by them). Other platforms ignore it.
+   */
+  statusBarTranslucent?: boolean | undefined;
+  /** Android companion of statusBarTranslucent for the navigation bar (RN forwards it only alongside statusBarTranslucent). */
+  navigationBarTranslucent?: boolean | undefined;
   testID?: string | undefined;
   unstyled?: never;
 }
@@ -448,6 +456,8 @@ export function Dialog({
   backdropStyle,
   contentStyle,
   inlineStyle,
+  statusBarTranslucent,
+  navigationBarTranslucent,
   testID,
 }: DialogProps): ReactElement | null {
   const theme = useTheme();
@@ -769,6 +779,10 @@ export function Dialog({
         : {
             onRequestClose: (event: unknown) =>
               requestDismiss('hardware-back', event),
+            // 웹에는 넘기지 않는다 — RNW Modal이 모르는 prop을 DOM으로 흘려
+            // React unknown-prop 경고를 내는 것을 막는다.
+            ...(statusBarTranslucent === undefined ? {} : { statusBarTranslucent }),
+            ...(navigationBarTranslucent === undefined ? {} : { navigationBarTranslucent }),
           })}
     >
       <View style={[styles.overlay, overlayStyle]}>

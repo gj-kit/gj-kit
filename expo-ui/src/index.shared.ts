@@ -53,6 +53,32 @@ export type { UiProviderProps } from "./components/provider";
 export { OverlayProvider } from "./components/overlay/provider";
 export type { OverlayProviderProps } from "./components/overlay/provider";
 
+// ─── 순수 달력 날짜 수학 (clock-free·time-zone-free) ───────────────────────
+export {
+  isCalendarLeapYear,
+  daysInCalendarMonth,
+  isValidCalendarDate,
+  compareCalendarDates,
+  isSameCalendarDate,
+  isSameCalendarMonth,
+  clampCalendarDate,
+  addCalendarDays,
+  addCalendarMonths,
+  calendarDayOfWeek,
+  formatCalendarDateKey,
+  parseCalendarDateKey,
+  buildMonthGrid,
+} from "./dates/calendar";
+export type {
+  CalendarDate,
+  CalendarMonth,
+  CalendarWeekday,
+  CalendarWeekStart,
+  MonthGrid,
+  MonthGridCell,
+  MonthGridWeek,
+} from "./dates/calendar";
+
 // ─── strings / icons ───────────────────────────────────────────────────────
 export { enStrings, koStrings } from "./strings/strings";
 export type { UiStrings } from "./strings/strings";
@@ -202,6 +228,8 @@ export type {
   DataTableListCell,
   DataTableListRowContext,
   DataTableRowPressContext,
+  DataTableActiveRow,
+  DataTableRowStyleContext,
   DataTableState,
 } from "./components/data-table.types";
 
@@ -333,6 +361,8 @@ export type {
   ToggleGroupSize,
 } from "./components/toggle-group";
 
+export type { TriggerRenderProps } from "./components/trigger-render";
+
 export { Menu } from "./components/menu";
 export type {
   MenuProps,
@@ -448,3 +478,17 @@ export type {
 
 export { Toolbar } from "./components/toolbar";
 export type { ToolbarProps, ToolbarAlign } from "./components/toolbar";
+
+export { MonthCalendar } from "./components/month-calendar";
+export type {
+  MonthCalendarProps,
+  MonthCalendarDayContext,
+  MonthCalendarLabels,
+} from "./components/month-calendar";
+
+export { DateField } from "./components/date-field";
+export type {
+  DateFieldProps,
+  DateFieldSegment,
+  DateFieldSegmentText,
+} from "./components/date-field";

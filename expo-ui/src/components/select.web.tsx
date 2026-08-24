@@ -46,6 +46,11 @@ import type {
   SelectProps,
 } from './select.types';
 import { roleTextStyle } from './text';
+import {
+  assertRenderTriggerRefAttached,
+  assertRenderTriggerWebWiringAttached,
+} from './trigger-render';
+import type { TriggerRenderProps } from './trigger-render';
 
 type Focusable = { focus?: () => void };
 
@@ -290,6 +295,7 @@ export function Select<const T extends string>(
     collisionPadding,
     size = 'md',
     leading,
+    renderTrigger,
     triggerTestID,
     triggerHoverStyle,
     itemHoverStyle,
@@ -688,6 +694,42 @@ export function Select<const T extends string>(
     onBlur: handleTriggerBlur,
   } as const;
 
+  const setTriggerNode = useCallback((node: unknown): void => {
+    triggerRef.current = node as WebPopoverElement | null;
+  }, []);
+  const hasRenderTrigger = renderTrigger !== undefined;
+  useLayoutEffect(() => {
+    if (!open || !hasRenderTrigger) return;
+    // renderTrigger 계약 강제: 주입 ref가 open 전에 붙지 않았으면 조용한
+    // 앵커링/포커스 복원 실패 대신 즉시 실패한다.
+    assertRenderTriggerRefAttached('Select', triggerRef.current);
+    // 같은 커밋이 aria-expanded="true"를 썼다 — 주입 combobox 배선이 ref가
+    // 붙은 그 노드에 실제로 도달했는지도 검증한다(부분 spread·래퍼 파킹이
+    // role/이름/expanded를 조용히 잃는 것을 시끄럽게 만든다).
+    assertRenderTriggerWebWiringAttached('Select', triggerRef.current, 'combobox');
+  }, [hasRenderTrigger, open]);
+  // 주입 계약: 선언된 키에 더해 combobox aria 배선·키보드/blur 핸들러를
+  // 런타임 키로 싣는다. 접근 가능한 이름은 항상 구체 문자열로 주입한다.
+  const injectedTriggerProps = {
+    ref: setTriggerNode,
+    onPress: handleTriggerPress,
+    disabled,
+    accessibilityRole: 'combobox',
+    // assertSelectProps가 label 또는 accessibilityLabel의 존재를 보장한다.
+    accessibilityLabel: accessibleName as string,
+    accessibilityHint: supportText,
+    accessibilityValue: { text: triggerValue },
+    accessibilityState: { disabled, expanded: open, busy },
+    testID:
+      triggerTestID ?? (testID === undefined ? undefined : `${testID}-trigger`),
+    nativeID: triggerId,
+    ...triggerWebProps,
+    // 주입 이름이 항상 구체 문자열이므로 labelledby 대신 aria-label로 고정한다.
+    ...(accessibilityLabel === undefined
+      ? { 'aria-labelledby': undefined, 'aria-label': accessibleName }
+      : {}),
+  } as unknown as TriggerRenderProps;
+
   const chevronIcon: RenderIcon = (iconProps) =>
     renderIconSlot(icons.chevronDown, iconProps) ?? fallbackGlyph('⌄', iconProps);
   const checkIcon: RenderIcon = (iconProps) =>
@@ -734,6 +776,9 @@ export function Select<const T extends string>(
         </View>
       )}
 
+      {renderTrigger !== undefined
+        ? renderTrigger(injectedTriggerProps)
+        : (
       <Pressable
         ref={(node) => {
           triggerRef.current = node as unknown as WebPopoverElement | null;
@@ -825,6 +870,7 @@ export function Select<const T extends string>(
           })}
         </View>
       </Pressable>
+        )}
 
       {supportText === undefined ? null : (
         <RNText

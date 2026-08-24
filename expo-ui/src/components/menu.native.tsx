@@ -1,19 +1,28 @@
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 import type { ReactElement, ReactNode } from "react";
-import { Pressable, StyleSheet, Text as RNText, View } from "react-native";
+import {
+  I18nManager,
+  Pressable,
+  StyleSheet,
+  Text as RNText,
+  View,
+} from "react-native";
 import type { GestureResponderEvent, StyleProp, TextStyle } from "react-native";
 import type { Theme } from "../theme/tokens";
 import { PRESSABLE_FEEDBACK_CLASS } from "./button";
 import type { DialogFocusRef } from "./dialog";
 import { renderIconSlot } from "./icons";
 import { mergeClassNames, nativeWindProps, themedStyles } from "./internal";
+import { NativeAnchoredMenuSelectPanel } from "./menu-select-anchored.native";
+import type { NativeAnchoredMenuSelectDismissDetails } from "./menu-select-anchored.native";
 import { assertMenuProps } from "./menu-select-validation";
 import { NativeMenuSelectSheet } from "./menu-select-sheet.native";
-import type { NativeMenuSelectDismissDetails } from "./menu-select-sheet.native";
 import type { MenuItem, MenuOpenChangeDetails, MenuProps } from "./menu.types";
 import { useOptionalOverlayStack } from "./overlay/provider";
 import { useIcons, useTheme } from "./provider";
 import { roleTextStyle } from "./text";
+import { assertRenderTriggerRefAttached } from "./trigger-render";
+import type { TriggerRenderProps } from "./trigger-render";
 
 type MenuDimensions = {
   readonly paddingHorizontal: number;
@@ -180,11 +189,17 @@ export function Menu<const T extends string>(
     triggerLabel,
     iconOnly = false,
     triggerIcon,
+    renderTrigger,
     accessibilityLabel,
     disabled = false,
     busy = false,
     dismissDisabled = false,
     presentation = "auto",
+    placement = "bottom-start",
+    direction = I18nManager.isRTL ? "rtl" : "ltr",
+    sideOffset = 0,
+    alignOffset = 0,
+    collisionPadding,
     bottomInset = 0,
     keyboardOverlap = 0,
     size = "md",
@@ -232,6 +247,21 @@ export function Menu<const T extends string>(
     // stale hover 하이라이트를 남기지 않는다.
     if (!open) setHoveredItemIndex(null);
   }, [open]);
+  const anchored = presentation === "anchored";
+  const [anchorLayoutVersion, setAnchorLayoutVersion] = useState(0);
+  const bumpAnchorLayoutVersion = useCallback((): void => {
+    setAnchorLayoutVersion((version) => version + 1);
+  }, []);
+  const setTriggerNode = useCallback((node: unknown): void => {
+    triggerRef.current = node as View | null;
+  }, []);
+  const hasRenderTrigger = renderTrigger !== undefined;
+  useEffect(() => {
+    if (!open || !hasRenderTrigger) return;
+    // renderTrigger 계약 강제: 주입 ref가 open 전에 붙지 않았으면 조용한
+    // 앵커링/포커스 복원 실패 대신 즉시 실패한다.
+    assertRenderTriggerRefAttached("Menu", triggerRef.current);
+  }, [hasRenderTrigger, open]);
   const initialIndex = items.findIndex(
     (item) => !disabled && !busy && item.disabled !== true
   );
@@ -255,7 +285,8 @@ export function Menu<const T extends string>(
   );
 
   const handleSheetDismiss = useCallback(
-    (details: NativeMenuSelectDismissDetails): void => {
+    // anchored 표면은 시트 어휘에 웹 패리티 'anchor-detached'를 더해 닫힌다.
+    (details: NativeAnchoredMenuSelectDismissDetails): void => {
       const reason =
         details.reason === "backdrop-press" ? "outside-press" : details.reason;
       requestOpenChange(false, {
@@ -291,12 +322,8 @@ export function Menu<const T extends string>(
     [busy, disabled, onSelect, requestOpenChange]
   );
 
-  return (
-    <View
-      testID={testID}
-      {...nativeWindProps(className)}
-      style={[styles.root, style]}
-    >
+  const ownedTrigger =
+    renderTrigger !== undefined ? null : (
       <Pressable
         ref={triggerRef}
         accessibilityRole="button"
@@ -304,6 +331,7 @@ export function Menu<const T extends string>(
         accessibilityState={{ disabled, expanded: open, busy }}
         disabled={disabled}
         onPress={handleTriggerPress}
+        onLayout={anchored ? bumpAnchorLayoutVersion : undefined}
         onHoverIn={
           triggerHoverStyle === undefined
             ? undefined
@@ -366,27 +394,22 @@ export function Menu<const T extends string>(
           </RNText>
         )}
       </Pressable>
+    );
 
-      <NativeMenuSelectSheet
-        visible={open}
-        overlayId={overlayId}
-        overlayStack={stack}
-        title={triggerLabel}
-        accessibilityLabel={accessibilityLabel}
-        presentation={presentation}
-        dismissDisabled={dismissDisabled}
-        bottomInset={bottomInset}
-        keyboardOverlap={keyboardOverlap}
-        initialFocusRef={
-          initialIndex < 0 ? undefined : (initialItemRef as DialogFocusRef)
-        }
-        finalFocusRef={triggerRef as DialogFocusRef}
-        onDismiss={handleSheetDismiss}
-        contentStyle={contentStyle}
-        contentClassName={contentClassName}
-        testID={testID === undefined ? undefined : `${testID}-sheet`}
-      >
-        {items.map((item, index) => {
+  // 주입 계약: 킷이 동작·접근성을 전부 소유한다 — 소비자는 시각만 소유한다.
+  const injectedTriggerProps: TriggerRenderProps = {
+    ref: setTriggerNode,
+    onPress: handleTriggerPress,
+    disabled,
+    accessibilityRole: "button",
+    accessibilityLabel: triggerLabel,
+    accessibilityState: { disabled, expanded: open, busy },
+    "aria-expanded": open,
+    testID: triggerTestID,
+    onLayout: anchored ? bumpAnchorLayoutVersion : undefined,
+  };
+
+  const itemNodes = items.map((item, index) => {
           const itemDisabled = disabled || busy || item.disabled === true;
           const checked = item.kind === "checkbox" && item.checked !== false;
           const foreground = itemDisabled
@@ -523,8 +546,65 @@ export function Menu<const T extends string>(
               )}
             </Pressable>
           );
-        })}
-      </NativeMenuSelectSheet>
+        });
+
+  return (
+    <View
+      testID={testID}
+      {...nativeWindProps(className)}
+      style={[styles.root, style]}
+    >
+      {renderTrigger === undefined
+        ? ownedTrigger
+        : renderTrigger(injectedTriggerProps)}
+
+      {presentation === "anchored" ? (
+        <NativeAnchoredMenuSelectPanel
+          visible={open}
+          overlayId={overlayId}
+          accessibilityLabel={accessibilityLabel ?? triggerLabel}
+          triggerRef={triggerRef}
+          anchorLayoutVersion={anchorLayoutVersion}
+          placement={placement}
+          direction={direction}
+          sideOffset={sideOffset}
+          alignOffset={alignOffset}
+          collisionPadding={collisionPadding}
+          dismissDisabled={dismissDisabled}
+          initialFocusRef={
+            initialIndex < 0 ? undefined : (initialItemRef as DialogFocusRef)
+          }
+          finalFocusRef={triggerRef as DialogFocusRef}
+          onDismiss={handleSheetDismiss}
+          contentStyle={contentStyle}
+          contentClassName={contentClassName}
+          testID={testID === undefined ? undefined : `${testID}-anchored`}
+        >
+          {itemNodes}
+        </NativeAnchoredMenuSelectPanel>
+      ) : (
+        <NativeMenuSelectSheet
+          visible={open}
+          overlayId={overlayId}
+          overlayStack={stack}
+          title={triggerLabel}
+          accessibilityLabel={accessibilityLabel}
+          presentation={presentation}
+          dismissDisabled={dismissDisabled}
+          bottomInset={bottomInset}
+          keyboardOverlap={keyboardOverlap}
+          initialFocusRef={
+            initialIndex < 0 ? undefined : (initialItemRef as DialogFocusRef)
+          }
+          finalFocusRef={triggerRef as DialogFocusRef}
+          onDismiss={handleSheetDismiss}
+          contentStyle={contentStyle}
+          contentClassName={contentClassName}
+          testID={testID === undefined ? undefined : `${testID}-sheet`}
+        >
+          {itemNodes}
+        </NativeMenuSelectSheet>
+      )}
     </View>
   );
 }

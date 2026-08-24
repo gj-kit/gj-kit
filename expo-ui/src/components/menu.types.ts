@@ -1,11 +1,18 @@
-import type { ReactNode } from 'react';
+import type { ReactElement, ReactNode } from 'react';
 import type { StyleProp, TextStyle, ViewStyle } from 'react-native';
 import type { RenderIcon } from './icons';
 import type { CommonProps } from './internal';
 import type { OverlayPlacement } from './overlay/types';
+import type { TriggerRenderProps } from './trigger-render';
 
 export type MenuPlacement = OverlayPlacement;
-export type MenuPresentation = 'auto' | 'bottom' | 'center';
+/**
+ * Native surface form. 'auto' resolves to 'bottom' on compact widths and
+ * 'center' on tablet widths, exactly as before. 'anchored' renders a dim-less
+ * panel positioned by the measured trigger inside a transparent Modal; the
+ * web popup is always anchored and ignores this prop.
+ */
+export type MenuPresentation = 'auto' | 'bottom' | 'center' | 'anchored';
 export type MenuDirection = 'ltr' | 'rtl';
 export type MenuTriggerSize = 'sm' | 'md';
 export type MenuTriggerVariant = 'filled' | 'outlined' | 'ghost';
@@ -84,8 +91,49 @@ type MenuTriggerProps =
       readonly triggerIcon: NonNullable<ReactNode> | RenderIcon;
     };
 
+type MenuOwnedTriggerProps = MenuTriggerProps & {
+  readonly renderTrigger?: never;
+  readonly size?: MenuTriggerSize | undefined;
+  readonly variant?: MenuTriggerVariant | undefined;
+  /** Applied to the trigger while a pointer hovers it (web and pointer-equipped devices). Layered after triggerStyle. */
+  readonly triggerHoverStyle?: StyleProp<ViewStyle> | undefined;
+  readonly triggerStyle?: StyleProp<ViewStyle> | undefined;
+  readonly triggerClassName?: string | undefined;
+  readonly triggerLabelStyle?: StyleProp<TextStyle> | undefined;
+  readonly triggerLabelClassName?: string | undefined;
+};
+
+type MenuRenderTriggerProps = {
+  /**
+   * Replaces the owned trigger visuals with an app-owned element. The kit
+   * injects everything behavior and accessibility own — ref, onPress,
+   * disabled, role, expanded/busy state, testID, web aria wiring, and the
+   * measurement hook anchoring needs; spread every injected prop onto a
+   * single Pressable — or an equivalent host that forwards RN press handling
+   * (a plain View drops the injected onPress and renders an inoperable
+   * announced button) — and style it freely. The injected ref must reach the
+   * returned host element: the menu throws when it opens without it, and on
+   * web it also throws when the injected role/expanded/name wiring did not
+   * land on that node. Owned trigger-visual props are rejected while this
+   * slot is present (compile-time via this union, and again at render for JS
+   * callers).
+   */
+  readonly renderTrigger: (trigger: TriggerRenderProps) => ReactElement;
+  /** The injected accessible trigger name and the native sheet title. */
+  readonly triggerLabel: string;
+  readonly iconOnly?: never;
+  readonly triggerIcon?: never;
+  readonly size?: never;
+  readonly variant?: never;
+  readonly triggerHoverStyle?: never;
+  readonly triggerStyle?: never;
+  readonly triggerClassName?: never;
+  readonly triggerLabelStyle?: never;
+  readonly triggerLabelClassName?: never;
+};
+
 export type MenuProps<T extends string> = Omit<CommonProps, 'unstyled'> &
-  MenuTriggerProps & {
+  (MenuOwnedTriggerProps | MenuRenderTriggerProps) & {
     readonly items: readonly MenuItem<T>[];
     readonly open: boolean;
     readonly onOpenChange: (
@@ -110,18 +158,10 @@ export type MenuProps<T extends string> = Omit<CommonProps, 'unstyled'> &
     readonly bottomInset?: number | undefined;
     /** Keyboard occlusion height measured inside a native Modal. Takes precedence over bottomInset when greater than 0. */
     readonly keyboardOverlap?: number | undefined;
-    readonly size?: MenuTriggerSize | undefined;
-    readonly variant?: MenuTriggerVariant | undefined;
     /** testID on the trigger pressable itself (the actual press target), distinct from the root container testID. */
     readonly triggerTestID?: string | undefined;
-    /** Applied to the trigger while a pointer hovers it (web and pointer-equipped devices). Layered after triggerStyle. */
-    readonly triggerHoverStyle?: StyleProp<ViewStyle> | undefined;
     /** Applied to an enabled item while a pointer hovers it. Layered after itemStyle. */
     readonly itemHoverStyle?: StyleProp<ViewStyle> | undefined;
-    readonly triggerStyle?: StyleProp<ViewStyle> | undefined;
-    readonly triggerClassName?: string | undefined;
-    readonly triggerLabelStyle?: StyleProp<TextStyle> | undefined;
-    readonly triggerLabelClassName?: string | undefined;
     readonly contentStyle?: StyleProp<ViewStyle> | undefined;
     readonly contentClassName?: string | undefined;
     readonly itemStyle?: StyleProp<ViewStyle> | undefined;

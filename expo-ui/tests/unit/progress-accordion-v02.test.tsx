@@ -37,6 +37,10 @@ describe('Spinner / ProgressBar', () => {
         ratingNoValue: '평점 없음',
         ratingValue: (value, maxRating) => `${value}점 / ${maxRating}점`,
         clearRating: '평점 지우기',
+        // v0.9 진화 경로 — 손으로 조립한 번들은 새 키를 함께 추가해야 한다.
+        dateFieldYear: '년',
+        dateFieldMonth: '월',
+        dateFieldDay: '일',
       }}>
         <Spinner />
       </UiProvider>,

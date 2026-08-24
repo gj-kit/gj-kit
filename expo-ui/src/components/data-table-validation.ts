@@ -324,6 +324,19 @@ export function assertDataTableProps<
       );
     }
   }
+  if (props.activeRow !== undefined) {
+    if (typeof props.activeRow !== "object" || props.activeRow === null) {
+      throw new Error(
+        "DataTable activeRow must be an object with a key (null for none)."
+      );
+    }
+    if (props.activeRow.key !== null) {
+      assertRowKey(props.activeRow.key, "activeRow.key");
+    }
+  }
+  if (props.rowStyle !== undefined && typeof props.rowStyle !== "function") {
+    throw new Error("DataTable rowStyle must be a function.");
+  }
   if (props.selection !== undefined) {
     if (typeof props.selection.onSelectionChange !== "function") {
       throw new Error(

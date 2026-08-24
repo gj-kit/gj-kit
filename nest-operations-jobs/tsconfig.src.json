@@ -1,0 +1,14 @@
+{
+  // 소스 전용 검사. 이 패키지는 platform: 'node' 산출물이므로 @types/node를 잠그지 않는다
+  // — 코어 가드가 막는 것은 Node API가 아니라 Nest/rxjs import와 clock.ts 밖의 ambient
+  // 시계다(tests/unit/guards/{peer-graph,ambient-clock}.test.ts).
+  "extends": "../tsconfig.base.json",
+  "compilerOptions": {
+    "experimentalDecorators": true,
+    "emitDecoratorMetadata": false,
+    "lib": ["ES2022"],
+    "types": ["node"],
+    "noEmit": true
+  },
+  "include": ["src"]
+}

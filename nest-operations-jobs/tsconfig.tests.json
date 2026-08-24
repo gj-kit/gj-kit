@@ -1,0 +1,12 @@
+{
+  // 테스트 전용 — 가드 테스트가 node:fs로 소스/산출물을 스캔한다.
+  "extends": "../tsconfig.base.json",
+  "compilerOptions": {
+    "experimentalDecorators": true,
+    "emitDecoratorMetadata": false,
+    "lib": ["ES2022"],
+    "types": ["node"],
+    "noEmit": true
+  },
+  "include": ["src", "tests"]
+}

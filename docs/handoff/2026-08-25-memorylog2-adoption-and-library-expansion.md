@@ -59,7 +59,10 @@ expo-auth 145/16 · format 356/21 · nest-operations-jobs 232/18 · nest-notific
 - **서버**: toss 3종 최신 vendoring + 킷 심볼·테스트 더블 채택, **환불 엔진 0~3단계 도입**(정책 등록 → gateway
   quoteRefund → 승인 시 quote 저장 + Prisma 마이그레이션 → gateway executeRefund; 실행 경로를 바꾸는 4단계는
   소유자 결정 대기), 하네스가 pass-through fake 대신 실제 fence 코드를 인메모리 PG 집합체 위에서 검증.
-  **4차 채택(잡·알림 패키지 실사용)은 이 문서 작성 시점 진행 중** — 완료 시 §6을 갱신할 것.
+  **4차 채택 완료**: 잡·알림 파이프라인(약 1,900줄)이 킷으로 넘어가고 앱에는 Prisma 스토어 어댑터와 제품
+  정책만 남았다. `PrismaJobRunStore`는 raw SQL로 S1~S7을 충족하고(부분 유니크 인덱스를 중재자로 지목하는
+  `ON CONFLICT DO NOTHING`, `FOR UPDATE SKIP LOCKED` reap, DB 시계 일원화), 킷의 스토어 계약 스위트를
+  **실제 PostgreSQL 16에서 48/48 통과**시켰다(잡 16 + 알림). 스키마 변경은 없었다.
 - **정리**: 죽은 expo-media 패치·`packages/ui` 잔해·lockfile extraneous 항목·스토리북 stale glob 제거.
 - **환경 함정 2건**: 스토리북 스모크는 `storybook-static` **프리빌드**를 검사(스토리·설정 변경 후 반드시
   `npm run build:storybook`) · expo-ui 0.8 웹 조건 분기가 Vite CJS interop 문제를 드러내
@@ -105,7 +108,8 @@ executeRefund의 409 3종을 terminal FAILED가 아니라 재견적 보류로 �
 | memorylog2 spec:check | **PASS** — 67 resources · 170 acceptance criteria |
 | admin typecheck / jest / expo export web | clean / **9스위트 47테스트** / 10 라우트 |
 | mobile typecheck / jest / storybook smoke | 0 errors / **121스위트 1,076테스트** / **1,466 스토리 전부 렌더(실패·미선언 API·외부요청 0)** |
-| server typecheck / test:offline | clean / **121스위트 2,245테스트** (4차 채택 후 재측정 필요) |
+| server typecheck / test:offline | clean / **126스위트 2,316테스트** |
+| server 스토어 계약 (실 PostgreSQL 16, 도커) | **48/48** — jobRunStoreContractCases 16 + notification store 32 |
 | 육안 확인 | 스토리북에서 Button variant 매트릭스·underline 탭·ConfirmDialog 단일 딤 |
 
 ⚠ 실기기 미검증: 모바일 네이티브 로그인/토큰 갱신(expo-auth 이관 경로), RN Modal 안 Button responder 재확인.

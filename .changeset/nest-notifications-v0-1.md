@@ -1,0 +1,15 @@
+---
+"@gj-kit/nest-notifications": minor
+---
+
+신규 패키지 — memorylog2 `apps/server`의 알림 파이프라인(명령 계약·릴레이·디스패치·전송 포트·빠른 경로) 승격. 소스 도메인은 자기 트랜잭션에서 명령 하나를 stage하고, 조용시간·배치·선호도·재시도·푸시 fan-out은 파이프라인이 소유한다.
+
+- 배달 계약을 먼저 명시한다: `(applicationKey, recipientRef, eventKey)`를 멱등 키로 하는 at-least-once, inbox 메시지는 배달당 정확히 하나, 순서 보장 없음. 실패 행렬 12종(완료 쓰기 실패·청크 부분 성공·ticket 무효 endpoint·배치 정체성 경쟁·영구 실패 행의 굶김 등)이 문서·테스트로 고정된다.
+- `./core`: 프레임워크·전송·저장소·언어를 모르는 파이프라인. `@nestjs/*`·`rxjs`·provider SDK·비영어 문자열 리터럴을 import도 포함도 하지 않는다(가드 테스트가 소스와 dist 양쪽에서 강제).
+- 시간대 파라미터화: 지역 상수 하드코딩 제거. `createQuietHoursPolicy({ timeZone, quietHours: { startHour: 22, endHour: 8 }, batchWindowMs: 600_000 })`처럼 호스트가 자기 지역을 말한다. IANA 벽시계 산술이라 DST 전환·비정시 offset(+05:45)에서도 정확하고, 갭/중복 시각 해석 규칙이 계약에 적혀 있다.
+- 저장소 포트 3종 + 호스트 포트 2종 + 의무 29종(R1–R13 · D1–D9 · I1–I3 · L1–L4). 라이브러리는 테이블도 마이그레이션도 소유하지 않고, `./testing`의 적합성 케이스 배열이 호스트 구현을 — ingress staging과 계정 삭제 순서까지 포함해 — 그대로 검사한다. 인메모리 구현 동봉.
+- 배달 삽입은 예외를 요구하지 않는다: `createDelivery`가 `{ id, created }`를 돌려주고, `created: false`면 릴레이가 병합/follow-up으로 되돌아간다. claim 신선도는 저장소 시계 하나에서만 판정된다(요청은 순간이 아니라 `claimStaleMs` 기간을 나른다). endpoint 비활성화는 `listEnabled`가 관측한 등록 리비전과 일치할 때만 쓴다 — 전송 중 재등록한 기기를 끄지 않는다.
+- `./expo`: `expo-server-sdk` 비의존. 청킹·토큰 형태 검사·ticket 분류(undersized 응답 가드 포함)는 순수 함수로 라이브러리가 소유하고, HTTP 전송만 호스트가 콜백으로 공급한다. SDK의 `sendPushNotificationsAsync`가 구조적으로 그대로 대입된다.
+- 배치 카피는 `NotificationPresenter` 필수 포트다 — 라이브러리는 어떤 언어의 문장도 만들지 않는다.
+- 빠른 경로(`request(): void`)는 명시적 best-effort다. 예약·배치 배달의 정확성 소유자는 주기 실행자이며, README가 `@gj-kit/nest-operations-jobs` 어댑터 12줄을 싣되 두 패키지 사이에 의존은 없다.
+- 런타임 의존성 0. `@nestjs/common`·`reflect-metadata`·`rxjs`는 required peer.

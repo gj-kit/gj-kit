@@ -20,6 +20,7 @@ const packageDirectories = [
   'expo-auth',
   'format',
   'nest-operations-jobs',
+  'nest-notifications',
   'toss-payments',
   'toss-payments-nestjs',
   'toss-payments-postgresql',

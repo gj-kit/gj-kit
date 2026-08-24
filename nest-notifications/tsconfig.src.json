@@ -1,0 +1,15 @@
+{
+  // 소스 전용 검사. 이 패키지는 platform: 'node' 산출물이므로 @types/node를 잠그지 않는다
+  // — `node:crypto`(recipient key)와 `node:` 내장은 정당한 사용이다(설계 §2.5 · §3.4.3).
+  // 코어 가드가 막는 것은 Node API가 아니라 Nest/rxjs/Expo import와 runtime.ts 밖의
+  // ambient 시계·난수·환경이다(tests/unit/guards/*).
+  "extends": "../tsconfig.base.json",
+  "compilerOptions": {
+    "experimentalDecorators": true,
+    "emitDecoratorMetadata": false,
+    "lib": ["ES2022"],
+    "types": ["node"],
+    "noEmit": true
+  },
+  "include": ["src"]
+}

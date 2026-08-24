@@ -1,0 +1,16 @@
+{
+  // 편집기/tsup 기준. tsconfig.src.json·tsconfig.tests.json은 이 파일을 extends하지 않고
+  // 루트 base를 직접 extends하므로, 데코레이터 플래그는 세 파일 모두에 명시한다.
+  "extends": "../tsconfig.base.json",
+  "compilerOptions": {
+    // Nest 데코레이터(@Injectable·@Inject) — 레거시 트랜스폼. 루트 base는 이 플래그를
+    // 주지 않으므로 패키지가 직접 켠다. TS5 네이티브 데코레이터에는 파라미터 데코레이터가
+    // 없어서 이 플래그 없이는 @Inject(토큰)이 컴파일되지 않는다.
+    "experimentalDecorators": true,
+    // 의도적 false — 형제 toss-payments-nestjs·nest-operations-jobs와 같은 결정.
+    // 모든 주입이 명시적 @Inject(토큰)이고 이 패키지의 어떤 코드도 design:paramtypes를
+    // 읽지 않으므로 SWC/esbuild 호스트에서 무설정으로 동작한다.
+    "emitDecoratorMetadata": false
+  },
+  "include": ["src", "tests"]
+}

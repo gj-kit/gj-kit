@@ -1,0 +1,108 @@
+{
+  "name": "@gj-kit/nest-notifications",
+  "version": "0.0.0",
+  "description": "내구성 알림 파이프라인 — 소스 트랜잭션 outbox → 릴레이(조용시간·배치·선호도) → 디스패치(inbox 메시지·푸시 fan-out). 순수 코어는 프레임워크·전송·저장소를 모르고, at-least-once 배달 계약과 저장소 원자성 의무를 명세로 강제한다. 런타임 의존성 0",
+  "keywords": [
+    "nestjs",
+    "notifications",
+    "push-notifications",
+    "outbox",
+    "transactional-outbox",
+    "expo-push",
+    "quiet-hours",
+    "idempotency",
+    "at-least-once"
+  ],
+  "homepage": "https://github.com/gj-kit/gj-kit/tree/main/nest-notifications",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/gj-kit/gj-kit.git",
+    "directory": "nest-notifications"
+  },
+  "bugs": {
+    "url": "https://github.com/gj-kit/gj-kit/issues"
+  },
+  "license": "MIT",
+  "type": "module",
+  "sideEffects": false,
+  "engines": {
+    "node": ">=20"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "files": [
+    "dist"
+  ],
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      },
+      "require": {
+        "types": "./dist/index.d.cts",
+        "default": "./dist/index.cjs"
+      }
+    },
+    "./core": {
+      "import": {
+        "types": "./dist/core.d.ts",
+        "default": "./dist/core.js"
+      },
+      "require": {
+        "types": "./dist/core.d.cts",
+        "default": "./dist/core.cjs"
+      }
+    },
+    "./expo": {
+      "import": {
+        "types": "./dist/expo.d.ts",
+        "default": "./dist/expo.js"
+      },
+      "require": {
+        "types": "./dist/expo.d.cts",
+        "default": "./dist/expo.cjs"
+      }
+    },
+    "./testing": {
+      "import": {
+        "types": "./dist/testing.d.ts",
+        "default": "./dist/testing.js"
+      },
+      "require": {
+        "types": "./dist/testing.d.cts",
+        "default": "./dist/testing.cjs"
+      }
+    },
+    "./package.json": "./package.json"
+  },
+  "scripts": {
+    "build": "tsup && node scripts/stamp-provenance.mjs",
+    "prepack": "npm run build && node scripts/check-provenance.mjs --require-clean",
+    "typecheck": "tsc --noEmit -p tsconfig.src.json && tsc --noEmit -p tsconfig.tests.json",
+    "test": "vitest run --project unit",
+    "test:types": "vitest run --project types",
+    "check:readme": "corepack pnpm run build && node scripts/check-readme.mjs",
+    "test:all": "pnpm run test && pnpm run test:types"
+  },
+  "peerDependencies": {
+    "@nestjs/common": "^10 || ^11",
+    "reflect-metadata": "^0.1.13 || ^0.2",
+    "rxjs": "^7"
+  },
+  "devDependencies": {
+    "@nestjs/common": "^11",
+    "@nestjs/core": "^11",
+    "@nestjs/testing": "^11",
+    "@types/node": "^24",
+    "reflect-metadata": "^0.2",
+    "rxjs": "^7",
+    "tsup": "^8",
+    "typescript": "^5",
+    "vitest": "^3"
+  }
+}

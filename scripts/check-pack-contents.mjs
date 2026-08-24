@@ -21,6 +21,7 @@ const packages = [
   { directory: 'expo-auth', requirePrepack: true, requireProvenance: true },
   { directory: 'format', requirePrepack: true, requireProvenance: true },
   { directory: 'nest-operations-jobs', requirePrepack: true, requireProvenance: true },
+  { directory: 'nest-notifications', requirePrepack: true, requireProvenance: true },
   { directory: 'toss-payments', requirePrepack: true, requireProvenance: true },
   { directory: 'toss-payments-nestjs', requirePrepack: true, requireProvenance: true },
   { directory: 'toss-payments-postgresql', requirePrepack: true, requireProvenance: true },

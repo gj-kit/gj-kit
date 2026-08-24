@@ -223,6 +223,9 @@ export function Menu<const T extends string>(props: MenuProps<T>): ReactElement 
     collisionPadding,
     size = 'md',
     variant = 'filled',
+    triggerTestID,
+    triggerHoverStyle,
+    itemHoverStyle,
     triggerStyle,
     triggerClassName,
     triggerLabelStyle,
@@ -239,7 +242,12 @@ export function Menu<const T extends string>(props: MenuProps<T>): ReactElement 
   } = props;
   const stack = useOptionalOverlayStack();
   if (stack === null) {
-    throw new Error('Menu must be rendered inside OverlayProvider.');
+    // 우아한 폴백을 두지 않는 이유: WebPopover의 outside-press/Escape 소유권
+    // 프로토콜이 stack의 topmost 판정에 의존한다 — stack 없이는 어느 레이어가
+    // 이벤트를 소비할지 결정할 수 없어 중첩 overlay 정합성이 깨진다.
+    throw new Error(
+      "Menu requires the overlay dismissal stack that coordinates stacked overlays (topmost-first Escape/outside-press ownership). Wrap the app — or the test render — in <UiProvider> from '@gj-kit/expo-ui', which creates the overlay scope automatically, or in an explicit <OverlayProvider>.",
+    );
   }
   const parentId = useOverlayParentId();
 
@@ -259,6 +267,8 @@ export function Menu<const T extends string>(props: MenuProps<T>): ReactElement 
   const wasOpenRef = useRef(false);
   const pendingOpenFocusRef = useRef<'first' | 'last' | null>(null);
   const [focusedIndex, setFocusedIndex] = useState<number | null>(null);
+  const [triggerHovered, setTriggerHovered] = useState(false);
+  const [hoveredItemIndex, setHoveredItemIndex] = useState<number | null>(null);
 
   const enabledIndices = useMemo(
     () => items.reduce<number[]>((indices, item, index) => {
@@ -350,6 +360,8 @@ export function Menu<const T extends string>(props: MenuProps<T>): ReactElement 
     if (!open) {
       typeaheadRef.current = createTypeaheadState();
       setFocusedIndex(null);
+      // 닫힌 사이 hover-out 이벤트가 오지 않으므로 재오픈 시 stale hover를 남기지 않는다.
+      setHoveredItemIndex(null);
     }
     wasOpenRef.current = open;
     return () => {
@@ -478,6 +490,13 @@ export function Menu<const T extends string>(props: MenuProps<T>): ReactElement 
         accessibilityState={{ disabled, expanded: open, busy }}
         disabled={disabled}
         onPress={handleTriggerPress}
+        onHoverIn={
+          triggerHoverStyle === undefined ? undefined : () => setTriggerHovered(true)
+        }
+        onHoverOut={
+          triggerHoverStyle === undefined ? undefined : () => setTriggerHovered(false)
+        }
+        testID={triggerTestID}
         {...(triggerWebProps as unknown as Record<string, unknown>)}
         {...nativeWindProps(mergeClassNames(PRESSABLE_FEEDBACK_CLASS, triggerClassName))}
         style={({ pressed }) => [
@@ -492,6 +511,9 @@ export function Menu<const T extends string>(props: MenuProps<T>): ReactElement 
             opacity: disabled ? 0.58 : 1,
           },
           triggerStyle,
+          !disabled && triggerHovered && triggerHoverStyle !== undefined
+            ? triggerHoverStyle
+            : null,
         ]}
       >
         {triggerIcon === undefined ? null : (
@@ -595,6 +617,19 @@ export function Menu<const T extends string>(props: MenuProps<T>): ReactElement 
                 }
                 disabled={itemDisabled}
                 onPress={(event) => selectItem(index, event)}
+                onHoverIn={
+                  itemHoverStyle === undefined
+                    ? undefined
+                    : () => setHoveredItemIndex(index)
+                }
+                onHoverOut={
+                  itemHoverStyle === undefined
+                    ? undefined
+                    : () =>
+                        setHoveredItemIndex((current) =>
+                          current === index ? null : current,
+                        )
+                }
                 testID={item.testID ?? (testID === undefined ? undefined : `${testID}-item-${index}`)}
                 {...(itemWebProps as unknown as Record<string, unknown>)}
                 {...nativeWindProps(mergeClassNames(PRESSABLE_FEEDBACK_CLASS, itemClassName))}
@@ -615,6 +650,11 @@ export function Menu<const T extends string>(props: MenuProps<T>): ReactElement 
                     opacity: itemDisabled ? 0.52 : 1,
                   },
                   itemStyle,
+                  !itemDisabled &&
+                  hoveredItemIndex === index &&
+                  itemHoverStyle !== undefined
+                    ? itemHoverStyle
+                    : null,
                 ]}
               >
                 {item.kind === 'checkbox' ? (

@@ -6,7 +6,7 @@
  */
 import type { ReactElement, ReactNode } from 'react';
 import { Platform, Text as RNText, View } from 'react-native';
-import type { ViewStyle } from 'react-native';
+import type { StyleProp, TextStyle, ViewStyle } from 'react-native';
 import type { ElevationKey, RadiusKey, SpacingKey, Theme } from '../theme/tokens';
 import { elevationStyle, mergeClassNames, nativeWindProps, resolveSpacing, themedStyles } from './internal';
 import type { CommonProps } from './internal';
@@ -116,6 +116,28 @@ export interface SectionProps extends Omit<CommonProps, 'unstyled'> {
   children?: ReactNode | undefined;
   /** typography.title. */
   title?: string | undefined;
+  /**
+   * When set, the title is exposed as a heading — native accessibilityRole
+   * "header", web role heading with this aria-level. Absent keeps the title a
+   * plain text node, exactly as before.
+   */
+  headingLevel?: 1 | 2 | 3 | 4 | 5 | 6 | undefined;
+  titleStyle?: StyleProp<TextStyle> | undefined;
+  titleClassName?: string | undefined;
+  /**
+   * Renders a token-styled count pill next to the title. Must be a finite
+   * number; formatting beyond String(count) stays with the caller.
+   */
+  count?: number | undefined;
+  /**
+   * Accessible name of the count pill — e.g. "40 of 812 shown". Defaults to
+   * the visible number. On the web the pill takes `role="img"` with this name
+   * and hides the numeral (ARIA prohibits naming a role-less generic element);
+   * native keeps the label on the numeral text element.
+   */
+  countAccessibilityLabel?: string | undefined;
+  /** Arbitrary node after the title and count pill, inside the title row. */
+  accessory?: ReactNode | undefined;
   /** typography.caption + textMuted. */
   subtitle?: string | undefined;
   actions?: ReactNode | undefined;
@@ -133,6 +155,17 @@ const getSectionStyles = themedStyles((theme: Theme) => ({
     justifyContent: 'space-between' as const,
   },
   copy: { flex: 1, minWidth: 0 },
+  titleRow: {
+    alignItems: 'center' as const,
+    flexDirection: 'row' as const,
+    flexWrap: 'wrap' as const,
+    gap: theme.spacing.sm,
+  },
+  countPill: {
+    borderRadius: theme.radius.pill,
+    paddingHorizontal: theme.spacing.sm,
+    paddingVertical: theme.spacing.xs,
+  },
   subtitle: { marginTop: theme.spacing.xs },
   actions: {
     alignItems: 'center' as const,
@@ -144,6 +177,12 @@ const getSectionStyles = themedStyles((theme: Theme) => ({
 export function Section({
   children,
   title,
+  headingLevel,
+  titleStyle,
+  titleClassName,
+  count,
+  countAccessibilityLabel,
+  accessory,
   subtitle,
   actions,
   gap = 'md',
@@ -153,20 +192,70 @@ export function Section({
 }: SectionProps): ReactElement {
   const theme = useTheme();
   const styles = getSectionStyles(theme);
+  if (count !== undefined && !Number.isFinite(count)) {
+    throw new Error('Section count must be a finite number.');
+  }
+  if (countAccessibilityLabel !== undefined && countAccessibilityLabel.trim().length === 0) {
+    throw new Error('Section countAccessibilityLabel must be a non-empty string.');
+  }
+  const titleNode = title ? (
+    <RNText
+      {...(headingLevel === undefined
+        ? {}
+        : {
+            accessibilityRole: 'header' as const,
+            ...(Platform.OS === 'web' ? { 'aria-level': headingLevel } : {}),
+          })}
+      {...nativeWindProps(titleClassName)}
+      style={[roleTextStyle(theme, 'title'), { color: theme.colors.text }, titleStyle]}
+    >
+      {title}
+    </RNText>
+  ) : null;
+  const namedPillOnWeb =
+    Platform.OS === 'web' && countAccessibilityLabel !== undefined;
+  const countNode =
+    count !== undefined ? (
+      <View
+        // ARIA prohibits naming a role-less generic element, so on the web the
+        // descriptive label must ride a name-permitting role on the pill with
+        // the numeral hidden (the readonly Rating pattern). Native keeps the
+        // plain Text accessibilityLabel, which is already a real accessibility
+        // element there.
+        {...(namedPillOnWeb
+          ? { role: 'img' as const, 'aria-label': countAccessibilityLabel }
+          : {})}
+        style={[styles.countPill, { backgroundColor: theme.colors.surfaceSubtle }]}
+      >
+        <RNText
+          {...(namedPillOnWeb
+            ? { accessible: false, 'aria-hidden': true }
+            : { accessibilityLabel: countAccessibilityLabel })}
+          style={[roleTextStyle(theme, 'caption'), { color: theme.colors.textMuted }]}
+        >
+          {String(count)}
+        </RNText>
+      </View>
+    ) : null;
+  const hasTitleRow = countNode !== null || (accessory !== undefined && accessory !== null);
   return (
     <View
       testID={testID}
       {...nativeWindProps(className)}
       style={[{ gap: resolveSpacing(theme, gap) }, style]}
     >
-      {title || subtitle || actions ? (
+      {title || subtitle || actions || hasTitleRow ? (
         <View style={styles.header}>
           <View style={styles.copy}>
-            {title ? (
-              <RNText style={[roleTextStyle(theme, 'title'), { color: theme.colors.text }]}>
-                {title}
-              </RNText>
-            ) : null}
+            {hasTitleRow ? (
+              <View style={styles.titleRow}>
+                {titleNode}
+                {countNode}
+                {accessory}
+              </View>
+            ) : (
+              titleNode
+            )}
             {subtitle ? (
               <RNText
                 style={[

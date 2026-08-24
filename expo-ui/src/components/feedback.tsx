@@ -52,13 +52,16 @@ export function Skeleton({
       opacity.setValue(SKELETON_OPACITY_MIN);
       return;
     }
+    // 웹의 RNW Animated에는 네이티브 드라이버가 없다 — true를 넘기면 인스턴스마다
+    // console.warn이 찍히고 어차피 JS 드라이버로 폴백된다. 동작은 동일하다.
+    const useNativeDriver = Platform.OS !== 'web';
     const animation = Animated.loop(
       Animated.sequence([
-        Animated.timing(opacity, { toValue: 1, duration: SKELETON_PULSE_MS, useNativeDriver: true }),
+        Animated.timing(opacity, { toValue: 1, duration: SKELETON_PULSE_MS, useNativeDriver }),
         Animated.timing(opacity, {
           toValue: SKELETON_OPACITY_MIN,
           duration: SKELETON_PULSE_MS,
-          useNativeDriver: true,
+          useNativeDriver,
         }),
       ]),
     );
@@ -93,6 +96,10 @@ const getStateStyles = themedStyles((theme: Theme) => ({
     gap: theme.spacing.md,
     padding: theme.spacing.xxl,
   },
+  emptyCardCompact: {
+    gap: theme.spacing.xs,
+    padding: theme.spacing.lg,
+  },
   iconCircle: {
     alignItems: 'center' as const,
     borderRadius: theme.radius.pill,
@@ -115,7 +122,16 @@ const getStateStyles = themedStyles((theme: Theme) => ({
   },
 }));
 
+export type EmptyStateVariant = 'default' | 'compact';
+
 export interface EmptyStateProps extends Omit<CommonProps, 'unstyled'> {
+  /**
+   * Defaults to 'default' — the standing card, unchanged. 'compact' is a
+   * one-line notice for table-internal or inline empty rows: label-role title,
+   * tighter padding, and no built-in icon (`leading` renders bare and only
+   * when explicitly provided).
+   */
+  variant?: EmptyStateVariant | undefined;
   /** Defaults to strings.emptyTitle. */
   title?: string | undefined;
   body?: string | undefined;
@@ -129,6 +145,7 @@ export interface EmptyStateProps extends Omit<CommonProps, 'unstyled'> {
 }
 
 export function EmptyState({
+  variant = 'default',
   title,
   body,
   action,
@@ -142,10 +159,12 @@ export function EmptyState({
   const strings = useStrings();
   const icons = useIcons();
   const styles = getStateStyles(theme);
+  const compact = variant === 'compact';
   const maxScale = maxFontSizeMultiplier ?? theme.metrics.maxFontScale;
-  const resolvedLeading =
-    leading ??
-    renderIconSlot(icons.empty, { color: theme.colors.textSubtle, size: theme.metrics.icon.lg });
+  const resolvedLeading = compact
+    ? leading
+    : leading ??
+      renderIconSlot(icons.empty, { color: theme.colors.textSubtle, size: theme.metrics.icon.lg });
 
   return (
     <View
@@ -153,17 +172,26 @@ export function EmptyState({
       {...nativeWindProps(className)}
       style={[
         styles.emptyCard,
+        compact ? styles.emptyCardCompact : null,
         { backgroundColor: theme.colors.surface, borderColor: theme.colors.line },
         style,
       ]}
     >
       {resolvedLeading ? (
-        <View style={[styles.iconCircle, { backgroundColor: theme.colors.surfaceSubtle }]}>
-          {resolvedLeading}
-        </View>
+        compact ? (
+          resolvedLeading
+        ) : (
+          <View style={[styles.iconCircle, { backgroundColor: theme.colors.surfaceSubtle }]}>
+            {resolvedLeading}
+          </View>
+        )
       ) : null}
       <RNText
-        style={[roleTextStyle(theme, 'title'), styles.centerText, { color: theme.colors.text }]}
+        style={[
+          roleTextStyle(theme, compact ? 'label' : 'title'),
+          styles.centerText,
+          { color: theme.colors.text },
+        ]}
         maxFontSizeMultiplier={maxScale}
       >
         {title ?? strings.emptyTitle}

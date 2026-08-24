@@ -14,6 +14,7 @@ import {
   useId,
   useLayoutEffect,
   useRef,
+  useState,
   useSyncExternalStore,
 } from 'react';
 import type { ReactElement, ReactNode, RefObject } from 'react';
@@ -47,6 +48,7 @@ import type {
 } from './overlay/types';
 import { useEscapeKey } from './overlay/use-escape-key';
 import { useIcons, useStrings, useTheme } from './provider';
+import { useReducedMotion } from './use-reduced-motion';
 import { roleTextStyle } from './text';
 import { Button, IconButton } from './button';
 import type { ButtonVariant } from './button';
@@ -98,11 +100,33 @@ export interface DialogPanelProps extends Omit<CommonProps, 'unstyled'> {
   leading?: ReactNode | undefined;
   footer?: ReactNode | undefined;
   titleStyle?: StyleProp<TextStyle> | undefined;
+  /** Styles the header row wrapping leading, the title/description copy, and the close button. */
+  headerStyle?: StyleProp<ViewStyle> | undefined;
+  descriptionStyle?: StyleProp<TextStyle> | undefined;
+  /**
+   * Hides the header visually — the title/description block and the leading
+   * node are both skipped; the close button keeps its own header row. A dialog
+   * must still have an accessible name, so a modal Dialog whose direct panel
+   * hides its header requires the Dialog accessibilityLabel (enforced at
+   * render). On the web that label names the modal; on native the panel
+   * content should carry its own context, exactly like the arbitrary-content
+   * Dialog branch. When defined it must be an actual boolean (enforced at
+   * render), so truthy non-booleans cannot bypass the naming rule.
+   */
+  hideHeader?: boolean | undefined;
   /** Defaults to true inside a Dialog. Standalone there is no dismiss behavior, so it is not rendered. */
   showCloseButton?: boolean | undefined;
   /** Defaults to strings.close. */
   closeAccessibilityLabel?: string | undefined;
   closeButtonTestID?: string | undefined;
+  closeButtonStyle?: StyleProp<ViewStyle> | undefined;
+  /**
+   * Replaces the default close mark (icons.close or the × glyph). The button
+   * keeps its accessible name. Like every icon slot, null — passed directly or
+   * returned from the RenderIcon — falls back to the default mark; render an
+   * empty fragment for a mark-less button.
+   */
+  closeIcon?: ReactNode | RenderIcon | undefined;
   unstyled?: never;
 }
 
@@ -119,6 +143,9 @@ const getStyles = themedStyles((theme: Theme) => ({
     alignItems: 'flex-start' as const,
     flexDirection: 'row' as const,
     gap: theme.spacing.md,
+  },
+  panelHeaderEnd: {
+    justifyContent: 'flex-end' as const,
   },
   copy: {
     flex: 1,
@@ -171,6 +198,15 @@ function assertOptionalNonEmptyString(value: string | undefined, label: string):
   if (value !== undefined) assertNonEmptyString(value, label);
 }
 
+// hideHeader의 렌더 분기는 truthiness, 이름 규율 강제는 === true를 쓴다 — JS
+// 소비자가 truthy 비-boolean으로 그 틈을 지나 이름 없는 다이얼로그를 만들 수
+// 없도록, 정의된 값은 실제 boolean임을 렌더 전에 강제한다(§ 런타임 검증 규율).
+function assertOptionalBoolean(value: boolean | undefined, label: string): void {
+  if (value !== undefined && typeof value !== 'boolean') {
+    throw new TypeError(`${label} must be a boolean.`);
+  }
+}
+
 /** The visual panel inside a Modal. It only creates a close button when a Dialog context exists. */
 export function DialogPanel({
   children,
@@ -179,9 +215,14 @@ export function DialogPanel({
   leading,
   footer,
   titleStyle,
+  headerStyle,
+  descriptionStyle,
+  hideHeader = false,
   showCloseButton = true,
   closeAccessibilityLabel,
   closeButtonTestID,
+  closeButtonStyle,
+  closeIcon,
   style,
   className,
   testID,
@@ -197,22 +238,37 @@ export function DialogPanel({
     closeAccessibilityLabel,
     'DialogPanel closeAccessibilityLabel',
   );
+  assertOptionalBoolean(hideHeader, 'DialogPanel hideHeader');
   if (dialog !== null && showCloseButton) {
     assertNonEmptyString(
       closeAccessibilityLabel ?? strings.close,
       'DialogPanel closeAccessibilityLabel',
     );
   }
-  const closeIcon: RenderIcon = (iconProps) => (
+  const closeIconSlot: RenderIcon = (iconProps) => (
     <View
       accessible={false}
       aria-hidden
       importantForAccessibility="no-hide-descendants"
       style={styles.closeIcon}
     >
-      {renderIconSlot(icons.close, iconProps) ?? closeGlyph(iconProps)}
+      {renderIconSlot(closeIcon, iconProps) ??
+        renderIconSlot(icons.close, iconProps) ??
+        closeGlyph(iconProps)}
     </View>
   );
+  const closeButton =
+    dialog !== null && showCloseButton ? (
+      <IconButton
+        accessibilityLabel={closeAccessibilityLabel ?? strings.close}
+        icon={closeIconSlot}
+        onPress={() => dialog.requestDismiss('close-action')}
+        disabled={dialog.dismissDisabled}
+        size={theme.metrics.control.md}
+        style={closeButtonStyle}
+        testID={closeButtonTestID}
+      />
+    ) : null;
 
   return (
     <View
@@ -224,42 +280,47 @@ export function DialogPanel({
         style,
       ]}
     >
-      <View style={styles.panelHeader}>
-        {leading}
-        <View style={styles.copy}>
-          <RNText
-            accessible
-            nativeID={dialog?.titleId}
-            accessibilityRole="header"
-            // RNW는 aria-level 없는 header를 <h1>으로 내보낸다. 다이얼로그 제목은
-            // 문서 제목이 아니라 페이지 안의 섹션 제목이므로 h2로 고정한다.
-            {...(Platform.OS === 'web' ? { 'aria-level': 2 } : {})}
-            accessibilityLabel={dialog?.nativeTitleAccessibilityLabel}
-            style={[roleTextStyle(theme, 'title'), { color: theme.colors.text }, titleStyle]}
-          >
-            {title}
-          </RNText>
-          {description !== undefined ? (
+      {hideHeader ? (
+        // 헤더 생략 시에도 닫기 버튼은 자체 행으로 남는다 — dismiss affordance는
+        // showCloseButton이 별도로 소유한다.
+        closeButton === null ? null : (
+          <View style={[styles.panelHeader, styles.panelHeaderEnd, headerStyle]}>
+            {closeButton}
+          </View>
+        )
+      ) : (
+        <View style={[styles.panelHeader, headerStyle]}>
+          {leading}
+          <View style={styles.copy}>
             <RNText
               accessible
-              nativeID={dialog?.descriptionId}
-              style={[roleTextStyle(theme, 'caption'), { color: theme.colors.textMuted }]}
+              nativeID={dialog?.titleId}
+              accessibilityRole="header"
+              // RNW는 aria-level 없는 header를 <h1>으로 내보낸다. 다이얼로그 제목은
+              // 문서 제목이 아니라 페이지 안의 섹션 제목이므로 h2로 고정한다.
+              {...(Platform.OS === 'web' ? { 'aria-level': 2 } : {})}
+              accessibilityLabel={dialog?.nativeTitleAccessibilityLabel}
+              style={[roleTextStyle(theme, 'title'), { color: theme.colors.text }, titleStyle]}
             >
-              {description}
+              {title}
             </RNText>
-          ) : null}
+            {description !== undefined ? (
+              <RNText
+                accessible
+                nativeID={dialog?.descriptionId}
+                style={[
+                  roleTextStyle(theme, 'caption'),
+                  { color: theme.colors.textMuted },
+                  descriptionStyle,
+                ]}
+              >
+                {description}
+              </RNText>
+            ) : null}
+          </View>
+          {closeButton}
         </View>
-        {dialog !== null && showCloseButton ? (
-          <IconButton
-            accessibilityLabel={closeAccessibilityLabel ?? strings.close}
-            icon={closeIcon}
-            onPress={() => dialog.requestDismiss('close-action')}
-            disabled={dialog.dismissDisabled}
-            size={theme.metrics.control.md}
-            testID={closeButtonTestID}
-          />
-        ) : null}
-      </View>
+      )}
       {children}
       {footer}
     </View>
@@ -274,7 +335,14 @@ interface DialogBaseProps {
   dismissOnBackdrop?: boolean | undefined;
   /** Blocks the backdrop, Escape/Back, the accessibility escape, and the panel's close button alike. */
   dismissDisabled?: boolean | undefined;
-  /** The existing default of 'fade'. */
+  /**
+   * Defaults to 'fade'. Motion is opt-in by platform consent — the same
+   * conservative policy as Sheet: the modal animates only after the platform
+   * has affirmatively reported that reduced motion is off, and presents with
+   * 'none' both while the preference is still unresolved and whenever reduced
+   * motion is on, regardless of this value. A preference learned while the
+   * dialog is open never replays the entrance.
+   */
   animationType?: NonNullable<ModalProps['animationType']> | undefined;
   /** Best-effort focus after onShow, only when specified. RNW's own focus trap is left alone. */
   initialFocusRef?: DialogFocusRef | undefined;
@@ -282,6 +350,15 @@ interface DialogBaseProps {
   finalFocusRef?: DialogFocusRef | undefined;
   overlayId?: string | undefined;
   overlayStyle?: StyleProp<ViewStyle> | undefined;
+  /**
+   * Style override layered onto the backdrop pressable after the theme's
+   * overlay color (modal presentation only — inline renders no backdrop).
+   * Overriding backgroundColor (for example with 'transparent' to build a
+   * dim-less anchored overlay) removes the scrim the theme guarantees, so
+   * contrast between the panel and the page behind it becomes the consumer's
+   * responsibility.
+   */
+  backdropStyle?: StyleProp<ViewStyle> | undefined;
   contentStyle?: StyleProp<ViewStyle> | undefined;
   /** The outer layout of the inline presentation only. contentStyle is identical across both presentations. */
   inlineStyle?: StyleProp<ViewStyle> | undefined;
@@ -368,6 +445,7 @@ export function Dialog({
   finalFocusRef,
   overlayId: overlayIdProp,
   overlayStyle,
+  backdropStyle,
   contentStyle,
   inlineStyle,
   testID,
@@ -376,6 +454,7 @@ export function Dialog({
   const styles = getStyles(theme);
   const reactId = sanitizeId(useId());
   const overlayId = overlayIdProp ?? `gj-dialog-${reactId}`;
+  const reduceMotion = useReducedMotion();
   const overlayStack = useOptionalOverlayStack();
   const parentOverlayId = useOverlayParentId();
   const overlaySnapshot = useSyncExternalStore(
@@ -391,11 +470,38 @@ export function Dialog({
     overlaySnapshot.entries.some((entry) => entry.id === overlayId);
   const modalIsVisible =
     visible && (overlayStack === null || parentIsRegistered);
+  // Motion is opt-in by platform consent, mirroring Sheet: animate only after
+  // the platform has affirmatively reported that reduced motion is off. The
+  // unresolved startup window presents with 'none' (isReduceMotionEnabled is
+  // async, so a dialog mounted already-visible would otherwise replay its full
+  // entrance for reduce-motion users). A preference learned while the dialog
+  // is open must not replay the entrance either — RNW's Modal restarts its CSS
+  // animation when animationType changes mid-presentation — so a new animation
+  // only commits while a closed state is on screen. This state-based latch is
+  // safe when a concurrent render is aborted because effects never commit.
+  const preferredAnimation: NonNullable<ModalProps['animationType']> =
+    reduceMotion === false ? animationType : 'none';
+  const [cycleAnimation, setCycleAnimation] = useState<
+    NonNullable<ModalProps['animationType']>
+  >('none');
+  useEffect(() => {
+    if (reduceMotion === true) {
+      // Reduce motion immediately, including while the dialog is visible.
+      setCycleAnimation('none');
+    } else if (!modalIsVisible) {
+      setCycleAnimation(preferredAnimation);
+    }
+  }, [modalIsVisible, preferredAnimation, reduceMotion]);
   const domIdBase = sanitizeId(overlayId) || `gj-dialog-${reactId}`;
   const titleId = `${domIdBase}-title`;
   const directPanel = isDirectDialogPanel(children) ? children : null;
+  // hideHeader는 description 노드를 렌더하지 않으므로 aria-describedby가 빈
+  // 참조가 되지 않게 함께 끈다.
   const descriptionId =
-    directPanel?.props.description !== undefined ? `${domIdBase}-description` : undefined;
+    directPanel?.props.description !== undefined &&
+    directPanel.props.hideHeader !== true
+      ? `${domIdBase}-description`
+      : undefined;
   const restoredRef = useRef(false);
   const wasVisibleRef = useRef(false);
   const visibleRef = useRef(visible);
@@ -561,6 +667,7 @@ export function Dialog({
       directPanel.props.closeAccessibilityLabel,
       'DialogPanel closeAccessibilityLabel',
     );
+    assertOptionalBoolean(directPanel.props.hideHeader, 'DialogPanel hideHeader');
   }
 
   const contextValue: DialogPanelContextValue = {
@@ -581,6 +688,18 @@ export function Dialog({
   ) {
     throw new Error(
       'Dialog requires accessibilityLabel when children is not a direct DialogPanel.',
+    );
+  }
+  if (
+    presentation === 'modal' &&
+    directPanel !== null &&
+    directPanel.props.hideHeader === true &&
+    accessibilityLabel === undefined
+  ) {
+    // hideHeader가 보이는 제목을 제거하면 파생 이름도 사라진다 — 이름 없는
+    // 다이얼로그를 렌더 전에 막는다(임의 콘텐츠 분기와 같은 명명 규율).
+    throw new Error(
+      'Dialog requires accessibilityLabel when its DialogPanel sets hideHeader — hiding the header removes the visible title that would otherwise name the dialog.',
     );
   }
 
@@ -640,7 +759,7 @@ export function Dialog({
     <Modal
       visible={modalIsVisible}
       transparent
-      animationType={animationType}
+      animationType={reduceMotion === true ? 'none' : cycleAnimation}
       testID={testID}
       {...webAccessibilityProps}
       onShow={focusInitial}
@@ -671,6 +790,7 @@ export function Dialog({
           style={[
             StyleSheet.absoluteFill,
             { backgroundColor: theme.colors.overlay },
+            backdropStyle,
           ]}
         />
         {layeredContent}
@@ -694,6 +814,13 @@ export interface ConfirmActionRowProps extends Omit<CommonProps, 'unstyled'> {
   /** Confirm is loading — cancel is disabled automatically. */
   loading?: boolean | undefined;
   cancelLoading?: boolean | undefined;
+  cancelTestID?: string | undefined;
+  confirmTestID?: string | undefined;
+  /** Per-button container style, layered after the built-in flex sizing. */
+  cancelStyle?: StyleProp<ViewStyle> | undefined;
+  confirmStyle?: StyleProp<ViewStyle> | undefined;
+  cancelLabelStyle?: StyleProp<TextStyle> | undefined;
+  confirmLabelStyle?: StyleProp<TextStyle> | undefined;
   unstyled?: never;
 }
 
@@ -707,6 +834,12 @@ export function ConfirmActionRow({
   destructive = false,
   loading,
   cancelLoading,
+  cancelTestID,
+  confirmTestID,
+  cancelStyle,
+  confirmStyle,
+  cancelLabelStyle,
+  confirmLabelStyle,
   style,
   className,
   testID,
@@ -722,7 +855,9 @@ export function ConfirmActionRow({
         onPress={onCancel}
         disabled={Boolean(loading)}
         loading={Boolean(cancelLoading)}
-        style={styles.actionButton}
+        style={[styles.actionButton, cancelStyle]}
+        labelStyle={cancelLabelStyle}
+        testID={cancelTestID}
       />
       <Button
         label={confirmLabel ?? strings.confirm}
@@ -730,7 +865,9 @@ export function ConfirmActionRow({
         onPress={onConfirm}
         disabled={Boolean(cancelLoading)}
         loading={Boolean(loading)}
-        style={styles.actionButton}
+        style={[styles.actionButton, confirmStyle]}
+        labelStyle={confirmLabelStyle}
+        testID={confirmTestID}
       />
     </View>
   );

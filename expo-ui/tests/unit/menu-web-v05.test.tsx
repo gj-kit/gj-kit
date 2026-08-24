@@ -305,7 +305,7 @@ describe('Menu web — controlled anchored menu semantics', () => {
           onSelect={() => {}}
         />,
       ),
-    ).toThrow('Menu must be rendered inside OverlayProvider.');
+    ).toThrow('Menu requires the overlay dismissal stack');
 
     expect(() =>
       render(

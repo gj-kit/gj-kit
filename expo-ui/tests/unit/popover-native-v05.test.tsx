@@ -1,6 +1,7 @@
 import { useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import {
+  act,
   cleanup,
   fireEvent,
   render,
@@ -9,7 +10,7 @@ import {
   within,
 } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { Platform, Pressable, Text, View } from 'react-native';
+import { AccessibilityInfo, Platform, Pressable, Text, View } from 'react-native';
 import { OverlayProvider } from '../../src/components/overlay/provider';
 import { Popover } from '../../src/components/popover.native';
 import type { PopoverOpenChangeDetails } from '../../src/components/popover.types';
@@ -108,8 +109,19 @@ describe('Popover native/default — adaptive modal dialog', () => {
   });
 
   it('maps close and backdrop reasons and restores final focus to the trigger', async () => {
+    // 이 테스트는 닫힘 애니메이션이 완료될 때까지 modal이 남아 있는 경로를 검증한다.
+    // Dialog는 플랫폼이 모션 허용(false)을 확정한 뒤 닫힌 커밋에서만 애니메이션을
+    // latch하므로, 선호도를 false로 고정하고 닫힌 상태에서 flush한 뒤 트리거로 연다.
+    vi.spyOn(AccessibilityInfo, 'isReduceMotionEnabled').mockReturnValue(
+      Promise.resolve(false),
+    );
+    vi.spyOn(AccessibilityInfo, 'addEventListener').mockReturnValue({ remove: vi.fn() } as never);
     const onOpenChange = vi.fn();
-    render(<Harness initialOpen onOpenChange={onOpenChange} />);
+    render(<Harness onOpenChange={onOpenChange} />);
+    await act(async () => {
+      await Promise.resolve();
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Account details' }));
     let dialog = await showModal();
     fireEvent.click(within(dialog).getByRole('button', { name: 'Close' }));
     expect(onOpenChange).toHaveBeenLastCalledWith(

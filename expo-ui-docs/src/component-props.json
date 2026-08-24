@@ -23,6 +23,12 @@
         "name": "style",
         "type": "StyleProp<TextStyle>",
         "required": false
+      },
+      {
+        "name": "tabularNums",
+        "type": "boolean",
+        "required": false,
+        "description": "Renders every digit at the same advance width so columns of figures line up.\nEmits `fontVariant: ['tabular-nums']`, which React Native Web serializes as\nthe CSS `font-variant` shorthand carrying the tabular-figures feature.\nDefaults to false."
       }
     ],
     "inheritsPlatformProps": true
@@ -203,6 +209,12 @@
         "description": "Passed to the native element without interpretation — NativeWind is a host concern (§5)."
       },
       {
+        "name": "count",
+        "type": "number",
+        "required": false,
+        "description": "Convenience count rendered after the label in a muted token color. Must be\na finite number. On the interactive kinds it also joins the accessible\nname (\"Done, 700\"); on a static chip it stays ordinary readable text."
+      },
+      {
         "name": "disabled",
         "type": "boolean",
         "required": false,
@@ -270,6 +282,12 @@
         "name": "testID",
         "type": "string",
         "required": false
+      },
+      {
+        "name": "trailing",
+        "type": "ReactNode",
+        "required": false,
+        "description": "Presentation-only node after the label and count — hidden from\naccessibility. Interactive trailing content is unsupported; use the\nremovable kind's dedicated remove button for a trailing action."
       },
       {
         "name": "variant",
@@ -731,6 +749,12 @@
         "required": false
       },
       {
+        "name": "itemHoverStyle",
+        "type": "StyleProp<ViewStyle>",
+        "required": false,
+        "description": "Applied to an enabled option while a pointer hovers it. Layered after itemStyle."
+      },
+      {
         "name": "itemLabelClassName",
         "type": "string",
         "required": false
@@ -813,9 +837,21 @@
         "required": false
       },
       {
+        "name": "triggerHoverStyle",
+        "type": "StyleProp<ViewStyle>",
+        "required": false,
+        "description": "Applied to the trigger while a pointer hovers it (web and pointer-equipped devices). Layered after triggerStyle."
+      },
+      {
         "name": "triggerStyle",
         "type": "StyleProp<ViewStyle>",
         "required": false
+      },
+      {
+        "name": "triggerTestID",
+        "type": "string",
+        "required": false,
+        "description": "testID on the trigger pressable itself (the actual press target). On the web it replaces the derived `${testID}-trigger`."
       },
       {
         "name": "valueClassName",
@@ -1448,6 +1484,12 @@
         "name": "testID",
         "type": "string",
         "required": false
+      },
+      {
+        "name": "variant",
+        "type": "SegmentedControlVariant",
+        "required": false,
+        "description": "Visual treatment only; radio semantics and keyboard behavior are identical. Defaults to filled."
       }
     ]
   },
@@ -1836,6 +1878,18 @@
         "required": true
       },
       {
+        "name": "accessibilityHint",
+        "type": "string",
+        "required": false,
+        "conditional": true
+      },
+      {
+        "name": "accessibilityLabel",
+        "type": "string",
+        "required": false,
+        "conditional": true
+      },
+      {
         "name": "className",
         "type": "string",
         "required": false,
@@ -1848,6 +1902,18 @@
         "description": "Applies to the inner content layout, such as child alignment and spacing."
       },
       {
+        "name": "disabled",
+        "type": "boolean",
+        "required": false,
+        "conditional": true
+      },
+      {
+        "name": "onPress",
+        "type": "() => void",
+        "required": false,
+        "conditional": true
+      },
+      {
         "name": "padding",
         "type": "number | keyof ThemeSpacing",
         "required": false,
@@ -1858,6 +1924,13 @@
         "type": "keyof ThemeRadius",
         "required": false,
         "description": "Defaults to 'md'."
+      },
+      {
+        "name": "selected",
+        "type": "boolean",
+        "required": false,
+        "description": "A boolean makes the card an independent toggle button — aria-pressed on\nweb, togglebutton with a checked state natively — plus a primary token\nborder and primarySoft background while selected. Leave it undefined for a\nplain button. For an exactly-one-of-N group, RadioGroup is the honest\nwidget; a selectable Card group reads as independent toggles.",
+        "conditional": true
       },
       {
         "name": "style",
@@ -1967,6 +2040,12 @@
     "typeName": "SectionProps",
     "props": [
       {
+        "name": "accessory",
+        "type": "ReactNode",
+        "required": false,
+        "description": "Arbitrary node after the title and count pill, inside the title row."
+      },
+      {
         "name": "actions",
         "type": "ReactNode",
         "required": false
@@ -1983,10 +2062,28 @@
         "description": "Passed to the native element without interpretation — NativeWind is a host concern (§5)."
       },
       {
+        "name": "count",
+        "type": "number",
+        "required": false,
+        "description": "Renders a token-styled count pill next to the title. Must be a finite\nnumber; formatting beyond String(count) stays with the caller."
+      },
+      {
+        "name": "countAccessibilityLabel",
+        "type": "string",
+        "required": false,
+        "description": "Accessible name of the count pill — e.g. \"40 of 812 shown\". Defaults to\nthe visible number. On the web the pill takes `role=\"img\"` with this name\nand hides the numeral (ARIA prohibits naming a role-less generic element);\nnative keeps the label on the numeral text element."
+      },
+      {
         "name": "gap",
         "type": "number | keyof ThemeSpacing",
         "required": false,
         "description": "Defaults to 'md'."
+      },
+      {
+        "name": "headingLevel",
+        "type": "1 | 2 | 3 | 4 | 5 | 6",
+        "required": false,
+        "description": "When set, the title is exposed as a heading — native accessibilityRole\n\"header\", web role heading with this aria-level. Absent keeps the title a\nplain text node, exactly as before."
       },
       {
         "name": "style",
@@ -2009,6 +2106,16 @@
         "type": "string",
         "required": false,
         "description": "typography.title."
+      },
+      {
+        "name": "titleClassName",
+        "type": "string",
+        "required": false
+      },
+      {
+        "name": "titleStyle",
+        "type": "StyleProp<TextStyle>",
+        "required": false
       }
     ]
   },
@@ -2124,6 +2231,12 @@
         "type": "string",
         "required": false,
         "description": "Defaults to strings.emptyTitle."
+      },
+      {
+        "name": "variant",
+        "type": "EmptyStateVariant",
+        "required": false,
+        "description": "Defaults to 'default' — the standing card, unchanged. 'compact' is a\none-line notice for table-internal or inline empty rows: label-role title,\ntighter padding, and no built-in icon (`leading` renders bare and only\nwhen explicitly provided)."
       }
     ]
   },
@@ -2286,6 +2399,12 @@
         "name": "label",
         "type": "string",
         "required": true
+      },
+      {
+        "name": "accessibilityLabel",
+        "type": "string",
+        "required": false,
+        "description": "Overrides the accessible name derived from the visible label — for example\n\"Paid (PAID)\" while the visible label stays localized. When present, the\nbadge is exposed as one accessibility element carrying this name: native\nflattens the accessible root, and the web root takes `role=\"img\"` with the\nlabel hidden from assistive technology, because ARIA prohibits naming a\nrole-less generic element."
       },
       {
         "name": "className",
@@ -2786,6 +2905,13 @@
         "required": false
       },
       {
+        "name": "getRowAccessibilityLabel",
+        "type": "(row: Row) => string",
+        "required": false,
+        "description": "Accessible name of an activatable row. Defaults to the row's cells\njoined as \"header: value\". Must return a nonblank string.",
+        "conditional": true
+      },
+      {
         "name": "headerCellClassName",
         "type": "string",
         "required": false
@@ -2819,6 +2945,13 @@
         "name": "minTableWidth",
         "type": "number",
         "required": false
+      },
+      {
+        "name": "onRowPress",
+        "type": "(row: Row, context: DataTableRowPressContext<RowKey>) => void",
+        "required": false,
+        "description": "Called when a body row is activated by pointer or keyboard. Never\nfires from the selection checkbox or from interactive cell content.",
+        "conditional": true
       },
       {
         "name": "onSortChange",
@@ -3170,7 +3303,13 @@
         "name": "animationType",
         "type": "NonNullable<'none' | 'slide' | 'fade' | undefined>",
         "required": false,
-        "description": "The existing default of 'fade'."
+        "description": "Defaults to 'fade'. Motion is opt-in by platform consent — the same\nconservative policy as Sheet: the modal animates only after the platform\nhas affirmatively reported that reduced motion is off, and presents with\n'none' both while the preference is still unresolved and whenever reduced\nmotion is on, regardless of this value. A preference learned while the\ndialog is open never replays the entrance."
+      },
+      {
+        "name": "backdropStyle",
+        "type": "StyleProp<ViewStyle>",
+        "required": false,
+        "description": "Style override layered onto the backdrop pressable after the theme's\noverlay color (modal presentation only — inline renders no backdrop).\nOverriding backgroundColor (for example with 'transparent' to build a\ndim-less anchored overlay) removes the scrim the theme guarantees, so\ncontrast between the panel and the page behind it becomes the consumer's\nresponsibility."
       },
       {
         "name": "contentStyle",
@@ -3258,10 +3397,22 @@
         "description": "The caller owns visibility; this component only requests dismissal."
       },
       {
+        "name": "animationType",
+        "type": "NonNullable<'none' | 'slide' | 'fade' | undefined>",
+        "required": false,
+        "description": "Passed through to Dialog. Defaults to Dialog's 'fade'; Dialog animates\nonly once the platform has affirmatively reported that reduced motion is\noff, and presents with 'none' otherwise (unresolved or reduced)."
+      },
+      {
         "name": "cancelLabel",
         "type": "string",
         "required": false,
         "description": "Defaults to strings.cancel."
+      },
+      {
+        "name": "cancelTestID",
+        "type": "string",
+        "required": false,
+        "description": "testID of the cancel button. Defaults to `${testID}-cancel`."
       },
       {
         "name": "className",
@@ -3280,6 +3431,12 @@
         "type": "string",
         "required": false,
         "description": "Defaults to strings.confirm."
+      },
+      {
+        "name": "confirmTestID",
+        "type": "string",
+        "required": false,
+        "description": "testID of the confirm button. Defaults to `${testID}-confirm`."
       },
       {
         "name": "confirmVariant",
@@ -3353,9 +3510,20 @@
         "description": "Defaults to strings.close."
       },
       {
+        "name": "closeButtonStyle",
+        "type": "StyleProp<ViewStyle>",
+        "required": false
+      },
+      {
         "name": "closeButtonTestID",
         "type": "string",
         "required": false
+      },
+      {
+        "name": "closeIcon",
+        "type": "ReactNode | RenderIcon",
+        "required": false,
+        "description": "Replaces the default close mark (icons.close or the × glyph). The button\nkeeps its accessible name. Like every icon slot, null — passed directly or\nreturned from the RenderIcon — falls back to the default mark; render an\nempty fragment for a mark-less button."
       },
       {
         "name": "description",
@@ -3363,9 +3531,26 @@
         "required": false
       },
       {
+        "name": "descriptionStyle",
+        "type": "StyleProp<TextStyle>",
+        "required": false
+      },
+      {
         "name": "footer",
         "type": "ReactNode",
         "required": false
+      },
+      {
+        "name": "headerStyle",
+        "type": "StyleProp<ViewStyle>",
+        "required": false,
+        "description": "Styles the header row wrapping leading, the title/description copy, and the close button."
+      },
+      {
+        "name": "hideHeader",
+        "type": "boolean",
+        "required": false,
+        "description": "Hides the header visually — the title/description block and the leading\nnode are both skipped; the close button keeps its own header row. A dialog\nmust still have an accessible name, so a modal Dialog whose direct panel\nhides its header requires the Dialog accessibilityLabel (enforced at\nrender). On the web that label names the modal; on native the panel\ncontent should carry its own context, exactly like the arbitrary-content\nDialog branch. When defined it must be an actual boolean (enforced at\nrender), so truthy non-booleans cannot bypass the naming rule."
       },
       {
         "name": "leading",
@@ -3635,6 +3820,12 @@
         "type": "'internal' | 'provided'",
         "required": false,
         "conditional": true
+      },
+      {
+        "name": "showCloseButton",
+        "type": "boolean",
+        "required": false,
+        "description": "Defaults to true. When false, the header close button is not rendered but\nthe backdrop, Escape, hardware Back, and the accessibility escape still\ndismiss — the close X is a convenience, not the only exit. Combining\nshowCloseButton={false} with dismissDisabled removes every built-in exit:\nthe sheet then stays open until the caller closes it, so the caller owns\nproviding an explicit way out (typically footer actions), the same\nforced-choice pattern as a confirm surface."
       },
       {
         "name": "style",
@@ -4057,6 +4248,12 @@
         "required": false
       },
       {
+        "name": "itemHoverStyle",
+        "type": "StyleProp<ViewStyle>",
+        "required": false,
+        "description": "Applied to an enabled item while a pointer hovers it. Layered after itemStyle."
+      },
+      {
         "name": "itemLabelClassName",
         "type": "string",
         "required": false
@@ -4113,6 +4310,12 @@
         "required": false
       },
       {
+        "name": "triggerHoverStyle",
+        "type": "StyleProp<ViewStyle>",
+        "required": false,
+        "description": "Applied to the trigger while a pointer hovers it (web and pointer-equipped devices). Layered after triggerStyle."
+      },
+      {
         "name": "triggerIcon",
         "type": "ReactNode | RenderIcon | NonNullable<ReactNode>",
         "required": false,
@@ -4132,6 +4335,12 @@
         "name": "triggerStyle",
         "type": "StyleProp<ViewStyle>",
         "required": false
+      },
+      {
+        "name": "triggerTestID",
+        "type": "string",
+        "required": false,
+        "description": "testID on the trigger pressable itself (the actual press target), distinct from the root container testID."
       },
       {
         "name": "variant",
@@ -4160,8 +4369,24 @@
         "description": "Defaults to strings.cancel."
       },
       {
+        "name": "cancelLabelStyle",
+        "type": "StyleProp<TextStyle>",
+        "required": false
+      },
+      {
         "name": "cancelLoading",
         "type": "boolean",
+        "required": false
+      },
+      {
+        "name": "cancelStyle",
+        "type": "StyleProp<ViewStyle>",
+        "required": false,
+        "description": "Per-button container style, layered after the built-in flex sizing."
+      },
+      {
+        "name": "cancelTestID",
+        "type": "string",
         "required": false
       },
       {
@@ -4181,6 +4406,21 @@
         "type": "string",
         "required": false,
         "description": "Defaults to strings.confirm."
+      },
+      {
+        "name": "confirmLabelStyle",
+        "type": "StyleProp<TextStyle>",
+        "required": false
+      },
+      {
+        "name": "confirmStyle",
+        "type": "StyleProp<ViewStyle>",
+        "required": false
+      },
+      {
+        "name": "confirmTestID",
+        "type": "string",
+        "required": false
       },
       {
         "name": "confirmVariant",

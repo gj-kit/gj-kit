@@ -713,7 +713,7 @@ describe('Select web — controlled select-only combobox', () => {
           onOpenChange={() => {}}
         />,
       ),
-    ).toThrow('Select must be rendered inside OverlayProvider.');
+    ).toThrow('Select requires the overlay dismissal stack');
 
     expect(() =>
       render(

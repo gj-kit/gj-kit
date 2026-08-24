@@ -101,6 +101,15 @@ const getStyles = themedStyles((theme: Theme) => ({
 
 export interface BadgeProps extends Omit<CommonProps, 'unstyled'> {
   label: string;
+  /**
+   * Overrides the accessible name derived from the visible label — for example
+   * "Paid (PAID)" while the visible label stays localized. When present, the
+   * badge is exposed as one accessibility element carrying this name: native
+   * flattens the accessible root, and the web root takes `role="img"` with the
+   * label hidden from assistive technology, because ARIA prohibits naming a
+   * role-less generic element.
+   */
+  accessibilityLabel?: string | undefined;
   /** Defaults to 'neutral'. */
   variant?: StatusVariant | undefined;
   /** Defaults to 'md'. */
@@ -114,6 +123,7 @@ export interface BadgeProps extends Omit<CommonProps, 'unstyled'> {
 
 export function Badge({
   label,
+  accessibilityLabel,
   variant = 'neutral',
   size = 'md',
   leading,
@@ -128,10 +138,23 @@ export function Badge({
   const palette = statusPalette(variant, theme);
   const textRole = size === 'sm' ? 'caption' : 'label';
   const iconSize = size === 'sm' ? theme.metrics.icon.sm : theme.metrics.icon.md;
+  const hasNameOverride = accessibilityLabel !== undefined;
+  const leadingNode = renderIconSlot(leading, {
+    color: palette.foreground,
+    size: iconSize,
+  });
 
   return (
     <View
       testID={testID}
+      accessible={hasNameOverride ? true : undefined}
+      accessibilityLabel={accessibilityLabel}
+      // ARIA prohibits naming a role-less generic element, so on the web an
+      // aria-label alone would be ignored and screen readers would keep
+      // reading the visible label. role="img" makes the override the single
+      // exposed name (the readonly Rating pattern); native already flattens
+      // the accessible root into one element and stays untouched.
+      {...(hasNameOverride && Platform.OS === 'web' ? { role: 'img' as const } : {})}
       {...nativeWindProps(className)}
       style={[
         styles.badge,
@@ -140,8 +163,25 @@ export function Badge({
         style,
       ]}
     >
-      {renderIconSlot(leading, { color: palette.foreground, size: iconSize })}
+      {hasNameOverride && leadingNode !== null ? (
+        <View
+          accessible={false}
+          aria-hidden
+          importantForAccessibility="no-hide-descendants"
+        >
+          {leadingNode}
+        </View>
+      ) : (
+        leadingNode
+      )}
       <RNText
+        {...(hasNameOverride
+          ? {
+              accessible: false,
+              'aria-hidden': true,
+              importantForAccessibility: 'no-hide-descendants' as const,
+            }
+          : {})}
         {...nativeWindProps(mergeClassNames(labelClassName))}
         style={[
           roleTextStyle(theme, textRole),

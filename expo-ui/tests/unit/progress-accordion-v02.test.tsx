@@ -31,6 +31,7 @@ describe('Spinner / ProgressBar', () => {
         sortAscending: '오름차순 정렬됨',
         sortDescending: '내림차순 정렬됨',
         sortUnsorted: '정렬되지 않음',
+        rowActivationHint: 'Enter 또는 Space 키로 활성화',
         previousPage: '이전 페이지',
         nextPage: '다음 페이지',
         ratingNoValue: '평점 없음',

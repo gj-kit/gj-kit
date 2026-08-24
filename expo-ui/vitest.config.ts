@@ -18,6 +18,8 @@ export default defineConfig({
           // globals — @testing-library/react의 afterEach auto-cleanup 등록에 필요
           // (누락 시 테스트 간 DOM 누적으로 오탐 — 테스트 작성 단계 실측).
           globals: true,
+          // reduce-motion 플랫폼 응답을 결정적 pending으로 고정 — setup.ts 참고.
+          setupFiles: ['tests/unit/setup.ts'],
           include: ['tests/unit/**/*.test.{ts,tsx}'],
         },
       },

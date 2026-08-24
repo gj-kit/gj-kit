@@ -54,6 +54,16 @@ interface SheetBaseProps extends Omit<CommonProps, 'unstyled'> {
   accessibilityLabel?: string | undefined;
   /** Defaults to strings.close. */
   closeAccessibilityLabel?: string | undefined;
+  /**
+   * Defaults to true. When false, the header close button is not rendered but
+   * the backdrop, Escape, hardware Back, and the accessibility escape still
+   * dismiss — the close X is a convenience, not the only exit. Combining
+   * showCloseButton={false} with dismissDisabled removes every built-in exit:
+   * the sheet then stays open until the caller closes it, so the caller owns
+   * providing an explicit way out (typically footer actions), the same
+   * forced-choice pattern as a confirm surface.
+   */
+  showCloseButton?: boolean | undefined;
   /** Defaults to true. */
   dismissOnBackdrop?: boolean | undefined;
   /** Blocks the backdrop, Escape/Back, the accessibility escape, and the close action alike. */
@@ -206,6 +216,7 @@ export function Sheet({
   presentation = 'auto',
   accessibilityLabel,
   closeAccessibilityLabel,
+  showCloseButton = true,
   dismissOnBackdrop = true,
   dismissDisabled = false,
   initialFocusRef,
@@ -404,6 +415,7 @@ export function Sheet({
         leading={leading}
         footer={renderedFooter}
         titleStyle={titleStyle}
+        showCloseButton={showCloseButton}
         closeAccessibilityLabel={closeAccessibilityLabel}
         closeButtonTestID={
           testID === undefined ? undefined : `${testID}-close`

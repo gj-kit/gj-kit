@@ -112,6 +112,12 @@ export type MenuProps<T extends string> = Omit<CommonProps, 'unstyled'> &
     readonly keyboardOverlap?: number | undefined;
     readonly size?: MenuTriggerSize | undefined;
     readonly variant?: MenuTriggerVariant | undefined;
+    /** testID on the trigger pressable itself (the actual press target), distinct from the root container testID. */
+    readonly triggerTestID?: string | undefined;
+    /** Applied to the trigger while a pointer hovers it (web and pointer-equipped devices). Layered after triggerStyle. */
+    readonly triggerHoverStyle?: StyleProp<ViewStyle> | undefined;
+    /** Applied to an enabled item while a pointer hovers it. Layered after itemStyle. */
+    readonly itemHoverStyle?: StyleProp<ViewStyle> | undefined;
     readonly triggerStyle?: StyleProp<ViewStyle> | undefined;
     readonly triggerClassName?: string | undefined;
     readonly triggerLabelStyle?: StyleProp<TextStyle> | undefined;

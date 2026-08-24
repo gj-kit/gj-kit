@@ -38,6 +38,11 @@ export interface UiStrings {
   readonly sortDescending: string;
   /** The unsorted state of the DataTable compact sort control. */
   readonly sortUnsorted: string;
+  /**
+   * The visually hidden keyboard hint referenced by activatable DataTable rows
+   * on the web through `aria-describedby`.
+   */
+  readonly rowActivationHint: string;
   /** The Pagination previous control. */
   readonly previousPage: string;
   /** The Pagination next control. */
@@ -66,6 +71,7 @@ export const enStrings: UiStrings = {
   sortAscending: "sorted ascending",
   sortDescending: "sorted descending",
   sortUnsorted: "not sorted",
+  rowActivationHint: "Press Enter or Space to activate",
   previousPage: "Previous page",
   nextPage: "Next page",
   ratingNoValue: "No rating",
@@ -89,6 +95,7 @@ export const koStrings: UiStrings = {
   sortAscending: "오름차순 정렬됨",
   sortDescending: "내림차순 정렬됨",
   sortUnsorted: "정렬되지 않음",
+  rowActivationHint: "Enter 또는 Space 키로 활성화",
   previousPage: "이전 페이지",
   nextPage: "다음 페이지",
   ratingNoValue: "평점 없음",

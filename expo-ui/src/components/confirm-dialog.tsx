@@ -6,6 +6,7 @@
 import { useCallback, useId, useRef } from 'react';
 import type { ComponentRef, ReactElement } from 'react';
 import { Pressable, View } from 'react-native';
+import type { ModalProps } from 'react-native';
 import type { Theme } from '../theme/tokens';
 import { themedStyles } from './internal';
 import type { CommonProps } from './internal';
@@ -47,9 +48,19 @@ export interface ConfirmDialogProps extends Omit<CommonProps, 'unstyled'> {
   loading?: boolean | undefined;
   /** Defaults to true. It affects only backdrop presses, like Dialog. */
   dismissOnBackdrop?: boolean | undefined;
+  /**
+   * Passed through to Dialog. Defaults to Dialog's 'fade'; Dialog animates
+   * only once the platform has affirmatively reported that reduced motion is
+   * off, and presents with 'none' otherwise (unresolved or reduced).
+   */
+  animationType?: NonNullable<ModalProps['animationType']> | undefined;
   /** Best-effort focus restoration after the modal exits. */
   finalFocusRef?: DialogFocusRef | undefined;
   overlayId?: string | undefined;
+  /** testID of the cancel button. Defaults to `${testID}-cancel`. */
+  cancelTestID?: string | undefined;
+  /** testID of the confirm button. Defaults to `${testID}-confirm`. */
+  confirmTestID?: string | undefined;
   unstyled?: never;
 }
 
@@ -82,8 +93,11 @@ export function ConfirmDialog({
   confirmDisabled = false,
   loading = false,
   dismissOnBackdrop = true,
+  animationType,
   finalFocusRef,
   overlayId: overlayIdProp,
+  cancelTestID,
+  confirmTestID,
   style,
   className,
   testID,
@@ -116,6 +130,7 @@ export function ConfirmDialog({
       visible={visible}
       onDismiss={handleDialogDismiss}
       dismissOnBackdrop={dismissOnBackdrop}
+      {...(animationType === undefined ? {} : { animationType })}
       dismissDisabled={interactionDisabled}
       initialFocusRef={
         interactionDisabled ? undefined : (cancelRef as unknown as DialogFocusRef)
@@ -143,7 +158,10 @@ export function ConfirmDialog({
               onPress={handleCancel}
               disabled={interactionDisabled}
               style={styles.action}
-              testID={testID === undefined ? undefined : `${testID}-cancel`}
+              testID={
+                cancelTestID ??
+                (testID === undefined ? undefined : `${testID}-cancel`)
+              }
             />
             <Button
               label={confirmLabel ?? strings.confirm}
@@ -152,7 +170,10 @@ export function ConfirmDialog({
               disabled={confirmDisabled}
               loading={loading}
               style={styles.action}
-              testID={testID === undefined ? undefined : `${testID}-confirm`}
+              testID={
+                confirmTestID ??
+                (testID === undefined ? undefined : `${testID}-confirm`)
+              }
             />
           </View>
         )}

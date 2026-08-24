@@ -32,6 +32,18 @@ type ChipBaseProps = Omit<CommonProps, 'unstyled'> & {
   size?: ChipSize | undefined;
   /** A decorative icon. A selected filter with no leading uses the Provider's check icon. */
   leading?: ReactNode | RenderIcon | undefined;
+  /**
+   * Convenience count rendered after the label in a muted token color. Must be
+   * a finite number. On the interactive kinds it also joins the accessible
+   * name ("Done, 700"); on a static chip it stays ordinary readable text.
+   */
+  count?: number | undefined;
+  /**
+   * Presentation-only node after the label and count — hidden from
+   * accessibility. Interactive trailing content is unsupported; use the
+   * removable kind's dedicated remove button for a trailing action.
+   */
+  trailing?: ReactNode | undefined;
   disabled?: boolean | undefined;
   labelStyle?: StyleProp<TextStyle> | undefined;
   labelClassName?: string | undefined;
@@ -154,6 +166,13 @@ const getStyles = themedStyles((theme: Theme) => ({
     flexShrink: 1,
     includeFontPadding: false,
   },
+  count: {
+    includeFontPadding: false,
+  },
+  trailingSlot: {
+    alignItems: 'center' as const,
+    flexDirection: 'row' as const,
+  },
   decorativeIcon: {
     alignItems: 'center' as const,
     justifyContent: 'center' as const,
@@ -240,6 +259,8 @@ export function Chip(props: ChipProps): ReactElement {
     variant = 'filled',
     size = 'md',
     leading,
+    count,
+    trailing,
     disabled = false,
     labelStyle,
     labelClassName,
@@ -247,6 +268,9 @@ export function Chip(props: ChipProps): ReactElement {
     className,
     testID,
   } = props;
+  if (count !== undefined && !Number.isFinite(count)) {
+    throw new Error('Chip count must be a finite number.');
+  }
   const theme = useTheme();
   const icons = useIcons();
   const styles = getStyles(theme);
@@ -274,8 +298,32 @@ export function Chip(props: ChipProps): ReactElement {
         labelStyle={labelStyle}
         labelClassName={labelClassName}
       />
+      {count !== undefined ? (
+        <RNText
+          numberOfLines={1}
+          maxFontSizeMultiplier={theme.metrics.maxFontScale}
+          style={[
+            roleTextStyle(theme, dimensions.textRole),
+            styles.count,
+            { color: disabled ? theme.colors.textSubtle : theme.colors.textMuted },
+          ]}
+        >
+          {String(count)}
+        </RNText>
+      ) : null}
+      {trailing !== undefined && trailing !== null ? (
+        <View
+          aria-hidden
+          accessible={false}
+          importantForAccessibility="no-hide-descendants"
+          style={styles.trailingSlot}
+        >
+          {trailing}
+        </View>
+      ) : null}
     </>
   );
+  const accessibleName = count !== undefined ? `${label}, ${count}` : label;
   const rootStyle = [
     styles.container,
     {
@@ -348,7 +396,7 @@ export function Chip(props: ChipProps): ReactElement {
       <Pressable
         accessible
         accessibilityRole={Platform.OS === 'web' ? 'button' : 'togglebutton'}
-        accessibilityLabel={label}
+        accessibilityLabel={accessibleName}
         accessibilityState={{ checked: selected, disabled }}
         aria-pressed={selected}
         aria-disabled={disabled}
@@ -367,7 +415,7 @@ export function Chip(props: ChipProps): ReactElement {
     <Pressable
       accessible
       accessibilityRole="button"
-      accessibilityLabel={label}
+      accessibilityLabel={accessibleName}
       accessibilityState={{ disabled }}
       aria-disabled={disabled}
       disabled={disabled}

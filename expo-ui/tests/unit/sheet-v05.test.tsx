@@ -364,7 +364,8 @@ describe('Sheet — adaptive rich modal surface', () => {
     fireEvent.animationEnd(reopenedAnimationHost as Element);
     expect(await screen.findByRole('dialog')).toBeTruthy();
     rendered.unmount();
-    expect(remove).toHaveBeenCalledTimes(1);
+    // Sheet와 그 내부 Dialog가 각자 모션 구독을 소유한다(백로그 #6) — 해제도 둘 다 일어난다.
+    expect(remove).toHaveBeenCalledTimes(2);
   });
 
   it.each([

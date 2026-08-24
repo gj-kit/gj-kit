@@ -80,6 +80,12 @@ const getStyles = themedStyles((theme: Theme) => ({
     borderBottomWidth: StyleSheet.hairlineWidth,
     flexDirection: "row" as const,
   },
+  rowCells: {
+    alignItems: "stretch" as const,
+    flexDirection: "row" as const,
+    flexGrow: 1,
+    flexShrink: 0,
+  },
   cell: {
     justifyContent: "center" as const,
   },
@@ -95,6 +101,14 @@ const getStyles = themedStyles((theme: Theme) => ({
   },
   rowHeaderText: {
     ...roleTextStyle(theme, "label"),
+  },
+  // cellAccessibilityContext처럼 1pt로 숨기되, 보조기술 활성화가 터치 시스템을
+  // 우회하지 못하는 플랫폼을 위해 pointerEvents는 막지 않는다.
+  rowActivationControl: {
+    height: 1,
+    overflow: "hidden" as const,
+    position: "absolute" as const,
+    width: 1,
   },
   selectionCell: {
     alignItems: "center" as const,
@@ -729,6 +743,68 @@ export function DataTable<
     </View>
   );
 
+  // onRowPress가 있어도 소비자 콘텐츠를 button 안에 중첩하지 않는다(웹 <tr role="row">
+  // 패턴의 네이티브 대응). 터치는 접근성 트리에 잡히지 않는 Pressable 표면이 받고 —
+  // 셀 안의 링크·버튼은 중첩 터처블 규칙대로 자기 터치를 그대로 가져간다 — 행 이름과
+  // 활성화는 셀·체크박스와 나란한 1pt 형제 button이 보조기술에 제공한다. iOS
+  // VoiceOver가 행 전체를 하나로 접어 자손 컨트롤을 가리는 일이 없다.
+  const wrapRowCells = (
+    row: ValidatedDataTableRow<Row, ColumnId, RowKey>,
+    rowPresentation: "table" | "list",
+    content: ReactElement | readonly ReactElement[]
+  ): ReactElement => {
+    const onRowPress = props.onRowPress;
+    if (onRowPress === undefined) {
+      // 정적 행은 기존 트리를 그대로 유지한다 — 표 셀은 행의 직접 자식이다.
+      return rowPresentation === "table" ? (
+        <>{content}</>
+      ) : (
+        <View style={styles.listRowBody}>{content}</View>
+      );
+    }
+    const activate = (event: GestureResponderEvent): void => {
+      onRowPress(row.row, {
+        rowKey: row.rowKey,
+        rowIndex: row.rowIndex,
+        presentation: rowPresentation,
+        originalEvent: originalEvent(event),
+      });
+    };
+    return (
+      <>
+        <Pressable
+          accessibilityLabel={row.pressLabel}
+          accessibilityRole="button"
+          role="button"
+          onPress={activate}
+          style={styles.rowActivationControl}
+          testID={
+            testID === undefined
+              ? undefined
+              : `${testID}-row-${String(row.rowKey)}-activate`
+          }
+        />
+        <Pressable
+          accessible={false}
+          focusable={false}
+          importantForAccessibility="no"
+          onPress={activate}
+          style={({ pressed }) => [
+            rowPresentation === "table" ? styles.rowCells : styles.listRowBody,
+            pressed ? { opacity: 0.72 } : null,
+          ]}
+          testID={
+            testID === undefined
+              ? undefined
+              : `${testID}-row-${String(row.rowKey)}-press`
+          }
+        >
+          {content}
+        </Pressable>
+      </>
+    );
+  };
+
   const renderTableRow = (
     row: ValidatedDataTableRow<Row, ColumnId, RowKey>
   ): ReactElement => (
@@ -765,7 +841,7 @@ export function DataTable<
           {renderSelectionControl(row)}
         </View>
       ) : null}
-      {row.cells.map(({ column, textValue }) => {
+      {wrapRowCells(row, "table", row.cells.map(({ column, textValue }) => {
         const alignment = column.align ?? "start";
         const invariant = columnInvariantStyle(column, defaultColumnMinWidth);
         const renderedCell = column.renderCell?.({
@@ -844,7 +920,7 @@ export function DataTable<
             )}
           </View>
         );
-      })}
+      }))}
     </View>
   );
 
@@ -1050,7 +1126,7 @@ export function DataTable<
         }
       >
         {renderSelectionControl(row)}
-        <View style={styles.listRowBody}>{rendered}</View>
+        {wrapRowCells(row, "list", rendered)}
       </View>
     );
   };

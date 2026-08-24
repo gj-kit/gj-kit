@@ -1,6 +1,6 @@
-import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { Platform, Text, View } from 'react-native';
+import { AccessibilityInfo, Platform, Text, View } from 'react-native';
 import { ActionSheet } from '../../src/components/action-sheet';
 import { Dialog, DialogPanel } from '../../src/components/dialog';
 import { UiProvider } from '../../src/components/provider';
@@ -9,6 +9,7 @@ import { lightTheme } from '../../src/theme/createTheme';
 afterEach(() => {
   cleanup();
   vi.useRealTimers();
+  vi.restoreAllMocks();
 });
 
 describe('Dialog v2 semantics and dismissal policy', () => {
@@ -371,6 +372,12 @@ describe('Dialog v2 semantics and dismissal policy', () => {
 
   it('does not restore stale final focus when a fading dialog rapidly reopens', async () => {
     vi.useFakeTimers();
+    // Dialog는 플랫폼이 모션 허용(false)을 확정한 뒤 닫힌 커밋에서만 애니메이션을
+    // latch하므로, 닫힌 상태로 마운트해 microtask를 flush한 뒤 열어 fade 경로를 얻는다.
+    vi.spyOn(AccessibilityInfo, 'isReduceMotionEnabled').mockReturnValue(
+      Promise.resolve(false),
+    );
+    vi.spyOn(AccessibilityInfo, 'addEventListener').mockReturnValue({ remove: vi.fn() } as never);
     const finalFocus = vi.fn();
     const finalFocusRef = { current: { focus: finalFocus } };
     const dialog = (visible: boolean) => (
@@ -386,7 +393,11 @@ describe('Dialog v2 semantics and dismissal policy', () => {
         </Dialog>
       </UiProvider>
     );
-    const { rerender } = render(dialog(true));
+    const { rerender } = render(dialog(false));
+    await act(async () => {
+      await Promise.resolve();
+    });
+    rerender(dialog(true));
     const modalRoot = screen.getByTestId('reopen-dialog');
     const animationRoot = modalRoot.parentElement?.parentElement ?? null;
     expect(animationRoot).not.toBeNull();

@@ -21,6 +21,14 @@ export interface AccordionItem<T extends string> {
   readonly description?: string | undefined;
   readonly content: NonNullable<ReactNode>;
   readonly leading?: ReactNode | undefined;
+  /**
+   * Presentation-only decoration at the end of the header row, before the
+   * expansion indicator — a count badge, for example. It renders inside the
+   * trigger but is hidden from accessibility, so the trigger's accessible name
+   * stays the title. Interactive trailing content is unsupported; when the
+   * information matters to assistive technology, repeat it in `description`.
+   */
+  readonly trailing?: ReactNode | undefined;
   readonly disabled?: boolean | undefined;
 }
 
@@ -90,6 +98,10 @@ const getStyles = themedStyles((theme: Theme) => ({
     justifyContent: 'center' as const,
     minHeight: theme.metrics.icon.md,
     minWidth: theme.metrics.icon.md,
+  },
+  trailingSlot: {
+    alignItems: 'center' as const,
+    flexDirection: 'row' as const,
   },
   content: {
     borderTopColor: theme.colors.line,
@@ -190,6 +202,16 @@ export function Accordion<T extends string>(props: AccordionProps<T>): ReactElem
                 </RNText>
               ) : null}
             </View>
+            {item.trailing !== undefined && item.trailing !== null ? (
+              <View
+                aria-hidden
+                accessible={false}
+                importantForAccessibility="no-hide-descendants"
+                style={styles.trailingSlot}
+              >
+                {item.trailing}
+              </View>
+            ) : null}
             <View aria-hidden accessible={false} style={styles.indicator}>
               {hasCustomIndicator ? customIndicator : (
                 <View style={{ transform: [{ rotate: expanded ? '180deg' : '0deg' }] }}>

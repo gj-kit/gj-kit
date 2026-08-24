@@ -13,9 +13,21 @@ import { mergeClassNames, nativeWindProps, themedStyles } from './internal';
 import type { CommonProps } from './internal';
 import { PRESSABLE_FEEDBACK_CLASS } from './button';
 import { useTheme } from './provider';
+import {
+  UNDERLINE_INDICATOR_WIDTH,
+  UNDERLINE_TAB_MIN_HEIGHT,
+  UNDERLINE_TRACK_BORDER_WIDTH,
+} from './tabs';
 
 export type SegmentedControlSize = 'sm' | 'md';
 export type SegmentedControlFit = 'equal' | 'content';
+/**
+ * `filled` is the bordered pill track; `underline` is a transparent track whose
+ * selected segment carries a `tabActive` underline and label (`tabInactive` on
+ * the rest) — the same token roles as an underline Tabs row, which it visually
+ * matches for filter rows that change a list rather than swap panels.
+ */
+export type SegmentedControlVariant = 'filled' | 'underline';
 
 export interface SegmentedControlItem<T extends string> {
   readonly label: string;
@@ -37,6 +49,8 @@ export interface SegmentedControlProps<T extends string>
   size?: SegmentedControlSize | undefined;
   /** Equal segments fill their container; content segments retain their intrinsic width. Defaults to equal. */
   fit?: SegmentedControlFit | undefined;
+  /** Visual treatment only; radio semantics and keyboard behavior are identical. Defaults to filled. */
+  variant?: SegmentedControlVariant | undefined;
   /** Applies to every segment without changing its semantic state. */
   itemStyle?: StyleProp<ViewStyle> | undefined;
   itemClassName?: string | undefined;
@@ -54,6 +68,15 @@ const getStyles = themedStyles((theme: Theme) => ({
     gap: theme.spacing.xs,
     padding: theme.spacing.xs,
   },
+  underlineRoot: {
+    backgroundColor: 'transparent',
+    borderBottomWidth: UNDERLINE_TRACK_BORDER_WIDTH,
+    borderRadius: theme.radius.none,
+    borderWidth: 0,
+    flexDirection: 'row' as const,
+    gap: theme.spacing.none,
+    padding: theme.spacing.none,
+  },
   equalRoot: { alignSelf: 'stretch' as const, width: '100%' as const },
   contentRoot: { alignSelf: 'flex-start' as const },
   item: {
@@ -62,6 +85,12 @@ const getStyles = themedStyles((theme: Theme) => ({
     borderWidth: StyleSheet.hairlineWidth,
     justifyContent: 'center' as const,
     minWidth: theme.spacing.none,
+  },
+  underlineItem: {
+    backgroundColor: 'transparent',
+    borderBottomWidth: UNDERLINE_INDICATOR_WIDTH,
+    borderRadius: theme.radius.none,
+    borderWidth: 0,
   },
   equalItem: { flexBasis: theme.spacing.none, flexGrow: 1, minWidth: theme.spacing.none },
   label: { includeFontPadding: false, textAlign: 'center' as const },
@@ -83,6 +112,13 @@ function assertSegmentedControl<T extends string>(props: SegmentedControlProps<T
   }
   if (props.fit !== undefined && props.fit !== 'equal' && props.fit !== 'content') {
     throw new Error('SegmentedControl fit must be "equal" or "content".');
+  }
+  if (
+    props.variant !== undefined &&
+    props.variant !== 'filled' &&
+    props.variant !== 'underline'
+  ) {
+    throw new Error('SegmentedControl variant must be "filled" or "underline".');
   }
 
   const values = new Set<string>();
@@ -113,6 +149,7 @@ export function SegmentedControl<T extends string>({
   accessibilityLabel,
   size = 'md',
   fit = 'equal',
+  variant = 'filled',
   itemStyle,
   itemClassName,
   style,
@@ -126,6 +163,7 @@ export function SegmentedControl<T extends string>({
     accessibilityLabel,
     size,
     fit,
+    variant,
     itemStyle,
     itemClassName,
     style,
@@ -141,6 +179,9 @@ export function SegmentedControl<T extends string>({
   }, []);
   const selectedIndex = items.findIndex((item) => item.value === value && !item.disabled);
   const rovingIndex = selectedIndex >= 0 ? selectedIndex : (enabledIndices[0] ?? -1);
+  const underline = variant === 'underline';
+  // underline md는 Tabs underline과 같은 높이·서체(typography.tab)를 공유해 필터 행과
+  // 탭 행의 baseline이 맞는다. sm은 compact control 높이를 유지한다.
   const dimensions =
     size === 'sm'
       ? {
@@ -149,9 +190,9 @@ export function SegmentedControl<T extends string>({
           typography: theme.typography.label,
         }
       : {
-          minHeight: theme.metrics.control.md,
+          minHeight: underline ? UNDERLINE_TAB_MIN_HEIGHT : theme.metrics.control.md,
           paddingHorizontal: theme.spacing.md,
-          typography: theme.typography.button,
+          typography: underline ? theme.typography.tab : theme.typography.button,
         };
 
   const activate = (item: SegmentedControlItem<T>): void => {
@@ -192,7 +233,9 @@ export function SegmentedControl<T extends string>({
       style={[
         styles.root,
         fit === 'equal' ? styles.equalRoot : styles.contentRoot,
-        { backgroundColor: theme.colors.surfaceSubtle, borderColor: theme.colors.line },
+        underline
+          ? [styles.underlineRoot, { borderBottomColor: theme.colors.line }]
+          : { backgroundColor: theme.colors.surfaceSubtle, borderColor: theme.colors.line },
         style,
       ]}
     >
@@ -210,8 +253,21 @@ export function SegmentedControl<T extends string>({
             borderColor: selected ? theme.colors.primaryStrong : theme.colors.line,
             opacity: disabled ? 0.5 : 1,
           },
+          underline
+            ? [
+                styles.underlineItem,
+                { borderBottomColor: selected ? theme.colors.tabActive : 'transparent' },
+              ]
+            : null,
           itemStyle,
         ];
+        const labelColor = underline
+          ? selected
+            ? theme.colors.tabActive
+            : theme.colors.tabInactive
+          : selected
+            ? theme.colors.onPrimary
+            : theme.colors.text;
         const accessibilityProps = {
           accessible: true,
           accessibilityRole: 'radio' as const,
@@ -231,7 +287,9 @@ export function SegmentedControl<T extends string>({
               theme.typography.fontFamily === undefined
                 ? null
                 : { fontFamily: theme.typography.fontFamily },
-              { color: selected ? theme.colors.onPrimary : theme.colors.text },
+              // underline의 비선택 항목은 Tabs underline처럼 body 굵기로 내려 선택 항목과 대비한다.
+              underline && !selected ? { fontWeight: theme.typography.body.fontWeight } : null,
+              { color: labelColor },
             ]}
           >
             {item.label}

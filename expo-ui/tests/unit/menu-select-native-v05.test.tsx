@@ -450,7 +450,7 @@ describe("Select native/default adaptive radio surface", () => {
           onValueChange={() => {}}
         />
       )
-    ).toThrow("Select must be rendered inside OverlayProvider.");
+    ).toThrow("Select requires the overlay dismissal stack");
 
     expect(() =>
       render(

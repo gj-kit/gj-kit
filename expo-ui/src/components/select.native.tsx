@@ -1,4 +1,4 @@
-import { useCallback, useId, useRef } from "react";
+import { useCallback, useEffect, useId, useRef, useState } from "react";
 import type { ReactElement, ReactNode } from "react";
 import { Pressable, StyleSheet, Text as RNText, View } from "react-native";
 import type { GestureResponderEvent, StyleProp, TextStyle } from "react-native";
@@ -147,6 +147,9 @@ export function Select<const T extends string>(
     keyboardOverlap = 0,
     size = "md",
     leading,
+    triggerTestID,
+    triggerHoverStyle,
+    itemHoverStyle,
     labelStyle,
     labelClassName,
     triggerStyle,
@@ -167,7 +170,12 @@ export function Select<const T extends string>(
   } = props;
   const stack = useOptionalOverlayStack();
   if (stack === null) {
-    throw new Error("Select must be rendered inside OverlayProvider.");
+    // 우아한 폴백을 두지 않는 이유: overlay stack이 topmost-first dismissal을
+    // 중재하므로, stack 없이 열리면 중첩 overlay의 Escape/outside-press 소유권이
+    // 보장되지 않는다. Dialog 단독 동작과 달리 여기서는 계약 위반으로 막는다.
+    throw new Error(
+      "Select requires the overlay dismissal stack that coordinates stacked overlays (topmost-first Escape/outside-press ownership). Wrap the app — or the test render — in <UiProvider> from '@gj-kit/expo-ui', which creates the overlay scope automatically, or in an explicit <OverlayProvider>."
+    );
   }
 
   const theme = useTheme();
@@ -177,6 +185,13 @@ export function Select<const T extends string>(
   const overlayId = `gj-select-${reactId}-overlay`;
   const triggerRef = useRef<View | null>(null);
   const initialItemRef = useRef<View | null>(null);
+  const [triggerHovered, setTriggerHovered] = useState(false);
+  const [hoveredItemIndex, setHoveredItemIndex] = useState<number | null>(null);
+  useEffect(() => {
+    // 닫힌 사이 pointer가 떠나도 hover-out 이벤트가 오지 않으므로 재오픈 시
+    // stale hover 하이라이트를 남기지 않는다.
+    if (!open) setHoveredItemIndex(null);
+  }, [open]);
   const selectedItem = items.find((item) => item.value === value) ?? null;
   const selectedEnabledIndex = items.findIndex(
     (item) =>
@@ -271,6 +286,17 @@ export function Select<const T extends string>(
         aria-valuetext={displayedValue}
         disabled={disabled}
         onPress={handleTriggerPress}
+        onHoverIn={
+          triggerHoverStyle === undefined
+            ? undefined
+            : () => setTriggerHovered(true)
+        }
+        onHoverOut={
+          triggerHoverStyle === undefined
+            ? undefined
+            : () => setTriggerHovered(false)
+        }
+        testID={triggerTestID}
         {...nativeWindProps(
           mergeClassNames(PRESSABLE_FEEDBACK_CLASS, triggerClassName)
         )}
@@ -289,6 +315,9 @@ export function Select<const T extends string>(
             opacity: disabled ? 0.58 : 1,
           },
           triggerStyle,
+          !disabled && triggerHovered && triggerHoverStyle !== undefined
+            ? triggerHoverStyle
+            : null,
         ]}
       >
         {displayedLeading === undefined ? null : (
@@ -408,6 +437,19 @@ export function Select<const T extends string>(
                 aria-checked={checked}
                 disabled={itemDisabled}
                 onPress={(event) => selectItem(item, event)}
+                onHoverIn={
+                  itemHoverStyle === undefined
+                    ? undefined
+                    : () => setHoveredItemIndex(index)
+                }
+                onHoverOut={
+                  itemHoverStyle === undefined
+                    ? undefined
+                    : () =>
+                        setHoveredItemIndex((current) =>
+                          current === index ? null : current
+                        )
+                }
                 testID={
                   item.testID ??
                   (testID === undefined ? undefined : `${testID}-item-${index}`)
@@ -430,6 +472,11 @@ export function Select<const T extends string>(
                     opacity: itemDisabled ? 0.52 : 1,
                   },
                   itemStyle,
+                  !itemDisabled &&
+                  hoveredItemIndex === index &&
+                  itemHoverStyle !== undefined
+                    ? itemHoverStyle
+                    : null,
                 ]}
               >
                 <View

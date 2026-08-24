@@ -259,7 +259,12 @@ export function Select<const T extends string>(
   assertSelectProps(props);
   const stack = useOptionalOverlayStack();
   if (stack === null) {
-    throw new Error('Select must be rendered inside OverlayProvider.');
+    // 우아한 폴백을 두지 않는 이유: WebPopover의 outside-press/Escape 소유권
+    // 프로토콜이 stack의 topmost 판정에 의존한다 — stack 없이는 어느 레이어가
+    // 이벤트를 소비할지 결정할 수 없어 중첩 overlay 정합성이 깨진다.
+    throw new Error(
+      "Select requires the overlay dismissal stack that coordinates stacked overlays (topmost-first Escape/outside-press ownership). Wrap the app — or the test render — in <UiProvider> from '@gj-kit/expo-ui', which creates the overlay scope automatically, or in an explicit <OverlayProvider>.",
+    );
   }
   const parentId = useOverlayParentId();
 
@@ -285,6 +290,9 @@ export function Select<const T extends string>(
     collisionPadding,
     size = 'md',
     leading,
+    triggerTestID,
+    triggerHoverStyle,
+    itemHoverStyle,
     labelStyle,
     labelClassName,
     triggerStyle,
@@ -355,6 +363,8 @@ export function Select<const T extends string>(
   const [activeValue, setActiveValue] = useState<T | null>(() =>
     open ? initialActiveValue() : null,
   );
+  const [triggerHovered, setTriggerHovered] = useState(false);
+  const [hoveredItemIndex, setHoveredItemIndex] = useState<number | null>(null);
   const activeIndexCandidate = itemIndexByValue(items, activeValue);
   const activeIndex = containsIndex(enabledIndices, activeIndexCandidate)
     ? activeIndexCandidate
@@ -455,6 +465,8 @@ export function Select<const T extends string>(
     if (!open) {
       if (activeValue !== null) setActiveValue(null);
       typeaheadRef.current = createTypeaheadState();
+      // 닫힌 사이 hover-out 이벤트가 오지 않으므로 재오픈 시 stale hover를 남기지 않는다.
+      setHoveredItemIndex(null);
     } else {
       let next = activeValue;
       if (!wasOpen) {
@@ -734,7 +746,16 @@ export function Select<const T extends string>(
         accessibilityState={{ disabled, expanded: open, busy }}
         disabled={disabled}
         onPress={handleTriggerPress}
-        testID={testID === undefined ? undefined : `${testID}-trigger`}
+        onHoverIn={
+          triggerHoverStyle === undefined ? undefined : () => setTriggerHovered(true)
+        }
+        onHoverOut={
+          triggerHoverStyle === undefined ? undefined : () => setTriggerHovered(false)
+        }
+        testID={
+          triggerTestID ??
+          (testID === undefined ? undefined : `${testID}-trigger`)
+        }
         {...(triggerWebProps as unknown as Record<string, unknown>)}
         {...nativeWindProps(mergeClassNames(PRESSABLE_FEEDBACK_CLASS, triggerClassName))}
         style={({ pressed }) => [
@@ -754,6 +775,9 @@ export function Select<const T extends string>(
             opacity: disabled ? 0.58 : 1,
           },
           triggerStyle,
+          !disabled && triggerHovered && triggerHoverStyle !== undefined
+            ? triggerHoverStyle
+            : null,
         ]}
       >
         {triggerLeading === undefined ? null : (
@@ -903,6 +927,19 @@ export function Select<const T extends string>(
                 accessibilityState={{ selected, disabled: itemDisabled }}
                 disabled={itemDisabled}
                 onPress={(event) => commitIndex(index, event, true)}
+                onHoverIn={
+                  itemHoverStyle === undefined
+                    ? undefined
+                    : () => setHoveredItemIndex(index)
+                }
+                onHoverOut={
+                  itemHoverStyle === undefined
+                    ? undefined
+                    : () =>
+                        setHoveredItemIndex((current) =>
+                          current === index ? null : current,
+                        )
+                }
                 testID={
                   item.testID ??
                   (testID === undefined ? undefined : `${testID}-item-${index}`)
@@ -928,6 +965,11 @@ export function Select<const T extends string>(
                     opacity: itemDisabled ? 0.52 : 1,
                   },
                   itemStyle,
+                  !itemDisabled &&
+                  hoveredItemIndex === index &&
+                  itemHoverStyle !== undefined
+                    ? itemHoverStyle
+                    : null,
                 ]}
               >
                 {item.leading === undefined ? null : (

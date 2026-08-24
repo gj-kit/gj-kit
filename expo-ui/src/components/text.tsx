@@ -19,6 +19,13 @@ export interface TextProps extends Omit<RNTextProps, 'style' | 'role'> {
   role?: TextRole | undefined;
   /** A closed union — typos are compile errors and raw colors go through the style escape hatch (§0). Defaults to 'text'. */
   color?: ColorKey | undefined;
+  /**
+   * Renders every digit at the same advance width so columns of figures line up.
+   * Emits `fontVariant: ['tabular-nums']`, which React Native Web serializes as
+   * the CSS `font-variant` shorthand carrying the tabular-figures feature.
+   * Defaults to false.
+   */
+  tabularNums?: boolean | undefined;
   style?: StyleProp<TextStyle> | undefined;
   className?: string | undefined;
   unstyled?: never;
@@ -37,9 +44,13 @@ export function roleTextStyle(theme: Theme, role: TextRole): TextStyle {
   };
 }
 
+/** (internal) The tabular-numeral style shared by Text and the data components that align figures. */
+export const TABULAR_NUMS_STYLE: TextStyle = { fontVariant: ['tabular-nums'] };
+
 export function Text({
   role = 'body',
   color = 'text',
+  tabularNums = false,
   style,
   className,
   children,
@@ -50,7 +61,12 @@ export function Text({
     <RNText
       {...rest}
       {...nativeWindProps(className)}
-      style={[roleTextStyle(theme, role), { color: theme.colors[color] }, style]}
+      style={[
+        roleTextStyle(theme, role),
+        { color: theme.colors[color] },
+        tabularNums ? TABULAR_NUMS_STYLE : null,
+        style,
+      ]}
     >
       {children}
     </RNText>

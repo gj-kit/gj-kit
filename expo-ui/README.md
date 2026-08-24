@@ -168,6 +168,7 @@ import {
   DataTable,
   FloatingActionButton,
   FormField,
+  KeyValueList,
   Link,
   Menu,
   Pagination,
@@ -175,8 +176,10 @@ import {
   Select,
   Sheet,
   Slider,
+  StatGrid,
   ToastViewport,
   ToggleGroup,
+  Toolbar,
   Tooltip,
   useToastQueue,
 } from '@gj-kit/expo-ui';
@@ -189,6 +192,7 @@ void Collapsible;
 void DataTable;
 void FloatingActionButton;
 void FormField;
+void KeyValueList;
 void Link;
 void Menu;
 void Pagination;
@@ -196,8 +200,10 @@ void Popover;
 void Select;
 void Sheet;
 void Slider;
+void StatGrid;
 void ToastViewport;
 void ToggleGroup;
+void Toolbar;
 void Tooltip;
 void useToastQueue;
 ```
@@ -214,6 +220,20 @@ void useToastQueue;
 ```
 
 `role`이 fontSize/lineHeight/fontWeight/fontFamily를 토큰에서 가져온다. `color`는 **닫힌 토큰 키 유니언** — `color="#FF0000"`은 컴파일 에러다(raw 색은 `style` 탈출구로).
+
+숫자 열이 세로로 정렬돼야 하는 표·통계에는 `tabularNums`를 켠다. 모든 숫자가 같은 폭으로 그려지도록 `fontVariant: ['tabular-nums']`를 방출하며, React Native Web은 이를 CSS `font-variant` 단축 속성으로 직렬화해 tabular-figures 기능을 켠다. 폰트 크기·굵기·색은 그대로 role·color 토큰에서 온다.
+
+```tsx
+import { Text } from '@gj-kit/expo-ui';
+
+export function AmountCell({ amount }: { amount: string }) {
+  return (
+    <Text role="body" tabularNums>
+      {amount}
+    </Text>
+  );
+}
+```
 
 ### Button / IconButton
 
@@ -249,6 +269,29 @@ void useToastQueue;
 
 `TextField`에 `style`을 주면 **컴파일 에러**다. 전신에서 `style`은 "입력 스타일"이었는데 새 버전은 컨테이너 개념이 생겼으므로, 의미가 바뀐 채 조용히 이관되는 사고를 타입으로 차단했다 — `containerStyle`(묶음)과 `inputStyle`(입력)로 명시한다.
 
+### Section — 페이지·패널 헤더의 heading 의미론과 count
+
+`Section`은 title/subtitle/actions 헤더와 자식 콘텐츠를 한 세로 리듬으로 묶는다. `headingLevel={1..6}`을 지정하면 title이 진짜 heading으로 노출된다 — 네이티브 `accessibilityRole="header"`, 웹 `role="heading"` + `aria-level`. 지정하지 않으면 기존과 동일한 일반 텍스트다. `count`는 title 옆에 토큰 스타일 count pill을 그리고(`surfaceSubtle` 배경 + `textMuted` caption), `countAccessibilityLabel`로 pill의 접근성 이름을 서술형으로 바꿀 수 있다("812건 중 40건") — 네이티브는 숫자 텍스트 요소에 라벨을 싣고, 웹은 role 없는 div의 aria-label이 ARIA가 금지한 네이밍이라 pill이 `role="img"` + 서술형 이름을 갖고 숫자를 AT에서 숨긴다. `accessory`는 count 뒤에 이어지는 임의 노드이고, `titleStyle`/`titleClassName`은 title 텍스트에만 적용된다. 새 prop이 전부 없으면 렌더 트리는 이전과 완전히 같다.
+
+```tsx
+import { Badge, Section } from '@gj-kit/expo-ui';
+
+export function PaymentsPanel({ visible, total }: { visible: number; total: number }) {
+  return (
+    <Section
+      title="결제"
+      headingLevel={2}
+      count={visible}
+      countAccessibilityLabel={`${total}건 중 ${visible}건 표시`}
+      accessory={<Badge label="실시간" size="sm" variant="info" />}
+      subtitle="최근 90일"
+    >
+      {/* 표·목록 */}
+    </Section>
+  );
+}
+```
+
 ### Badge / Alert — 상태를 색이 아니라 의미로
 
 ```tsx
@@ -258,6 +301,11 @@ export function SyncStatus() {
   return (
     <>
       <Badge label="동기화 완료" variant="success" size="sm" />
+      <Badge
+        label="결제 완료"
+        variant="success"
+        accessibilityLabel="결제 완료 (PAID)"
+      />
       <Alert
         title="오프라인 상태"
         variant="warning"
@@ -271,7 +319,7 @@ export function SyncStatus() {
 }
 ```
 
-`Badge`는 `neutral | info | success | warning | error`, `Alert`는 알림 의도가 분명한 `info | success | warning | error`만 받는다. `Alert`는 `title` 또는 `null`·`undefined`가 아닌 `children`이 반드시 필요하고, 액션은 `{ label, onPress }` 한 덩어리라 죽은 버튼을 만들 수 없다. 정적 안내의 기본 `live="off"`를 유지하고, 비동기 결과를 새로 삽입할 때만 `live="polite"` 또는 `"assertive"`를 선택한다.
+`Badge`는 `neutral | info | success | warning | error`, `Alert`는 알림 의도가 분명한 `info | success | warning | error`만 받는다. `Badge accessibilityLabel`은 보이는 라벨에서 파생되는 접근성 이름을 재정의한다 — 보이는 라벨은 현지화 문구로 두고 운영자가 지원 티켓에 붙여 넣을 원시 코드를 이름에 남기는 경우("결제 완료 (PAID)")를 위한 것으로, 지정하면 배지가 그 이름을 가진 하나의 접근성 요소로 노출된다 — 네이티브는 accessible 루트가 자식을 평탄화하고, 웹은 role 없는 div의 aria-label이 ARIA가 금지한 네이밍이라 스크린 리더가 무시하므로 루트가 `role="img"`를 갖고 보이는 라벨·아이콘을 AT에서 숨긴다(읽기 전용 Rating과 같은 패턴). `Alert`는 `title` 또는 `null`·`undefined`가 아닌 `children`이 반드시 필요하고, 액션은 `{ label, onPress }` 한 덩어리라 죽은 버튼을 만들 수 없다. 정적 안내의 기본 `live="off"`를 유지하고, 비동기 결과를 새로 삽입할 때만 `live="polite"` 또는 `"assertive"`를 선택한다.
 
 ### Avatar / Divider / ListItem — identity와 정보 구조
 
@@ -395,6 +443,31 @@ export function RangeControl() {
 
 `SegmentedControl<T>`은 **정확히 하나가 선택된 compact radio group**이다. `value`와 `onValueChange`는 앱이 소유하며 빈 선택·복수 선택은 제공하지 않는다. `accessibilityLabel`은 필수이고 웹에서는 radio 역할, 선택된 항목 하나의 roving tab stop, Space·방향키·Home·End, disabled 항목 건너뛰기를 제공한다. 화면과 panel 관계가 필요하면 `Tabs`, 토글 가능한 단일/복수 상태가 필요하면 `ToggleGroup`을 쓴다. 기본 `fit="equal"`은 컨테이너 폭을 균등 분할하고 `fit="content"`는 각 항목의 intrinsic width를 유지한다.
 
+목록의 **필터를 바꾸는 "탭처럼 생긴 행"**은 panel을 바꾸지 않으므로 `Tabs`가 아니라 이 radio group이 정직한 primitive다. `variant="underline"`은 기본 `filled`와 semantics·키보드가 완전히 같고 외형만 바뀐다 — 투명한 track 아래 hairline, 선택 항목에만 `colors.tabActive` 밑줄과 같은 색 글자, 비선택 항목은 `colors.tabInactive` — `Tabs variant="underline"`과 같은 token role이다. `md` 크기는 `Tabs variant="underline"`과 높이·서체(`typography.tab`)를 공유해 같은 화면에 나란히 놓아도 baseline이 맞는다.
+
+```tsx
+import { useState } from 'react';
+import { SegmentedControl } from '@gj-kit/expo-ui';
+
+const albumFilters = [
+  { label: '내 앨범', value: 'mine' },
+  { label: '공유받은 앨범', value: 'shared' },
+] as const;
+
+export function AlbumFilterRow() {
+  const [filter, setFilter] = useState<'mine' | 'shared'>('mine');
+  return (
+    <SegmentedControl
+      accessibilityLabel="앨범 필터"
+      items={albumFilters}
+      value={filter}
+      onValueChange={setFilter}
+      variant="underline"
+    />
+  );
+}
+```
+
 ### Accordion — 단일/복수 controlled disclosure
 
 ```tsx
@@ -423,6 +496,8 @@ export function FrequentlyAskedQuestions() {
 
 기본 `type="single"`은 `value: T | null`, `type="multiple"`은 `value: readonly T[]` 계약으로 분리된다. `collapsible={false}`는 열린 단일 항목을 잠그며 multiple 모드에서는 사용할 수 없다. 웹은 heading/button/panel 관계, `aria-expanded`, Enter·Space를 제공하고 네이티브는 같은 펼침·disabled 상태를 접근성 API로 전달한다.
 
+item의 `trailing`은 헤더 행에서 제목 옆(인디케이터 앞)에 그려지는 **presentation-only** 슬롯이다 — "최근 결제 [12]"의 count pill 같은 시각 장식용. 트리거의 접근성 이름은 계속 `title`이고 trailing은 접근성 트리에서 숨겨지므로, 그 정보가 보조 기술에도 중요하면 `description`에 함께 적는다. 트리거 내부에 중첩 컨트롤을 만들 수 없도록 인터랙티브 trailing 콘텐츠는 지원하지 않는다.
+
 ### Interaction·data·overlay foundation
 
 #### Chip — 생김새가 아니라 동작으로 분기
@@ -436,7 +511,7 @@ export function FrequentlyAskedQuestions() {
 | `static` | `label`, 선택 `selected` | 읽기 전용 값 또는 선택 상태를 보이는 일반 텍스트 (button/selection widget 아님) |
 | `removable` | `label`, `onRemove`, `removeAccessibilityLabel` | 정적 값 + 별도 제거 button |
 
-공통 선택지는 `variant="filled" | "outlined"`(기본 filled), `size="sm" | "md"`(기본 md), `leading`이다. `disabled`는 interactive action/filter/removable에만 쓴다. static의 `selected`는 시각 상태만 바꾸며 ARIA selection state를 만들지 않는다. removable 컨테이너 전체를 Pressable로 만들지 않아 인터랙티브 요소 중첩을 피한다.
+공통 선택지는 `variant="filled" | "outlined"`(기본 filled), `size="sm" | "md"`(기본 md), `leading`, `count`, `trailing`이다. `count`는 라벨 뒤에 muted 토큰 색(`textMuted`, disabled면 `textSubtle`)으로 건수를 그리는 편의 슬롯으로, action/filter의 접근성 이름에 "완료, 700"처럼 합쳐진다(static은 일반 텍스트라 그대로 읽힌다). `trailing`은 접근성 트리에서 숨겨지는 presentation-only 노드다 — 인터랙티브 trailing은 지원하지 않으며, 제거 액션은 removable kind의 전용 버튼을 쓴다. `disabled`는 interactive action/filter/removable에만 쓴다. static의 `selected`는 시각 상태만 바꾸며 ARIA selection state를 만들지 않는다. removable 컨테이너 전체를 Pressable로 만들지 않아 인터랙티브 요소 중첩을 피한다.
 
 ```tsx
 import { useState } from 'react';
@@ -453,6 +528,13 @@ export function TopicChips() {
         label="인기"
         selected={featured}
         onSelectedChange={setFeatured}
+      />
+      <Chip
+        kind="filter"
+        label="완료"
+        count={700}
+        selected={!featured}
+        onSelectedChange={() => setFeatured(false)}
       />
       <Chip kind="static" label="다크 초콜릿" selected />
       <Chip
@@ -619,6 +701,42 @@ export function PaymentsTable() {
 
 필터링·검색·페이지네이션·서버 fetch·행 재정렬·가상화는 앱 또는 전용 데이터 엔진이 소유한다. 위 예제처럼 `DataTable`에는 앱이 잘라 낸 현재 행을, 독립 `Pagination`에는 전체 개수와 현재 페이지를 전달한다. 두 컴포넌트가 서로의 상태나 fetch 수명을 숨겨 소유하지 않는다. `DataTable`은 현재 visible rows에 최적화된 비가상 표이며, 대규모 데이터·복합 셀 편집·column pinning·grid keyboard navigation은 후속 별도 `DataGrid`의 책임이다.
 
+**행 활성화 — `onRowPress`.** 행을 누르면 상세 화면을 여는 관리 콘솔 표를 위해 `onRowPress(row, { rowKey, rowIndex, presentation })`를 받는다. 어떤 표현에서도 소비자 행 콘텐츠는 button 안에 중첩되지 않는다. 웹 `table` 표현은 실제 `<tr role="row">`가 `tabIndex={0}`으로 포커스 가능해지고 click·Enter·Space로 활성화되며, `getRowAccessibilityLabel(row)`가 있으면 그 값이, 없으면 셀을 `"헤더: 값"`으로 이은 문자열이 행의 `aria-label`이 된다. 행을 button으로 만들면 스크린리더의 row/cell 관계가 깨지고 셀 안의 체크박스·링크·정렬 버튼이 동작하지 않기 때문이다. 웹 `list` 표현도 같은 패턴이다 — listitem 자체가 포커스 가능한 활성화 컨테이너가 된다. 포커스 가능한 행·listitem은 `aria-describedby`로 시각적으로 숨긴 힌트(`UiStrings.rowActivationHint`, 기본 "Press Enter or Space to activate")를 가리켜 키보드 활성화 방법을 보조기술에 알린다. 선택 체크박스 셀은 이벤트를 행으로 전파하지 않고, 셀 안의 link·button 같은 interactive 요소에서 시작한 클릭도 행을 활성화하지 않는다. 키보드는 **행 자체에 포커스가 있을 때만** 반응하므로 체크박스 위의 Space는 선택만 바꾼다. 네이티브 `table`·`list` 표현은 두 관심사를 나눈다: 접근성 트리에 잡히지 않는 Pressable 표면이 터치를 받고(셀 안의 링크·버튼은 중첩 터처블 규칙대로 자기 터치를 그대로 가져간다), 행 이름과 활성화는 셀·체크박스와 나란한 1pt 형제 button이 보조기술에 제공한다 — iOS VoiceOver가 행을 하나의 button으로 접어 자손 컨트롤을 가리는 일이 없다. `onRowPress`는 `canOpen ? open : undefined` 같은 조건부 연결을 허용하지만, `getRowAccessibilityLabel`은 확실히 존재하는 `onRowPress` 없이는 이름 붙일 대상이 없으므로 **컴파일 에러**다.
+
+```tsx
+import { DataTable } from '@gj-kit/expo-ui';
+import type { DataTableColumn } from '@gj-kit/expo-ui';
+
+type Member = { readonly id: string; readonly name: string; readonly email: string };
+
+const memberColumns = [
+  { id: 'name', header: '이름', flex: 1, getTextValue: ({ row }) => row.name },
+  { id: 'email', header: '이메일', flex: 2, getTextValue: ({ row }) => row.email },
+] as const satisfies readonly DataTableColumn<Member, 'name' | 'email', string>[];
+
+export function MembersTable({
+  members,
+  onOpen,
+}: {
+  members: readonly Member[];
+  onOpen: (id: string) => void;
+}) {
+  return (
+    <DataTable
+      accessibilityLabel="멤버"
+      state={{ status: 'ready', rows: members }}
+      columns={memberColumns}
+      getRowKey={(row) => row.id}
+      rowHeaderColumnId="name"
+      onRowPress={(row) => onOpen(row.id)}
+      getRowAccessibilityLabel={(row) => `${row.name} 상세 열기`}
+    />
+  );
+}
+```
+
+웹 표는 `table-layout: fixed` + `width: 100%`로 scroll region(컨테이너) 폭을 따르고, `minTableWidth`(기본 640) 아래에서만 region이 가로 스크롤한다. 긴 이메일 하나가 표 전체를 max-content로 키우는 손수 만든 flex 표의 결함은 실제 `<table>`에는 없다.
+
 #### Pagination — 전체 개수와 opaque cursor를 섞지 않는 탐색
 
 `Pagination`은 `mode="numbered" | "cursor"`가 필수인 controlled navigation이다. numbered의 공개 page는 **1-based**다. `countMode="items"`는 `totalItemCount`와 `pageSize`로 page count를 계산하고 callback detail에 `offset`, `endOffsetExclusive`, `visibleItemCount`를 함께 전달한다. `countMode="pages"`는 이미 계산한 `pageCount`만 받는다. 두 count branch의 입력은 `never`로 교차 사용을 막으며, 결과가 0페이지면 controlled sentinel은 `page={1}`이다.
@@ -650,6 +768,87 @@ numbered의 `presentation="auto" | "full" | "compact"`는 표현만 바꾼다. �
 
 `disabled`와 `busy`는 navigation request를 막고, `direction="ltr" | "rtl"`, `size="sm" | "md"`와 control/status별 style·className 꼬리를 제공한다. 데이터 fetch, cursor 저장, route 동기화, 범위를 벗어난 page의 자동 보정, 리스트 끝 도달 감지는 앱 책임이다.
 
+#### KeyValueList — 상세 패널의 description list
+
+`KeyValueList`는 `{ label, value }` 쌍을 세로로 나열하는 description list다. 웹은 실제 `<dl>` 안에 `<div><dt/><dd/></div>` 그룹을 만들어(HTML이 허용하는 구조) term/definition 의미를 그대로 노출하고, description list 의미가 없는 네이티브는 `list`/`listitem` 역할을 쓰며 문자열·숫자 값은 `"라벨: 값"` 하나의 접근성 요소로 접는다. 커스텀 노드 값은 접지 않아 내부 링크·배지에 개별로 닿을 수 있다. 빈 `items`는 빈 컨테이너조차 만들지 않는다.
+
+`layout="inline"`(기본)은 라벨을 왼쪽 고정 폭 열로, `stacked`는 값 위에 라벨을 놓는다. 웹에서 라벨 열 폭은 블록 레벨 `<dt>`에 실린다 — `labelStyle`의 `width`(또는 `minWidth`·`maxWidth`·flex 크기 속성)를 주면 dt로 끌어올려져 모든 행의 값이 같은 위치에서 정렬된다. `divider`는 행 사이에만 hairline을 긋고, `labelStyle`·`valueStyle`·`rowStyle`(+`className` 쌍)이 각 층에 닿는다. 라벨은 `textMuted`, 값은 `text` 토큰이며 `key`를 생략하면 `label`이 React key가 되므로 같은 라벨이 두 번 나오면 런타임에서 즉시 거부한다.
+
+```tsx
+import { Badge, KeyValueList } from '@gj-kit/expo-ui';
+
+export function MemberSummary() {
+  return (
+    <KeyValueList
+      accessibilityLabel="멤버 정보"
+      layout="inline"
+      divider
+      items={[
+        { label: '이름', value: '김가람' },
+        { label: '이메일', value: 'garam@example.com' },
+        { label: '좌석', value: 12 },
+        { key: 'status', label: '상태', value: <Badge label="활성" variant="success" size="sm" /> },
+      ]}
+    />
+  );
+}
+```
+
+#### StatGrid — 한 장의 테두리 안에 모이는 참고 지표
+
+`StatGrid`는 N열 격자 하나에 지표를 채운다. 카드 여러 장은 "똑같이 급한 N가지"로 읽히지만 조용한 격자 하나는 참고 데이터로 읽힌다. `columns`(기본 2)는 1 이상의 정수만 허용하고, 각 `StatItem`은 이미 포맷된 문자열 `value`와 선택적 `hint`, 0~1의 `ratio`, 그리고 `tone`을 갖는다. 모든 셀은 `"라벨, 값, 힌트"`를 이름으로 하는 group이며, `ratio`가 있으면 값 아래 얇은 막대가 `progressbar` 계약(`aria-valuenow` 0~100)으로 노출된다. 범위 밖·NaN 비율은 [0, 1]로 clamp된다. 값 글자는 `tabularNums`로 그려져 열이 흔들리지 않는다.
+
+**임계값은 라이브러리가 정하지 않는다.** 저장 공간 90% 이상을 danger로, 75% 이상을 warning으로 칠할지는 제품 정책이라 앱이 `tone`을 계산해 넘긴다.
+
+```tsx
+import { StatGrid } from '@gj-kit/expo-ui';
+import type { StatTone } from '@gj-kit/expo-ui';
+
+function storageTone(ratio: number): StatTone {
+  return ratio >= 0.9 ? 'danger' : ratio >= 0.75 ? 'warning' : 'neutral';
+}
+
+export function WorkspaceStats({ usedBytes, limitBytes }: { usedBytes: number; limitBytes: number }) {
+  const ratio = usedBytes / limitBytes;
+  return (
+    <StatGrid
+      accessibilityLabel="워크스페이스 현황"
+      columns={3}
+      items={[
+        { label: '멤버', value: '1,204' },
+        { label: '이번 달 결제', value: '3건 실패', tone: 'danger' },
+        {
+          label: '저장 공간',
+          value: `${Math.round(ratio * 100)}%`,
+          hint: `${usedBytes.toLocaleString()} / ${limitBytes.toLocaleString()} B`,
+          ratio,
+          tone: storageTone(ratio),
+        },
+      ]}
+    />
+  );
+}
+```
+
+#### Toolbar — 이름 있는 컨트롤 행
+
+`Toolbar`는 검색 필드·Select·버튼이 줄바꿈하며 늘어서는 행이다. `accessibilityLabel`은 **필수** — `role="toolbar"`는 이름이 있어야 보조 기술에 의미가 있다. `wrap`(기본 true)·`gap`(spacing 토큰 키, 기본 `sm`)·`align`(`start | center | end | space-between`)·`bordered`(surface 배경 + hairline 테두리 + 안쪽 패딩)만 다루는 레이아웃·이름 계약이다. **방향키 roving focus는 제공하지 않는다** — 서로 독립적인 컨트롤은 Tab으로 이동하고 포커스는 각 자식이 소유한다.
+
+```tsx
+import { useState } from 'react';
+import { Button, SearchField, Toolbar } from '@gj-kit/expo-ui';
+
+export function MemberFilters({ onExport }: { onExport: () => void }) {
+  const [query, setQuery] = useState('');
+  return (
+    <Toolbar accessibilityLabel="멤버 필터" bordered align="space-between">
+      <SearchField value={query} onChangeText={setQuery} />
+      <Button label="내보내기" variant="secondary" size="sm" onPress={onExport} />
+    </Toolbar>
+  );
+}
+```
+
 #### Link — 목적지 이동과 앱 라우팅을 분리
 
 `Link`의 children은 안정적인 문자열이고, 다음 두 branch는 상호 배타적이다.
@@ -678,7 +877,26 @@ export function HelpLinks() {
 
 #### Card / AspectRatio — 콘텐츠 표면과 미디어 비율
 
-`Card`는 관련 콘텐츠를 묶는 **정적 View 컨테이너만** 제공한다. 선택지는 `variant="outlined" | "elevated" | "filled"`, 토큰 또는 숫자 `padding`, 토큰 `radius`다. 모든 variant가 같은 내부 content View를 사용하며 `style`은 높이·폭·배치 같은 바깥 레이아웃, `contentStyle`은 자식 방향·정렬·간격에 적용한다. 이 구조는 고정 높이 Card 안의 flex 자식이 남은 영역을 채우게 하면서 elevated의 바깥 shadow는 clip하지 않고 내부 배경·테두리·둥근 모서리와 자식만 안전하게 clip한다. `onPress`·`disabled`·전체-card 접근성 이름은 받지 않는다. 이동이나 작업이 필요하면 정적 Card 안에 의미가 분명한 `Link`나 `Button`을 별도로 둔다. 이 경계는 전체 카드 button 안에 다른 interactive child가 중첩되는 문제를 공개 API에서 제거한다.
+`Card`는 기본적으로 관련 콘텐츠를 묶는 **정적 View 컨테이너**다. 선택지는 `variant="outlined" | "elevated" | "filled"`, 토큰 또는 숫자 `padding`, 토큰 `radius`다. 모든 variant가 같은 내부 content View를 사용하며 `style`은 높이·폭·배치 같은 바깥 레이아웃, `contentStyle`은 자식 방향·정렬·간격에 적용한다. 이 구조는 고정 높이 Card 안의 flex 자식이 남은 영역을 채우게 하면서 elevated의 바깥 shadow는 clip하지 않고 내부 배경·테두리·둥근 모서리와 자식만 안전하게 clip한다.
+
+`onPress`를 주면 카드 전체가 정직한 버튼이 된다. 자식은 언제나 임의 rich 콘텐츠이므로 **명시적 `accessibilityLabel`이 타입으로 필수**다(rich children `Button`과 같은 규칙, 런타임에서도 공백 문자열을 거부). `selected`를 boolean으로 주면 카드는 **독립 toggle button**으로 노출된다 — 웹 `aria-pressed`, 네이티브 togglebutton + checked 상태 — 그리고 선택 중에는 `primarySoft` 배경 + `primary` 테두리의 토큰 시각을 얻는다. 정확히 하나를 고르는 N지선다 그룹의 정직한 위젯은 `RadioGroup`이다: Card 하나는 그룹 관계·roving focus를 소유할 수 없으므로 radio 의미론을 가장하지 않는다. 선택형 Card 그룹을 쓰면 보조 기술에는 독립 토글들의 집합으로 읽힌다는 것을 감수하고, 그룹 맥락은 각 카드의 `accessibilityLabel`/`accessibilityHint`로 전달한다. 정적 카드에 `onPress`·`selected`·`disabled`·`accessibilityLabel`을 붙이는 것은 여전히 컴파일 에러이고, pressable 카드 안에 또 다른 interactive child를 두는 것은 중첩 컨트롤이므로 두지 않는다 — 내부 액션이 필요한 카드는 정적 Card + 명시적 `Link`/`Button` 조합으로 돌아간다.
+
+```tsx
+import { Card, Text } from '@gj-kit/expo-ui';
+
+export function ScenarioCard({ selected, onSelect }: { selected: boolean; onSelect: () => void }) {
+  return (
+    <Card
+      onPress={onSelect}
+      selected={selected}
+      accessibilityLabel="표준 시나리오, 월 1회 결제"
+    >
+      <Text role="title">표준 시나리오</Text>
+      <Text role="caption" color="textMuted">매월 1일에 정기 결제를 시도합니다.</Text>
+    </Card>
+  );
+}
+```
 
 `AspectRatio`는 `ratio={width / height}`와 선택적 children을 받는 폭 100% View다. ratio가 0 이하이거나 유한수가 아니면 즉시 `RangeError`를 던져 깨진 레이아웃이 조용히 전파되지 않게 한다.
 
@@ -911,6 +1129,33 @@ export function RecordActions() {
 
 safe area는 `safeAreaInsets={{ top, right, bottom, left }}` 구조 값으로 주입한다. `keyboardOverlap > 0`이면 패널의 `safeAreaInsets.bottom`을 대체해 키보드 높이와 safe area를 이중 합산하지 않는다. backdrop, Escape, hardware Back, accessibility escape, close action, 중첩 overlay의 child-first 순서와 focus 복원은 Dialog와 같은 dismissal stack을 사용한다. `dismissDisabled`는 이 모든 사용자 닫기 경로를 함께 막는다.
 
+`showCloseButton`(기본 true)은 헤더의 닫기 X만 제어한다. **X는 편의 장치이지 유일한 출구가 아니다** — `showCloseButton={false}`여도 backdrop 탭, Escape, hardware Back, 접근성 escape는 여전히 dismiss한다. 반대로 `showCloseButton={false}`와 `dismissDisabled`를 **함께** 쓰면 내장 출구가 전부 사라진다: 시트는 호출부가 닫아 줄 때까지 열려 있으므로, **명시적 출구 제공은 전적으로 소비자 책임이다.** 로그아웃·탈퇴처럼 둘 중 하나를 강제하는 확인 시트가 정확히 이 패턴이며, 보통 `footer`의 취소/확인 액션이 유일한 출구가 된다(ConfirmDialog의 forced-choice 규율과 동일).
+
+```tsx
+import { Button, Sheet, Text } from '@gj-kit/expo-ui';
+
+export function SignOutSheet({ open, onResolve }: { open: boolean; onResolve: (signOut: boolean) => void }) {
+  return (
+    <Sheet
+      open={open}
+      onOpenChange={() => {}}
+      title="로그아웃할까요?"
+      presentation="bottom"
+      showCloseButton={false}
+      dismissDisabled
+      footer={
+        <>
+          <Button label="취소" variant="secondary" onPress={() => onResolve(false)} />
+          <Button label="로그아웃" variant="destructive" onPress={() => onResolve(true)} />
+        </>
+      }
+    >
+      <Text>다시 로그인하기 전까지 알림을 받을 수 없습니다.</Text>
+    </Sheet>
+  );
+}
+```
+
 ```tsx
 import { useState } from 'react';
 import { Button, Sheet, Text } from '@gj-kit/expo-ui';
@@ -1075,6 +1320,39 @@ export function ReleaseChannelSelect() {
 
 두 컴포넌트의 웹 표현은 anchor collision·flip·shift와 detached anchor 종료를 처리하고 긴 목록을 자체 viewport에서 스크롤한다. 네이티브 `presentation="auto" | "bottom" | "center"`, `bottomInset`, `keyboardOverlap`은 ActionSheet와 같은 adaptive 규칙을 쓰며 `keyboardOverlap > 0`이면 이미 safe area를 포함한 값으로 보고 `bottomInset`보다 우선한다.
 
+트리거는 컴포넌트가 소유하지만 테스트·시안 계약을 위한 탈출구는 연다. `triggerTestID`는 **실제 press 대상인 trigger pressable**에 testID를 붙인다(루트 컨테이너의 `testID`와 별개 — `fireEvent.press(getByTestId('album-sort-button'))` 계약이 그대로 성립한다; 웹 Select에서는 파생 `${testID}-trigger`를 대체한다). `triggerHoverStyle`/`itemHoverStyle`은 pointer가 올라가 있는 동안 trigger/항목에 겹쳐지는 스타일이다 — 각각 `triggerStyle`/`itemStyle` **뒤에** 적용되고, disabled 대상에는 적용하지 않으며, hover가 없는 터치 플랫폼에서는 아무 일도 하지 않는다.
+
+```tsx
+import { useState } from 'react';
+import { Select } from '@gj-kit/expo-ui';
+
+const sortItems = [
+  { value: 'recent', label: '최신순' },
+  { value: 'oldest', label: '오래된순' },
+] as const;
+
+export function AlbumSortSelect() {
+  const [open, setOpen] = useState(false);
+  const [sort, setSort] = useState<'recent' | 'oldest' | null>('recent');
+  return (
+    <Select
+      accessibilityLabel="정렬 변경"
+      placeholder="정렬"
+      items={sortItems}
+      value={sort}
+      onValueChange={setSort}
+      open={open}
+      onOpenChange={(next) => setOpen(next)}
+      triggerTestID="album-sort-button"
+      triggerHoverStyle={{ backgroundColor: '#F1F3F5' }}
+      itemHoverStyle={{ backgroundColor: '#edeff0' }}
+    />
+  );
+}
+```
+
+Menu·Select는 OverlayProvider 범위 없이 렌더되면 **의도적으로 throw한다**(Dialog의 단독 폴백과 비대칭인 이유: 두 컴포넌트의 outside-press/Escape 소유권은 overlay stack의 topmost 판정이 중재하므로, stack 없이 열리면 중첩 overlay에서 어느 레이어가 이벤트를 소비할지 보장할 수 없다). 에러 메시지가 안내하듯 앱 루트나 테스트 렌더를 `UiProvider`로 감싸면 된다 — 루트 `UiProvider`가 overlay scope를 자동으로 만든다(명시적 `OverlayProvider`도 동일).
+
 #### ToastViewport / useToastQueue — 수명과 순서를 선언적으로 소유
 
 기존 `Toast/useToastController`는 단일 알림 호환 API로 유지한다. `useToastQueue`는 FIFO 전체 `records`, 현재 보이는 `visibleToasts`, `queuedCount`와 `show/update/dismiss/dismissAll/pause/resume`을 반환한다. 기본은 한 개 표시·아홉 개 대기(총 10개), 5000ms이며 `durationMs={null}`은 사용자가 닫을 때까지 유지한다. 타이머는 보이는 Toast에만 시작되고, update 또는 같은 `dedupeKey`의 show는 기존 id와 위치를 보존하면서 내용을 바꾸고 수명을 다시 시작한다. 상한을 넘으면 가장 오래 기다린 항목을 결정적으로 제거하고 `queue-overflow`를 보고한다.
@@ -1161,8 +1439,11 @@ export function ProfileTabs() {
 
 ```tsx
 <EmptyState body="첫 번째 기록을 남겨보세요" action={{ label: '기록 만들기', onPress: create }} />
+<EmptyState variant="compact" title="결제 내역 없음" />
 <ErrorState onRetry={refetch} />
 ```
+
+`EmptyState variant="compact"`은 표 내부(`DataTable emptyState` 슬롯)나 인라인 빈 행용 한 줄 안내다 — 제목이 `typography.label`(13px), 패딩은 `spacing.lg`, 내장 아이콘 없음(`leading`은 명시했을 때만 원형 배경 없이 그대로 렌더). `variant`가 없으면 기존 카드와 완전히 같다. `Skeleton`은 모든 플랫폼에서 같은 펄스를 돌리되 웹에서는 JS driver를 명시해 RNW의 `useNativeDriver` 경고를 인스턴스마다 찍지 않는다.
 
 > **왜 이 단계를 건너뛸 수 없는가**
 > `EmptyState`의 액션은 `{ label, onPress }` 객체다 — 전신처럼 `actionLabel`만 넘기고 `onAction`을 잊으면 **눌러도 아무 일 없는 죽은 버튼**이 렌더됐다. 이제 그 상태는 컴파일되지 않는다. `ErrorState`의 재시도 버튼도 `onRetry`가 있을 때만 렌더된다.
@@ -1199,6 +1480,51 @@ variant별 아이콘은 `icons.toast`에서, 지속 시간은 `useToastControlle
 
 `Dialog`는 `visible`을 앱이 소유하는 controlled API를 유지하면서 `onDismiss`에 `backdrop-press | escape-key | hardware-back | accessibility-escape | close-action` 이유를 전달한다. 기존 `() => void` handler도 그대로 할당할 수 있다. 직접 자식 `DialogPanel`의 title·description은 웹 modal의 `aria-labelledby`·`aria-describedby`에 연결되고, 네이티브에서는 탐색 가능한 header·description과 modal isolation을 제공한다. 임의 콘텐츠에는 `accessibilityLabel`을 요구한다. `DialogPanel`은 Dialog 안에서 현지화된 닫기 버튼을 기본 제공하며 `showCloseButton={false}`로 끌 수 있다.
 
+시안 고정 확인창을 위해 `DialogPanel`은 헤더·닫기 버튼 탈출구를 연다. `headerStyle`은 leading·제목/본문 copy·닫기 버튼을 감싸는 헤더 행에, `descriptionStyle`은 description Text에 적용된다. `closeButtonStyle`은 닫기 버튼(원형 IconButton)의 위치·크기를, `closeIcon`은 기본 ×/`icons.close` 마크를 임의 노드(또는 `RenderIcon`)로 교체한다 — 접근 가능한 이름(`closeAccessibilityLabel ?? strings.close`)은 그대로 유지된다. 다른 아이콘 슬롯과 같은 규약으로 `null`(직접 전달이든 `RenderIcon`의 반환이든)은 기본 마크로 되돌아간다 — 마크 없는 버튼을 원하면 빈 프래그먼트(`<></>`)를 렌더한다. `hideHeader`는 제목/본문 블록과 `leading` 노드를 시각적으로 렌더하지 않되 닫기 버튼 행은 남긴다. 정의된 `hideHeader`는 실제 boolean이어야 한다 — truthy 비-boolean(예: `"false"` 문자열)으로 이름 규율을 우회할 수 없도록 렌더 전에 검증한다. **이름 규율은 그대로다**: 보이는 제목이 사라지면 파생 이름도 사라지므로, modal Dialog의 직접 자식 패널이 `hideHeader`를 쓰면 Dialog에 `accessibilityLabel`을 요구한다(누락 시 렌더 전에 명확히 실패). 이때 description은 렌더되지 않으므로 `aria-describedby` 관계도 걸리지 않는다 — 스크린 리더에 전달할 본문은 패널 children으로 직접 구성한다.
+
+`Dialog backdropStyle`은 backdrop pressable에 테마 `colors.overlay` 위로 겹쳐지는 스타일 오버라이드다. `backgroundColor: 'transparent'`로 딤 없는 anchored overlay를 만들거나 시안 딤 색을 그대로 지정할 수 있다. **overlay 색을 덮어쓰는 순간 패널과 뒤 화면의 대비 책임은 소비자에게 넘어간다** — 테마가 보장하던 scrim 대비는 더 이상 성립하지 않는다. inline presentation은 backdrop 자체를 렌더하지 않으므로 이 prop의 영향 밖이다.
+
+```tsx
+import { Text } from 'react-native';
+import { ConfirmActionRow, Dialog, DialogPanel } from '@gj-kit/expo-ui';
+
+export function FixedArtworkConfirm({ visible, onClose }: { visible: boolean; onClose: () => void }) {
+  return (
+    <Dialog
+      visible={visible}
+      onDismiss={onClose}
+      accessibilityLabel="회원 등급 변경 확인"
+      backdropStyle={{ backgroundColor: 'rgba(13, 13, 13, 0.5)' }}
+    >
+      <DialogPanel
+        title="회원 등급 변경 확인"
+        hideHeader
+        closeButtonStyle={{ position: 'absolute', right: 12, top: 12 }}
+        closeIcon={<Text accessible={false}>×</Text>}
+      >
+        <Text>시안이 소유하는 본문 카피</Text>
+        <ConfirmActionRow
+          onCancel={onClose}
+          onConfirm={onClose}
+          cancelTestID="member-plan-cancel-button"
+          confirmTestID="member-plan-confirm-button"
+          cancelStyle={{ backgroundColor: '#f1f3f5', minHeight: 52 }}
+          cancelLabelStyle={{ color: '#546e7a' }}
+          confirmLabelStyle={{ fontWeight: '600' }}
+        />
+      </DialogPanel>
+    </Dialog>
+  );
+}
+```
+
+`ConfirmActionRow`도 같은 이유로 버튼별 탈출구를 연다: `cancelTestID`/`confirmTestID`(소비 앱의 `-cancel-button`/`-confirm-button` testID 규약), `cancelStyle`/`confirmStyle`(버튼 컨테이너 — 내장 flex 사이징 뒤에 겹침), `cancelLabelStyle`/`confirmLabelStyle`(라벨 Text)이다.
+
+`Dialog`의 모션은 플랫폼 동의 후에만 켜진다(Sheet와 같은 보수적 정책이며, Dialog를 조합하는 `ConfirmDialog`·`ActionSheet`·`Sheet`·`Popover`도 같은 경로를 지난다). `AccessibilityInfo.isReduceMotionEnabled()`는 비동기이므로 설정이 false(모션 허용)로 확정되기 전까지는 — 미해결 창과 감소 상태 모두 — `animationType` 값과 무관하게 'none'으로 프레젠테이션한다. 이 덕분에 `{open && <ConfirmDialog visible …/>}`처럼 열린 채 마운트되는 흔한 패턴에서도 모션 감소 사용자가 entrance 애니메이션을 보지 않는다. 열린 채로 설정이 확정되어도 진행 중인 프레젠테이션의 entrance를 다시 재생하지 않고, 닫힌 커밋 이후의 다음 entrance부터 적용한다(Sheet와 같은 latch).
+
+> **웹 소비자 jest 안내 (jest-expo/web + @testing-library/react)**
+> RNW `Modal`은 entrance 애니메이션의 `animationend` 이후에야 active가 된다 — `role="dialog"`, focus trap, 닫힘 후 unmount가 전부 그 시점이다. jsdom은 CSS 애니메이션을 실행하지 않으므로 `animationType`이 'none'이 아니면 `getByRole('dialog')`가 영원히 나타나지 않는다. 다만 위의 보수적 정책 때문에 대부분의 테스트는 그대로 통과한다: 설정이 false로 확정되기 전까지 Dialog는 'none'이므로, 열자마자(또는 열린 채 마운트하면 즉시) `getByRole('dialog')`가 나타난다. jsdom에는 `window.matchMedia`가 없어 RNW가 모션 감소를 true로 보고하므로 microtask가 flush된 뒤에도 'none'이 유지된다. 애니메이션 경로 자체를 검증해야 할 때만 `isReduceMotionEnabled`를 `Promise.resolve(false)`로 모킹하고 닫힌 상태에서 flush한 뒤 열어 fade/slide를 latch시킨다.
+
 `dismissDisabled`는 저장·삭제 중 backdrop, Escape/Back, 접근성 escape와 닫기 버튼을 함께 막는다. 접근성 escape callback은 실제 descendant에 연결하지만 iOS VoiceOver 실기기 검증 전에는 보장 범위를 넓히지 않는다. `initialFocusRef`·`finalFocusRef`를 지정했을 때만 플랫폼 기본 포커스 처리에 best-effort override를 적용한다. `presentation="inline"`은 이미 열린 native Modal 안에서 레이어를 합성할 때 쓰며 portal·focus trap·dialog 역할을 제공한다고 가장하지 않고 overlay stack에도 참여하지 않는다. rich adaptive surface는 위의 `Sheet`, 제한된 선택 액션은 `ActionSheet`를 사용한다. drag·snap 제스처는 현재 둘의 계약 밖이며 후속 optional `BottomSheet` adapter 범위다.
 
 modal Dialog는 `UiProvider` 또는 `OverlayProvider` 범위가 있으면 열릴 때 stack에 한 번 등록되고, 내부 overlay는 현재 Dialog를 parent로 상속한다. backdrop, 웹 Escape, 네이티브 Back, 접근성 escape와 close action은 모두 같은 topmost request 경로를 지나므로 열린 child Popover·Menu·Select가 있으면 parent Dialog가 먼저 닫히지 않는다. `dismissDisabled`인 topmost layer는 아래 layer까지 요청이 새는 것도 막는다. 이 parent ID와 stack hook은 구현 세부이며 public prop이나 barrel export가 아니다. Provider 없는 단일 Dialog는 기존처럼 동작하지만 여러 overlay의 중첩 순서가 필요하면 루트 `UiProvider`를 둔다.
@@ -1220,7 +1546,7 @@ import { ConfirmDialog } from '@gj-kit/expo-ui';
 />
 ```
 
-확인/취소 두 action만 필요한 경우에는 `ConfirmDialog`를 쓴다. `visible`·`loading`·실제 삭제 후 닫기는 앱이 소유하고, `onConfirm`은 스스로 modal을 닫지 않는다. `onDismiss`는 명시적 취소의 `cancel-action`과 Dialog의 `backdrop-press | escape-key | hardware-back | accessibility-escape`를 같은 typed callback으로 전달한다. 일반 상태에서는 안전한 Cancel에 initial focus를 두며, `loading` 중에는 Cancel·Confirm·backdrop·Escape/Back·접근성 escape를 모두 막는다. custom body/footer나 닫기 X가 필요하면 `Dialog`와 `DialogPanel`을 직접 조합한다.
+확인/취소 두 action만 필요한 경우에는 `ConfirmDialog`를 쓴다. `animationType`은 Dialog로 그대로 전달된다('none' | 'fade' | 'slide', 기본 fade) — 모션은 플랫폼이 감소 아님(false)을 확정한 뒤에만 켜지고 미해결·감소 상태에서는 'none'이므로, 웹 jest에서는 보통 명시 없이도 `getByRole('dialog')`가 바로 나타난다(위 Dialog v2의 안내 참고). `visible`·`loading`·실제 삭제 후 닫기는 앱이 소유하고, `onConfirm`은 스스로 modal을 닫지 않는다. `onDismiss`는 명시적 취소의 `cancel-action`과 Dialog의 `backdrop-press | escape-key | hardware-back | accessibility-escape`를 같은 typed callback으로 전달한다. 일반 상태에서는 안전한 Cancel에 initial focus를 두며, `loading` 중에는 Cancel·Confirm·backdrop·Escape/Back·접근성 escape를 모두 막는다. 버튼 testID는 기본적으로 `${testID}-cancel`/`${testID}-confirm`으로 파생되고, `cancelTestID`/`confirmTestID`로 소비 앱 규약(`-cancel-button`/`-confirm-button` 등)에 맞게 덮어쓸 수 있다. custom body/footer나 닫기 X가 필요하면 `Dialog`와 `DialogPanel`을 직접 조합한다.
 
 ## 3. "./insets" — 키보드·safe-area
 
@@ -1324,7 +1650,8 @@ preset 입력도 브랜드 `Theme`이다 — 손조립 토큰으로 preset을 �
 | `Chip` kind와 다른 handler·state 조합 | 컴파일 에러 — action/filter/removable 판별 유니언 |
 | removable `Chip`에 `removeAccessibilityLabel` 누락 | 컴파일 에러 |
 | `Link`에 `href`와 `onPress`를 동시에 지정 | 컴파일 에러 — destination/router branch 배타 |
-| `Card`에 `onPress`·`disabled` 지정 | 컴파일 에러 — 정적 콘텐츠 컨테이너 전용 |
+| pressable `Card`(`onPress`)에 `accessibilityLabel` 누락 | 컴파일 에러 — rich children은 이름을 암묵 파생하지 않음 |
+| 정적 `Card`에 `selected`·`disabled`·`accessibilityLabel` 지정 | 컴파일 에러 — 위젯 상태는 pressable 카드 전용 |
 | `FormField`에 임의 child를 직접 전달 | 컴파일 에러 — render prop으로 control 관계 적용 |
 | `FormField`에 `disabled` 지정 | 컴파일 에러 — 실제 control이 상태를 소유 |
 | `Collapsible`에 `title` 누락 또는 custom `trigger` 지정 | 컴파일 에러 |
@@ -1336,6 +1663,12 @@ preset 입력도 브랜드 `Theme`이다 — 손조립 토큰으로 preset을 �
 | `DataTable rowHeaderColumnId`에 columns에 없는 ID 지정 | 컴파일 에러 (`NoInfer`) |
 | literal columns tuple의 non-sortable ID를 `DataTable sort.columnId`에 지정 | 컴파일 에러 — `sortable: true` 열만 추론 |
 | `DataTable presentation="list" | "auto"`에 `renderListRow` 누락 | 컴파일 에러 — compact row를 앱이 명시 |
+| `DataTable getRowAccessibilityLabel`을 `onRowPress` 없이 지정 | 컴파일 에러 — 정적 행에는 이름 붙일 대상이 없음 |
+| `KeyValueList` item `value`에 `null`/`undefined`/boolean | 컴파일 에러 — 빈 값은 행을 빼는 것으로 표현 |
+| `StatGrid` item `value`에 숫자 | 컴파일 에러 — 포맷은 앱이 소유, `value: string` |
+| `StatGrid tone="error"` | 컴파일 에러 — `danger`가 tone 이름 |
+| `Toolbar`에 `accessibilityLabel` 누락 | 컴파일 에러 — toolbar landmark 이름 필수 |
+| `Toolbar gap={12}` 같은 픽셀 값 | 컴파일 에러 — spacing 토큰 키만 |
 | `Pagination`에 `accessibilityLabel` 누락 | 컴파일 에러 — navigation 목적 이름 필수 |
 | items `Pagination`에 `pageCount`도 지정 | 컴파일 에러 — items/pages count branch 배타 |
 | cursor `Pagination`에 `page`·`onPageChange` 지정 | 컴파일 에러 — opaque cursor에 숫자 위치를 발명하지 않음 |

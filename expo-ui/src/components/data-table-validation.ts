@@ -24,6 +24,8 @@ export interface ValidatedDataTableRow<
   readonly cells: readonly ValidatedDataTableCell<Row, ColumnId, RowKey>[];
   readonly selectionDisabled: boolean;
   readonly selectionLabel: string | undefined;
+  /** Accessible name of the activatable row; undefined without onRowPress. */
+  readonly pressLabel: string | undefined;
 }
 
 export function assertNonblankDataTableString(
@@ -309,6 +311,19 @@ export function assertDataTableProps<
       "DataTable refreshing state requires at least one retained row; use loading instead."
     );
   }
+  if (props.onRowPress !== undefined && typeof props.onRowPress !== "function") {
+    throw new Error("DataTable onRowPress must be a function.");
+  }
+  if (props.getRowAccessibilityLabel !== undefined) {
+    if (typeof props.getRowAccessibilityLabel !== "function") {
+      throw new Error("DataTable getRowAccessibilityLabel must be a function.");
+    }
+    if (props.onRowPress === undefined) {
+      throw new Error(
+        "DataTable getRowAccessibilityLabel requires onRowPress; static rows have no accessible name."
+      );
+    }
+  }
   if (props.selection !== undefined) {
     if (typeof props.selection.onSelectionChange !== "function") {
       throw new Error(
@@ -374,6 +389,19 @@ export function assertDataTableProps<
         selectionDisabled =
           props.selection.isRowSelectionDisabled?.(context) === true;
       }
+      let pressLabel: string | undefined;
+      if (props.onRowPress !== undefined) {
+        pressLabel =
+          props.getRowAccessibilityLabel === undefined
+            ? cells
+                .map(({ column, textValue }) => `${column.header}: ${textValue}`)
+                .join(", ")
+            : props.getRowAccessibilityLabel(row);
+        assertNonblankDataTableString(
+          pressLabel,
+          `row accessibility label for row "${String(rowKey)}"`
+        );
+      }
       return {
         row,
         rowKey: rowKey as RowKey,
@@ -381,6 +409,7 @@ export function assertDataTableProps<
         cells,
         selectionDisabled,
         selectionLabel,
+        pressLabel,
       };
     }
   );

@@ -78,6 +78,12 @@ export type SelectProps<T extends string> = Omit<CommonProps, 'unstyled'> &
     readonly keyboardOverlap?: number | undefined;
     readonly size?: SelectSize | undefined;
     readonly leading?: ReactNode | RenderIcon | undefined;
+    /** testID on the trigger pressable itself (the actual press target). On the web it replaces the derived `${testID}-trigger`. */
+    readonly triggerTestID?: string | undefined;
+    /** Applied to the trigger while a pointer hovers it (web and pointer-equipped devices). Layered after triggerStyle. */
+    readonly triggerHoverStyle?: StyleProp<ViewStyle> | undefined;
+    /** Applied to an enabled option while a pointer hovers it. Layered after itemStyle. */
+    readonly itemHoverStyle?: StyleProp<ViewStyle> | undefined;
     readonly labelStyle?: StyleProp<TextStyle> | undefined;
     readonly labelClassName?: string | undefined;
     readonly triggerStyle?: StyleProp<ViewStyle> | undefined;

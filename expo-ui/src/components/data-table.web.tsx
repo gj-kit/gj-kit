@@ -5,7 +5,7 @@
  * ARIA grid: it never captures arrow/Home/End keys, and interactive cell
  * descendants keep their ordinary document tab order.
  */
-import { createElement, isValidElement, useId } from "react";
+import { isValidElement, useId } from "react";
 import type { ReactElement, ReactNode } from "react";
 import { Pressable, StyleSheet, Text as RNText, View } from "react-native";
 import type { ViewStyle } from "react-native";
@@ -32,351 +32,12 @@ import type {
 import { EmptyState, ErrorState } from "./feedback";
 import { mergeClassNames, nativeWindProps, themedStyles } from "./internal";
 import { useStrings, useTheme } from "./provider";
+import { rawDomStyle, rawElement } from "./raw-dom";
+import type { RawStyle } from "./raw-dom";
 import { roleTextStyle } from "./text";
-
-type RawStyle = Record<string, unknown>;
-type RawProps = Record<string, unknown>;
-
-/** src intentionally has no DOM type dependency. Keep raw-host access narrow. */
-function rawElement(
-  tag: string,
-  props: RawProps | null,
-  ...children: ReactNode[]
-): ReactElement {
-  return createElement(
-    tag as never,
-    props as never,
-    ...children
-  ) as ReactElement;
-}
 
 function sanitizeId(value: string): string {
   return value.replace(/[^a-zA-Z0-9_-]/g, "");
-}
-
-const RAW_STYLE_ALIASES: Readonly<Record<string, string>> = {
-  borderBottomEndRadius: "borderEndEndRadius",
-  borderBottomStartRadius: "borderEndStartRadius",
-  borderEndColor: "borderInlineEndColor",
-  borderEndWidth: "borderInlineEndWidth",
-  borderStartColor: "borderInlineStartColor",
-  borderStartWidth: "borderInlineStartWidth",
-  borderTopEndRadius: "borderStartEndRadius",
-  borderTopStartRadius: "borderStartStartRadius",
-  end: "insetInlineEnd",
-  marginEnd: "marginInlineEnd",
-  marginStart: "marginInlineStart",
-  paddingEnd: "paddingInlineEnd",
-  paddingStart: "paddingInlineStart",
-  start: "insetInlineStart",
-};
-
-const RAW_AXIS_STYLE_EXPANSIONS: Readonly<Record<string, readonly string[]>> = {
-  marginHorizontal: ["marginLeft", "marginRight"],
-  marginVertical: ["marginTop", "marginBottom"],
-  paddingHorizontal: ["paddingLeft", "paddingRight"],
-  paddingVertical: ["paddingTop", "paddingBottom"],
-};
-
-/**
- * RN numbers are density-independent pixels. React DOM normally adds `px` to
- * numeric dimensions, but treats a few CSS properties (notably lineHeight) as
- * unitless. Serializing every RN length here keeps raw semantic hosts faithful
- * to the RN style contract and avoids a theme lineHeight of 24 becoming 24x.
- */
-const RAW_LENGTH_PROPERTIES = new Set([
-  "borderBottomLeftRadius",
-  "borderBottomRightRadius",
-  "borderBottomWidth",
-  "borderEndEndRadius",
-  "borderEndStartRadius",
-  "borderInlineEndWidth",
-  "borderInlineStartWidth",
-  "borderLeftWidth",
-  "borderRadius",
-  "borderRightWidth",
-  "borderStartEndRadius",
-  "borderStartStartRadius",
-  "borderTopLeftRadius",
-  "borderTopRightRadius",
-  "borderTopWidth",
-  "borderWidth",
-  "bottom",
-  "columnGap",
-  "flexBasis",
-  "fontSize",
-  "gap",
-  "height",
-  "inset",
-  "insetBlock",
-  "insetBlockEnd",
-  "insetBlockStart",
-  "insetInline",
-  "insetInlineEnd",
-  "insetInlineStart",
-  "left",
-  "letterSpacing",
-  "lineHeight",
-  "margin",
-  "marginBlock",
-  "marginBlockEnd",
-  "marginBlockStart",
-  "marginBottom",
-  "marginInline",
-  "marginInlineEnd",
-  "marginInlineStart",
-  "marginLeft",
-  "marginRight",
-  "marginTop",
-  "maxHeight",
-  "maxWidth",
-  "minHeight",
-  "minWidth",
-  "outlineOffset",
-  "outlineWidth",
-  "padding",
-  "paddingBlock",
-  "paddingBlockEnd",
-  "paddingBlockStart",
-  "paddingBottom",
-  "paddingInline",
-  "paddingInlineEnd",
-  "paddingInlineStart",
-  "paddingLeft",
-  "paddingRight",
-  "paddingTop",
-  "right",
-  "rowGap",
-  "top",
-  "width",
-]);
-
-/** CSS-compatible RN properties accepted by raw table descendants. */
-const RAW_DIRECT_PROPERTIES = new Set([
-  "alignContent",
-  "alignItems",
-  "alignSelf",
-  "aspectRatio",
-  "backfaceVisibility",
-  "backgroundColor",
-  "borderBlockColor",
-  "borderBlockEndColor",
-  "borderBlockStartColor",
-  "borderBottomColor",
-  "borderColor",
-  "borderInlineEndColor",
-  "borderInlineStartColor",
-  "borderLeftColor",
-  "borderRightColor",
-  "borderStyle",
-  "borderTopColor",
-  "boxSizing",
-  "color",
-  "cursor",
-  "direction",
-  "display",
-  "flex",
-  "flexDirection",
-  "flexGrow",
-  "flexShrink",
-  "flexWrap",
-  "fontFamily",
-  "fontStyle",
-  "isolation",
-  "justifyContent",
-  "mixBlendMode",
-  "opacity",
-  "overflow",
-  "position",
-  "textDecorationColor",
-  "textDecorationLine",
-  "textDecorationStyle",
-  "textTransform",
-  "userSelect",
-  "zIndex",
-]);
-
-function rawPrimitive(value: unknown): string | number | undefined {
-  if (typeof value === "string") return value;
-  if (typeof value === "number" && Number.isFinite(value)) return value;
-  return undefined;
-}
-
-function rawLength(value: unknown): string | undefined {
-  if (typeof value === "number" && Number.isFinite(value)) return `${value}px`;
-  return typeof value === "string" ? value : undefined;
-}
-
-function rawFontWeight(value: unknown): string | number | undefined {
-  const aliases: Readonly<Record<string, number>> = {
-    black: 900,
-    condensed: 400,
-    condensedBold: 700,
-    heavy: 800,
-    light: 300,
-    medium: 500,
-    regular: 400,
-    semibold: 600,
-    thin: 100,
-    ultralight: 100,
-  };
-  if (typeof value === "string" && value in aliases) return aliases[value];
-  return rawPrimitive(value);
-}
-
-function rawTransform(style: RawStyle): string | undefined {
-  if (typeof style.transform === "string") return style.transform;
-  const parts: string[] = [];
-  if (Array.isArray(style.transform)) {
-    for (const operation of style.transform) {
-      if (typeof operation !== "object" || operation === null) continue;
-      const [name, value] = Object.entries(operation as RawStyle)[0] ?? [];
-      if (name === undefined) continue;
-      if (name === "matrix" && Array.isArray(value)) {
-        const values = value.filter(
-          (item): item is number =>
-            typeof item === "number" && Number.isFinite(item)
-        );
-        if (
-          values.length === value.length &&
-          (values.length === 6 || values.length === 16)
-        ) {
-          parts.push(
-            `${values.length === 16 ? "matrix3d" : "matrix"}(${values.join(
-              ", "
-            )})`
-          );
-        }
-      } else if (
-        name === "perspective" ||
-        name === "translateX" ||
-        name === "translateY"
-      ) {
-        const length = rawLength(value);
-        if (length !== undefined) parts.push(`${name}(${length})`);
-      } else if (
-        name === "rotate" ||
-        name === "rotateX" ||
-        name === "rotateY" ||
-        name === "rotateZ" ||
-        name === "skewX" ||
-        name === "skewY"
-      ) {
-        if (typeof value === "string") parts.push(`${name}(${value})`);
-      } else if (name === "scale" || name === "scaleX" || name === "scaleY") {
-        if (typeof value === "number" && Number.isFinite(value))
-          parts.push(`${name}(${value})`);
-      }
-    }
-  }
-  if (parts.length === 0) {
-    if (typeof style.rotation === "number" && Number.isFinite(style.rotation)) {
-      parts.push(`rotate(${style.rotation}deg)`);
-    }
-    for (const name of ["scaleX", "scaleY"] as const) {
-      const value = style[name];
-      if (typeof value === "number" && Number.isFinite(value))
-        parts.push(`${name}(${value})`);
-    }
-    for (const name of ["translateX", "translateY"] as const) {
-      const value = rawLength(style[name]);
-      if (value !== undefined) parts.push(`${name}(${value})`);
-    }
-    if (Array.isArray(style.transformMatrix)) {
-      const values = style.transformMatrix.filter(
-        (item): item is number =>
-          typeof item === "number" && Number.isFinite(item)
-      );
-      if (
-        values.length === style.transformMatrix.length &&
-        (values.length === 6 || values.length === 16)
-      ) {
-        parts.push(
-          `${values.length === 16 ? "matrix3d" : "matrix"}(${values.join(
-            ", "
-          )})`
-        );
-      }
-    }
-  }
-  return parts.length === 0 ? undefined : parts.join(" ");
-}
-
-/**
- * Raw HTML descendants bypass React Native Web's style resolver. Translate the
- * RN style surface deliberately instead of leaking RN-only shorthands or value
- * shapes as invalid CSS declarations.
- */
-function rawDomStyle(style: unknown): RawStyle | undefined {
-  const flat = StyleSheet.flatten(style as never);
-  if (flat === undefined || flat === null) return undefined;
-  const source = flat as unknown as RawStyle;
-  const result: RawStyle = {};
-  for (const [nativeName, nativeValue] of Object.entries(source)) {
-    const expandedNames = RAW_AXIS_STYLE_EXPANSIONS[nativeName];
-    if (expandedNames !== undefined) {
-      const value = rawLength(nativeValue);
-      if (value !== undefined) {
-        for (const name of expandedNames) result[name] = value;
-      }
-      continue;
-    }
-    const name = RAW_STYLE_ALIASES[nativeName] ?? nativeName;
-    if (RAW_LENGTH_PROPERTIES.has(name)) {
-      const value = rawLength(nativeValue);
-      if (value !== undefined) result[name] = value;
-    } else if (RAW_DIRECT_PROPERTIES.has(name)) {
-      const value = rawPrimitive(nativeValue);
-      if (value !== undefined) result[name] = value;
-    } else if (name === "fontWeight") {
-      const value = rawFontWeight(nativeValue);
-      if (value !== undefined) result.fontWeight = value;
-    } else if (name === "fontVariant" && Array.isArray(nativeValue)) {
-      const values = nativeValue.filter(
-        (value): value is string => typeof value === "string"
-      );
-      if (values.length === nativeValue.length)
-        result.fontVariant = values.join(" ");
-    } else if (
-      name === "pointerEvents" &&
-      (nativeValue === "auto" || nativeValue === "none")
-    ) {
-      result.pointerEvents = nativeValue;
-    } else if (name === "textAlign" && nativeValue !== "auto") {
-      const value = rawPrimitive(nativeValue);
-      if (value !== undefined) result.textAlign = value;
-    } else if (name === "textAlignVertical" || name === "verticalAlign") {
-      const value = nativeValue === "center" ? "middle" : nativeValue;
-      if (value !== "auto" && typeof value === "string")
-        result.verticalAlign = value;
-    } else if (
-      name === "writingDirection" &&
-      (nativeValue === "ltr" || nativeValue === "rtl")
-    ) {
-      result.direction = nativeValue;
-    } else if (
-      (name === "boxShadow" ||
-        name === "filter" ||
-        name === "experimental_backgroundImage") &&
-      typeof nativeValue === "string"
-    ) {
-      result[
-        name === "experimental_backgroundImage" ? "backgroundImage" : name
-      ] = nativeValue;
-    } else if (name === "transformOrigin") {
-      if (typeof nativeValue === "string") {
-        result.transformOrigin = nativeValue;
-      } else if (Array.isArray(nativeValue)) {
-        const values = nativeValue.map((value) => rawLength(value));
-        if (values.every((value): value is string => value !== undefined)) {
-          result.transformOrigin = values.join(" ");
-        }
-      }
-    }
-  }
-  const transform = rawTransform(source);
-  if (transform !== undefined) result.transform = transform;
-  return Object.keys(result).length === 0 ? undefined : result;
 }
 
 function alignmentStyle(align: DataTableAlignment | undefined): ViewStyle {
@@ -409,6 +70,54 @@ function originalEvent(event: unknown): unknown {
     return (event as { readonly nativeEvent?: unknown }).nativeEvent ?? event;
   }
   return event;
+}
+
+type RawDomEvent = {
+  readonly key?: string;
+  readonly target?: unknown;
+  readonly currentTarget?: unknown;
+  readonly nativeEvent?: unknown;
+  readonly preventDefault?: () => void;
+  readonly stopPropagation?: () => void;
+};
+
+/**
+ * Activatable rows must not swallow their own interactive descendants: a click
+ * that started on a link, a checkbox, or a button inside a cell belongs to that
+ * control. The lookup uses the target's own `closest` so src stays free of DOM
+ * types.
+ */
+const INTERACTIVE_DESCENDANT_SELECTOR = [
+  "a[href]",
+  "button",
+  "input",
+  "select",
+  "textarea",
+  "summary",
+  '[contenteditable="true"]',
+  '[role="button"]',
+  '[role="checkbox"]',
+  '[role="combobox"]',
+  '[role="link"]',
+  '[role="menuitem"]',
+  '[role="radio"]',
+  '[role="slider"]',
+  '[role="switch"]',
+  '[role="tab"]',
+  '[role="textbox"]',
+].join(",");
+
+function startsInsideInteractiveDescendant(event: RawDomEvent): boolean {
+  const target = event.target as
+    | { readonly closest?: (selector: string) => unknown }
+    | null
+    | undefined;
+  const hit = target?.closest?.(INTERACTIVE_DESCENDANT_SELECTOR);
+  return hit !== null && hit !== undefined && hit !== event.currentTarget;
+}
+
+function isActivationKey(key: string | undefined): boolean {
+  return key === "Enter" || key === " " || key === "Space" || key === "Spacebar";
 }
 
 function changedPageKeys<RowKey extends DataTableRowKey>(
@@ -676,10 +385,12 @@ function DataTableList<
   props,
   rowModels,
   descriptionId,
+  activationHintId,
 }: {
   readonly props: DataTableProps<Row, ColumnId, RowKey>;
   readonly rowModels: readonly ValidatedDataTableRow<Row, ColumnId, RowKey>[];
   readonly descriptionId: string | undefined;
+  readonly activationHintId: string | undefined;
 }): ReactElement {
   const theme = useTheme();
   const strings = useStrings();
@@ -852,11 +563,45 @@ function DataTableList<
                   "DataTable renderListRow must return one valid React element."
                 );
               }
+              const onRowPress = props.onRowPress;
+              const activate = (event: RawDomEvent): void => {
+                onRowPress?.(row, {
+                  rowKey,
+                  rowIndex,
+                  presentation: "list",
+                  originalEvent: originalEvent(event),
+                });
+              };
+              // 표의 <tr role="row"> 패턴을 그대로 따른다 — listitem 자체가 포커스
+              // 가능한 활성화 컨테이너가 되고, 소비자 콘텐츠·체크박스는 button 안에
+              // 중첩되지 않는다. interactive 자손에서 시작한 이벤트는 그 컨트롤 몫이다.
+              const activationProps: Record<string, unknown> =
+                onRowPress === undefined
+                  ? {}
+                  : {
+                      tabIndex: 0,
+                      "aria-label": rowModel.pressLabel,
+                      ...(activationHintId === undefined
+                        ? {}
+                        : { "aria-describedby": activationHintId }),
+                      onClick: (event: RawDomEvent) => {
+                        if (startsInsideInteractiveDescendant(event)) return;
+                        activate(event);
+                      },
+                      onKeyDown: (event: RawDomEvent) => {
+                        if (event.target !== event.currentTarget) return;
+                        if (!isActivationKey(event.key)) return;
+                        event.preventDefault?.();
+                        activate(event);
+                      },
+                    };
+              const body = <View style={styles.listRowContent}>{rendered}</View>;
               return (
                 <View
                   key={reactRowKey(rowKey)}
                   role="listitem"
                   {...nativeWindProps(mergeClassNames(props.listRowClassName))}
+                  {...activationProps}
                   style={[
                     styles.listRow,
                     {
@@ -872,6 +617,9 @@ function DataTableList<
                           : 0,
                       padding: theme.spacing.md,
                     },
+                    onRowPress === undefined
+                      ? null
+                      : { cursor: "pointer" as const },
                     props.listRowStyle,
                   ]}
                 >
@@ -897,7 +645,7 @@ function DataTableList<
                       }}
                     />
                   )}
-                  <View style={styles.listRowContent}>{rendered}</View>
+                  {body}
                 </View>
               );
             })
@@ -940,6 +688,39 @@ export function DataTable<
     props.description === undefined
       ? undefined
       : `gj-data-table-${id}-description`;
+  if (props.onRowPress !== undefined) {
+    assertNonblankDataTableString(
+      strings.rowActivationHint,
+      "strings.rowActivationHint"
+    );
+  }
+  const rowActivationHintId =
+    props.onRowPress === undefined
+      ? undefined
+      : `gj-data-table-${id}-row-activation`;
+  // 포커스 가능한 행에는 눌러서 실행할 수 있다는 단서가 없다 — 시각적으로 숨긴
+  // 힌트를 aria-describedby로 연결해 Enter/Space 활성화를 보조기술에 알린다.
+  const rowActivationHint =
+    rowActivationHintId === undefined
+      ? null
+      : rawElement(
+          "span",
+          {
+            id: rowActivationHintId,
+            style: {
+              border: 0,
+              clipPath: "inset(50%)",
+              height: "1px",
+              margin: "-1px",
+              overflow: "hidden",
+              padding: 0,
+              position: "absolute",
+              whiteSpace: "nowrap",
+              width: "1px",
+            },
+          },
+          strings.rowActivationHint
+        );
   const selection = props.selection;
   const selectedSet = new Set(selection?.selectedRowKeys ?? []);
   const enabledKeys = rowModels
@@ -1008,10 +789,12 @@ export function DataTable<
           </RNText>
         )}
         {captionAndDescription}
+        {rowActivationHint}
         <DataTableList
           props={props}
           rowModels={rowModels}
           descriptionId={descriptionId}
+          activationHintId={rowActivationHintId}
         />
       </View>
     );
@@ -1170,6 +953,13 @@ export function DataTable<
             {
               key: "internal:selection",
               className: props.cellClassName,
+              // 선택 셀의 클릭·키 입력은 행 활성화로 번지지 않는다.
+              ...(props.onRowPress === undefined
+                ? {}
+                : {
+                    onClick: (event: RawDomEvent) => event.stopPropagation?.(),
+                    onKeyDown: (event: RawDomEvent) => event.stopPropagation?.(),
+                  }),
               style: {
                 borderBottom: `${StyleSheet.hairlineWidth}px solid ${theme.colors.line}`,
                 padding: padding.vertical,
@@ -1270,7 +1060,48 @@ export function DataTable<
           )
         );
       });
-      bodyRows.push(rawElement("tr", { key: reactRowKey(rowKey) }, ...cells));
+      const onRowPress = props.onRowPress;
+      const pressProps =
+        onRowPress === undefined
+          ? {}
+          : {
+              // 실제 <tr role="row">를 유지한 채 포커스 가능하게 만든다. 행을 button으로
+              // 바꾸면 row/cell 관계가 깨지고 중첩된 체크박스·링크가 동작하지 않는다.
+              role: "row",
+              tabIndex: 0,
+              "aria-label": rowModel.pressLabel,
+              ...(rowActivationHintId === undefined
+                ? {}
+                : { "aria-describedby": rowActivationHintId }),
+              // filter/transform 기반 피드백 클래스는 table-row 박스에서 브라우저마다
+              // 다르게 그려지므로 행에는 붙이지 않는다. 포커스 링은 UA 기본값을 쓴다.
+              style: { cursor: "pointer" },
+              onClick: (event: RawDomEvent) => {
+                if (startsInsideInteractiveDescendant(event)) return;
+                onRowPress(row, {
+                  rowKey,
+                  rowIndex,
+                  presentation: "table",
+                  originalEvent: originalEvent(event),
+                });
+              },
+              onKeyDown: (event: RawDomEvent) => {
+                // 행 자체에 포커스가 있을 때만 활성화한다 — 셀 안의 컨트롤에서 올라온
+                // Enter/Space는 그 컨트롤의 몫이다.
+                if (event.target !== event.currentTarget) return;
+                if (!isActivationKey(event.key)) return;
+                event.preventDefault?.();
+                onRowPress(row, {
+                  rowKey,
+                  rowIndex,
+                  presentation: "table",
+                  originalEvent: originalEvent(event),
+                });
+              },
+            };
+      bodyRows.push(
+        rawElement("tr", { key: reactRowKey(rowKey), ...pressProps }, ...cells)
+      );
     });
   }
 
@@ -1342,6 +1173,7 @@ export function DataTable<
       style={[styles.root, props.style]}
     >
       {captionAndDescription}
+      {rowActivationHint}
       {rawElement(
         "div",
         {

@@ -131,6 +131,62 @@ export type DataTableSelectionChangeDetails<RowKey extends DataTableRowKey> =
       readonly originalEvent?: unknown;
     };
 
+export interface DataTableRowPressContext<RowKey extends DataTableRowKey> {
+  readonly rowKey: RowKey;
+  readonly rowIndex: number;
+  /** "table" for the semantic web table and the native visual table; "list" for compact presentations. */
+  readonly presentation: "table" | "list";
+  readonly originalEvent?: unknown;
+}
+
+/**
+ * Row activation is optional and additive, and consumer row content is never
+ * nested inside a button. On the web the table body row stays a real focusable
+ * `<tr role="row">` and the compact list row a focusable listitem; both
+ * activate on click, Enter, and Space, ignore events that start on interactive
+ * descendants (selection checkboxes, links), and reference a visually hidden
+ * `strings.rowActivationHint` through `aria-describedby`. Native presentations
+ * split the two concerns: a non-accessible pressable surface handles touch
+ * (nested touchables inside cells still win their own touches) while a sibling
+ * one-point button element carries the accessible row name and activation for
+ * assistive technology. The selection checkbox always stays outside both.
+ */
+type DataTableRowPress<Row, RowKey extends DataTableRowKey> =
+  | {
+      /**
+       * Called when a body row is activated by pointer or keyboard. Never
+       * fires from the selection checkbox or from interactive cell content.
+       */
+      readonly onRowPress: (
+        row: Row,
+        context: DataTableRowPressContext<RowKey>
+      ) => void;
+      /**
+       * Accessible name of an activatable row. Defaults to the row's cells
+       * joined as "header: value". Must return a nonblank string.
+       */
+      readonly getRowAccessibilityLabel?: ((row: Row) => string) | undefined;
+    }
+  | {
+      readonly onRowPress?: never;
+      /**
+       * Only meaningful for activatable rows; requires a definitely present
+       * onRowPress.
+       */
+      readonly getRowAccessibilityLabel?: never;
+    }
+  | {
+      /**
+       * Conditional wiring like `onRowPress={canOpen ? open : undefined}`
+       * stays idiomatic; getRowAccessibilityLabel still requires a definitely
+       * present handler.
+       */
+      readonly onRowPress:
+        | ((row: Row, context: DataTableRowPressContext<RowKey>) => void)
+        | undefined;
+      readonly getRowAccessibilityLabel?: never;
+    };
+
 export interface DataTableSelection<Row, RowKey extends DataTableRowKey> {
   /** Include-only controlled model. Off-page keys are preserved by page toggles. */
   readonly selectedRowKeys: readonly NoInfer<RowKey>[];
@@ -299,6 +355,7 @@ export type DataTableProps<
 > = DataTableBaseProps<Row, ColumnId, RowKey> &
   DataTableAccessibleName &
   DataTableSorting<ColumnId> &
+  DataTableRowPress<Row, RowKey> &
   (
     | DataTableTablePresentation
     | DataTableAdaptivePresentation<Row, RowKey, ColumnId>

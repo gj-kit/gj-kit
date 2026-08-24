@@ -46,9 +46,16 @@ export type TabsProps<T extends string> = TabsBaseProps<T> & TabsPanelsProps<T>;
  * Tab row height — the predecessor's measured values preserved (segmented 40,
  * underline 48). No token concept corresponds to it, so it is named as a constant
  * (§3.8 exception — token-guard covers color and type literals).
+ *
+ * The underline geometry is shared (internal) with SegmentedControl's underline
+ * variant so a filter row and a tab row sit on the same baseline.
  */
 const SEGMENTED_TAB_MIN_HEIGHT = 40;
-const UNDERLINE_TAB_MIN_HEIGHT = 48;
+export const UNDERLINE_TAB_MIN_HEIGHT = 48;
+/** (internal) Hairline under the whole underline track. */
+export const UNDERLINE_TRACK_BORDER_WIDTH = 1;
+/** (internal) Thickness of the active underline indicator. */
+export const UNDERLINE_INDICATOR_WIDTH = 2;
 
 type Focusable = { focus?: () => void };
 
@@ -72,7 +79,7 @@ const getStyles = themedStyles((theme: Theme) => ({
     gap: theme.spacing.xs,
     padding: theme.spacing.xs,
   },
-  underlineTrack: { borderBottomWidth: 1, flexDirection: 'row' as const },
+  underlineTrack: { borderBottomWidth: UNDERLINE_TRACK_BORDER_WIDTH, flexDirection: 'row' as const },
   tab: {
     alignItems: 'center' as const,
     flex: 1,
@@ -80,7 +87,7 @@ const getStyles = themedStyles((theme: Theme) => ({
     paddingHorizontal: theme.spacing.md,
   },
   segmentedTab: { borderRadius: theme.radius.sm, minHeight: SEGMENTED_TAB_MIN_HEIGHT },
-  underlineTab: { minHeight: UNDERLINE_TAB_MIN_HEIGHT, borderBottomWidth: 2 },
+  underlineTab: { minHeight: UNDERLINE_TAB_MIN_HEIGHT, borderBottomWidth: UNDERLINE_INDICATOR_WIDTH },
   tabLabel: { textAlign: 'center' as const },
 }));
 

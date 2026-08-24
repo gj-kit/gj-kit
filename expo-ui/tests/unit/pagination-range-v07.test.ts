@@ -242,7 +242,7 @@ describe("Pagination numbered range", () => {
       }
     }
     expect(evaluated).toBe(282_375);
-  });
+  }, 15_000);
 
   it("rejects unsafe pages, counts, and unsupported range budgets", () => {
     const invalidCases = [

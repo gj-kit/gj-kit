@@ -20,6 +20,7 @@ const packageDirectories = [
   'toss-payments',
   'toss-payments-nestjs',
   'toss-payments-postgresql',
+  'expo-workouts',
 ];
 
 const temporaryDirectory = mkdtempSync(join(tmpdir(), 'gj-kit-npmrc-'));

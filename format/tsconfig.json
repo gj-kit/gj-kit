@@ -1,0 +1,11 @@
+{
+  // 편집기/기본 검사용. tsup이 읽는 tsconfig이기도 하다.
+  // 이 파일은 `@types/node`를 막지 않는다 — platform neutral 강제는 tsconfig.src.json이 한다
+  // (설계 문서 §2.2: 초판처럼 tsconfig 1개면 devDependencies의 @types/node가 src/**에서도
+  // 그대로 보이고, `process`·`Buffer`가 소스에 들어와도 타입 검사가 통과한다).
+  "extends": "../tsconfig.base.json",
+  "compilerOptions": {
+    "ignoreDeprecations": "6.0"
+  },
+  "include": ["src", "tests"]
+}

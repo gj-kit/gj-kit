@@ -18,6 +18,7 @@ const packageDirectories = [
   'expo-ui',
   'expo-media',
   'expo-auth',
+  'format',
   'toss-payments',
   'toss-payments-nestjs',
   'toss-payments-postgresql',

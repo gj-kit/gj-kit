@@ -1,0 +1,13 @@
+{
+  // 테스트 전용 — 테스트는 `process.env.TZ`·`node:fs`를 쓴다(결정성 테스트·가드 스캔).
+  // src의 platform neutral 규율은 tsconfig.src.json이 따로 검사하므로, 여기서 node 타입을
+  // 켜도 라이브러리 코드의 Node API 유입은 여전히 차단된다.
+  "extends": "../tsconfig.base.json",
+  "compilerOptions": {
+    "lib": ["ES2022"],
+    "types": ["node"],
+    "noEmit": true,
+    "ignoreDeprecations": "6.0"
+  },
+  "include": ["src", "tests"]
+}

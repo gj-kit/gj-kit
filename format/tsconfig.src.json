@@ -1,0 +1,16 @@
+{
+  // platform neutral 강제 (설계 문서 §1-5 · §2.2).
+  //
+  // `types: []`가 @types/node 전역을 src/**에서 차단하고, `lib: ["ES2022"]`가 DOM 전역을
+  // 차단한다. 즉 `process.env`·`Buffer`·`document`·`window`가 src에 들어오면 여기서 죽는다 —
+  // 이 규율이 없으면 Node 전역이 타입 검사를 통과하고 Hermes에서만 크래시한다.
+  // 문자열 스캔 가드(tests/unit/guards/source-guard)는 같은 규율의 두 번째 그물이다.
+  "extends": "../tsconfig.base.json",
+  "compilerOptions": {
+    "lib": ["ES2022"],
+    "types": [],
+    "noEmit": true,
+    "ignoreDeprecations": "6.0"
+  },
+  "include": ["src"]
+}

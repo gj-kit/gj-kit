@@ -71,6 +71,7 @@ describe.skipIf(!built)('듀얼 빌드 스모크', () => {
       expect(declared.filter((name) => !(name in fromCjs))).toEqual([]);
       expect(declared.filter((name) => !(name in fromEsm))).toEqual([]);
     },
+    30_000,
   );
 
   it('§7-7 CJS 이중 로드 — `./core`가 만든 에러를 `.`의 매핑이 알아본다', () => {

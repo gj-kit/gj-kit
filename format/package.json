@@ -1,6 +1,6 @@
 {
   "name": "@gj-kit/format",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "description": "명시성 강제 포매팅 유틸 — 시간대·로케일·통화 스타일·바이트 단위를 전부 명시 인자로 받아, 로컬/UTC·₩/원 같은 앱 간 표기 불일치를 타입으로 차단한다. 런타임 의존성 0, Hermes 안전 Intl 부분집합만 사용",
   "keywords": [
     "format",

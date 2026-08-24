@@ -1,5 +1,15 @@
 # @gj-kit/expo-ui-docs
 
+## 0.3.7
+
+### Patch Changes
+
+- Updated dependencies [7a2c809]
+- Updated dependencies [004616f]
+- Updated dependencies [004616f]
+- Updated dependencies [004616f]
+  - @gj-kit/expo-ui@0.8.0
+
 ## 0.3.6
 
 ### Patch Changes

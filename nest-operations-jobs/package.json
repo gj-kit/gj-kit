@@ -1,6 +1,6 @@
 {
   "name": "@gj-kit/nest-operations-jobs",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "description": "NestJS 운영 잡 실행 플랫폼 — 잡 정의만 등록하면 인증·중복 실행 방지·하트비트·타임아웃·실행 기록이 파이프라인으로 강제된다. 저장소는 포트로 분리(스키마 비소유), 순수 러너는 ./core에서 프레임워크 없이 동작, 런타임 의존성 0",
   "keywords": [
     "nestjs",

@@ -1,0 +1,15 @@
+{
+  // 빌드·dts 정본. tsup이 읽는 유일한 tsconfig다 (설계 문서 §2.4).
+  //
+  // lib:["ES2022"] + types:[] — DOM도 node도 주지 않는다. 웹 분기(storage.web.ts)까지 포함한
+  // 전 소스가 구조적 타입 + globalThis 반사만으로 컴파일된다는 것 자체가 §2.4의 계약이다.
+  // 전역 setTimeout/clearTimeout/localStorage 식별자 참조가 소스에 생기면 이 typecheck가
+  // 컴파일 실패로 잡는다 — expo-media처럼 DOM 각인 후처리가 필요 없는 이유다.
+  "extends": "../tsconfig.base.json",
+  "compilerOptions": {
+    "lib": ["ES2022"],
+    "types": [],
+    "ignoreDeprecations": "6.0"
+  },
+  "include": ["src"]
+}

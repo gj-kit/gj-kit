@@ -18,6 +18,7 @@ const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const packages = [
   { directory: 'expo-ui', requirePrepack: true, requireProvenance: true },
   { directory: 'expo-media', requirePrepack: true, requireProvenance: true },
+  { directory: 'expo-auth', requirePrepack: true, requireProvenance: true },
   { directory: 'toss-payments', requirePrepack: true, requireProvenance: true },
   { directory: 'toss-payments-nestjs', requirePrepack: true, requireProvenance: true },
   { directory: 'toss-payments-postgresql', requirePrepack: true, requireProvenance: true },

@@ -10,7 +10,7 @@
     "typecheck": "corepack pnpm -r typecheck",
     "test": "corepack pnpm -r test",
     "test:types": "corepack pnpm -r test:types",
-    "check:readme": "corepack pnpm --filter @gj-kit/expo-ui check:readme && corepack pnpm --filter @gj-kit/expo-media check:readme && corepack pnpm --filter @gj-kit/expo-workouts check:readme && corepack pnpm --filter @gj-kit/toss-payments check:readme && corepack pnpm --filter @gj-kit/toss-payments-nestjs check:readme && corepack pnpm --filter @gj-kit/toss-payments-postgresql check:readme",
+    "check:readme": "corepack pnpm --filter @gj-kit/expo-ui check:readme && corepack pnpm --filter @gj-kit/expo-media check:readme && corepack pnpm --filter @gj-kit/expo-auth check:readme && corepack pnpm --filter @gj-kit/expo-workouts check:readme && corepack pnpm --filter @gj-kit/toss-payments check:readme && corepack pnpm --filter @gj-kit/toss-payments-nestjs check:readme && corepack pnpm --filter @gj-kit/toss-payments-postgresql check:readme",
     "check:pack": "node scripts/check-pack-contents.mjs",
     "check:toss-payments-consumer": "node scripts/check-toss-payments-consumer.mjs",
     "check:expo-sdk": "corepack pnpm --filter @gj-kit/expo-media check:expo-sdk",

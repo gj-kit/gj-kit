@@ -17,6 +17,7 @@ if (token === undefined || token.length === 0) {
 const packageDirectories = [
   'expo-ui',
   'expo-media',
+  'expo-auth',
   'toss-payments',
   'toss-payments-nestjs',
   'toss-payments-postgresql',

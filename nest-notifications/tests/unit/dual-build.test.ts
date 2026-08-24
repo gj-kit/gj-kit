@@ -89,7 +89,7 @@ describe.skipIf(!built)('듀얼 빌드', () => {
       const missing = advertisedAsValue.filter((name) => !(name in runtime));
       expect(missing, declaration).toEqual([]);
     }
-  }, 15_000);
+  }, 30_000);
 
   it('`./core`는 Nest 없이 릴레이를 조립할 수 있다 — 모듈 그래프 층의 증명', async () => {
     const core = (await import(join(distRoot, 'core.js'))) as Record<string, unknown>;

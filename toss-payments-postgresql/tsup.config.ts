@@ -1,7 +1,7 @@
 import { defineConfig } from 'tsup';
 
 export default defineConfig({
-  entry: ['src/index.ts', 'src/nestjs.ts'],
+  entry: ['src/index.ts', 'src/nestjs.ts', 'src/testing.ts'],
   // Nest 생태계는 CJS 프로젝트가 여전히 다수 — ESM+CJS 듀얼 필수 (형제 패키지 선례)
   format: ['esm', 'cjs'],
   dts: true,

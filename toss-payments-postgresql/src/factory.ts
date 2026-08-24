@@ -18,6 +18,12 @@ import { migrate } from './migrations';
 import type { MigrationResult } from './migrations';
 import { createPgOpaqueAdvisoryLocks } from './opaque-advisory-locks';
 import type { PgOpaqueAdvisoryLocks } from './opaque-advisory-locks';
+import {
+  DEFAULT_CANCEL_RETRY_DAYS,
+  DEFAULT_COMPLETED_TTL_SECONDS,
+  assertPositiveFinite,
+  assertPositiveInteger,
+} from './options';
 import { requireSensitiveValueProtector } from './sensitive-values';
 import type { SensitiveValueProtector } from './sensitive-values';
 import type { SqlClient } from './sql';
@@ -100,9 +106,6 @@ export interface TossPaymentsPostgres {
   cleanup(): Promise<CleanupResult>;
 }
 
-const DEFAULT_COMPLETED_TTL_SECONDS = 432_000; // 5일
-const DEFAULT_CANCEL_RETRY_DAYS = 15; // 토스 멱등키 유효기간
-
 export function createTossPaymentsPostgres(
   options: TossPaymentsPostgresOptions,
 ): TossPaymentsPostgres {
@@ -156,22 +159,4 @@ RETURNING 1 AS deleted`;
       };
     },
   };
-}
-
-function assertPositiveFinite(value: number, label: string): void {
-  if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0) {
-    throw new TypeError(`[@gj-kit/toss-payments-postgresql] ${label}은(는) 양의 유한 숫자여야 합니다.`);
-  }
-}
-
-/**
- * `make_interval(days => $1)`의 days 파라미터는 PostgreSQL **integer**다 —
- * secs(double precision)와 달리 소수(예: 0.5)를 주면 조립 시점이 아니라 첫
- * cleanup() 호출에서야 드라이버 캐스트 에러로 터진다. fail-fast 원칙대로
- * 조립 시점에 정수를 강제한다.
- */
-function assertPositiveInteger(value: number, label: string): void {
-  if (typeof value !== 'number' || !Number.isSafeInteger(value) || value <= 0) {
-    throw new TypeError(`[@gj-kit/toss-payments-postgresql] ${label}은(는) 양의 정수여야 합니다.`);
-  }
 }

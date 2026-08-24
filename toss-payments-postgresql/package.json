@@ -40,6 +40,16 @@
         "types": "./dist/nestjs.d.cts",
         "default": "./dist/nestjs.cjs"
       }
+    },
+    "./testing": {
+      "import": {
+        "types": "./dist/testing.d.ts",
+        "default": "./dist/testing.js"
+      },
+      "require": {
+        "types": "./dist/testing.d.cts",
+        "default": "./dist/testing.cjs"
+      }
     }
   },
   "scripts": {
@@ -53,7 +63,7 @@
     "test:all": "pnpm run test && pnpm run test:types && pnpm run test:integration"
   },
   "peerDependencies": {
-    "@gj-kit/toss-payments": "^0.5.0",
+    "@gj-kit/toss-payments": "^0.5.0 || ^0.6.0",
     "@nestjs/common": "^10 || ^11",
     "reflect-metadata": "^0.1.13 || ^0.2",
     "rxjs": "^7"

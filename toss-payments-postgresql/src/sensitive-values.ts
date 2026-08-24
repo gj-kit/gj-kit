@@ -38,6 +38,10 @@ export interface SensitiveValueContext {
  * 들이지 않는다. `encrypt`는 평문과 다른, DB에 안전하게 저장 가능한 문자열을 반환해야
  * 하고 `decrypt`는 같은 context에서만 원문을 복원해야 한다. 구현은 암호화 실패 메시지에
  * 평문을 포함하지 않아야 한다.
+ *
+ * 이 패키지의 스토어가 넘기는 평문은 항상 well-formed UTF-16이다(JSON.stringify 출력 또는
+ * ASCII secret). 구현은 비페어 서로게이트를 조용히 바꿔 봉하지 말고 거부해야 한다 — 레퍼런스
+ * AES-256-GCM 보호기는 `TypeError`로 거부한다.
  */
 export interface SensitiveValueProtector {
   encrypt(plaintext: string, context: SensitiveValueContext): Promise<string>;

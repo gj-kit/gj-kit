@@ -85,7 +85,11 @@ WHERE order_id = $1`;
   };
 }
 
-function mapStoredOrder(orderId: OrderId, row: SqlRow): StoredOrder {
+/**
+ * orders 행 → StoredOrder 투영. 계약 5필드만 내보내고 amount/currency를 검증한다.
+ * 내부 공유 전용(`./testing` 대역이 같은 투영·검증을 재사용한다) — 루트 엔트리에서 export하지 않는다.
+ */
+export function mapStoredOrder(orderId: OrderId, row: SqlRow): StoredOrder {
   const amount = toSafeAmount(row['amount']);
   const currency = row['currency'];
   const orderName = row['order_name'];

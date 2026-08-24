@@ -4,7 +4,7 @@
  *
  * README.md의 모든 ```ts 블록을 추출해 실제 패키지 타입(dist d.ts)에 대해 tsc --noEmit로
  * 검사한다. 라이브러리 import는 tsconfig paths로 dist 엔트리에 매핑하고 — 이 패키지 자신
- * (`.`/`./nestjs`)과 코어(`@gj-kit/toss-payments` 3엔트리), Nest 배선 패키지, 그리고
+ * (`.`/`./nestjs`/`./testing`)과 코어(`@gj-kit/toss-payments` 3엔트리), Nest 배선 패키지, 그리고
  * `pg`/`@nestjs/*` devDependency 타입까지 — 예제가 가정하는 서드파티 모듈
  * (`typeorm`/`@nestjs/schedule`)은 ambient 스텁으로 선언한다: 앱/서드파티 식별자는 스텁,
  * 라이브러리 유래 식별자는 실제 타입이라 시그니처 오용은 그대로 컴파일 에러로 잡힌다.
@@ -38,6 +38,7 @@ const nestPkgDistDir = join(pkgRoot, '..', 'toss-payments-nestjs', 'dist');
 for (const [label, file] of [
   ['dist/index.d.ts', join(distDir, 'index.d.ts')],
   ['dist/nestjs.d.ts', join(distDir, 'nestjs.d.ts')],
+  ['dist/testing.d.ts', join(distDir, 'testing.d.ts')],
   ['@gj-kit/toss-payments dist', join(coreDistDir, 'index.d.ts')],
   ['@gj-kit/toss-payments-nestjs dist', join(nestPkgDistDir, 'index.d.ts')],
 ]) {
@@ -160,9 +161,11 @@ declare const webhook: import('@gj-kit/toss-payments/webhook').AcceptedWebhook;
 const paths = {
   '@gj-kit/toss-payments-postgresql': [join(distDir, 'index.d.ts')],
   '@gj-kit/toss-payments-postgresql/nestjs': [join(distDir, 'nestjs.d.ts')],
+  '@gj-kit/toss-payments-postgresql/testing': [join(distDir, 'testing.d.ts')],
   '@gj-kit/toss-payments': [join(coreDistDir, 'index.d.ts')],
   '@gj-kit/toss-payments/server': [join(coreDistDir, 'server.d.ts')],
   '@gj-kit/toss-payments/webhook': [join(coreDistDir, 'webhook.d.ts')],
+  '@gj-kit/toss-payments/testing': [join(coreDistDir, 'testing.d.ts')],
   '@gj-kit/toss-payments-nestjs': [join(nestPkgDistDir, 'index.d.ts')],
   // devDependency 타입 — 임시 디렉토리에서 bare specifier가 해석되지 않으므로 명시 매핑
   pg: [join(pkgRoot, 'node_modules', '@types', 'pg', 'index.d.ts')],

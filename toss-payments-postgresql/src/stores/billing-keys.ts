@@ -13,8 +13,6 @@
  *   customerKey와 billingKey를 같은 문자열(로그 한 줄)에 함께 두지 않는다 — 토스의
  *   빌링 보안 모델이 이 쌍의 분리에 의존한다. 이 파일의 메시지는 둘 다 싣지 않는다.
  */
-import { createHash, timingSafeEqual } from 'node:crypto';
-
 import type {
   BillingKeyDeleteRequest,
   BillingKeyRecord,
@@ -22,43 +20,37 @@ import type {
   BillingKeyStore,
 } from '@gj-kit/toss-payments/server';
 
-import { TossPostgresError } from '../errors';
 import { DEFAULT_SCHEMA, assertSqlIdentifier, schemaRef } from '../identifiers';
 import {
   createOpaqueAdvisoryLockAcquirer,
   createOpaqueAdvisoryLockKey,
 } from '../opaque-advisory-locks';
 import type { OpaqueAdvisoryLockKey } from '../opaque-advisory-locks';
-import {
-  SENSITIVE_VALUE_PURPOSE,
-  createSensitiveValueContext,
-  requireProtectedString,
-  requireSensitiveValueProtector,
-} from '../sensitive-values';
+import { requireSensitiveValueProtector } from '../sensitive-values';
 import type { PgSensitiveStoreOptions } from '../sensitive-values';
-import type { SqlClient, SqlExecutor, SqlRow } from '../sql';
+import type { SqlClient, SqlExecutor } from '../sql';
+import {
+  assertRecordCustomerKey,
+  billingKeysEqualConstantTime,
+  fingerprintOperationId,
+  operationFingerprintFromReplacement,
+  operationFingerprintsEqual,
+  protectBillingKeyRecord,
+  readOperationFingerprint,
+  recordFromReplacement,
+  snapshotFromLoaded,
+  unprotectBillingKeyRecord,
+} from './billing-key-codec';
+import type { LockedBillingKeySnapshot, PgBillingKeySnapshot } from './billing-key-codec';
 
-const METHODS: ReadonlySet<string> = new Set(['카드', '계좌이체']);
+export type { PgBillingKeySnapshot } from './billing-key-codec';
+
 // `hashtext` + two-int advisory lock은 지원 PostgreSQL 범위에 널리 존재한다. 해시 충돌은
 // 서로 다른 customer의 작업을 추가 직렬화할 뿐, 동일 customer fence의 안전성은 약화하지
 // 않는다. `hashtextextended`처럼 새 PostgreSQL 버전에만 있는 함수에 의존하지 않는다.
 const BILLING_KEY_MUTATION_LOCK_SQL =
   'SELECT pg_advisory_xact_lock(hashtext($1), hashtext($2))';
 const BILLING_KEY_MUTATION_LOCK_PREFIX = '@gj-kit/toss-payments-postgresql:billing-key:';
-const MAX_OPERATION_ID_LENGTH = 512;
-/**
- * `replaceAndGetPrevious`가 반환하는 opaque previous snapshot.
- *
- * `record`만 읽어 복구/표시에 쓸 수 있다. snapshot 원본을 그대로
- * `replaceIfBillingKeyMatches`에 넘기면 nonsecret operation fingerprint도 같이 복원한다.
- * fingerprint와 trusted record는 모듈 내부 `WeakMap`에만 연결된다. JSON 직렬화·spread·수동
- * 재구성·상속한 객체는 registry identity가 없으므로 복원 후 lifecycle fence는 의도적으로
- * false가 된다.
- */
-export interface PgBillingKeySnapshot {
-  readonly record: BillingKeyRecord;
-}
-
 /**
  * `withMutationLock` callback에만 전달되는 customerKey-고정 mutation handle.
  *
@@ -296,7 +288,7 @@ RETURNING 1 AS replaced`;
       const result = await sql.query(selectSql, [customerKey]);
       const row = result.rows[0];
       if (row === undefined) return null;
-      return decryptBillingKeyRecord(row, customerKey, sensitiveValueProtector);
+      return unprotectBillingKeyRecord(row['billing_key'], customerKey, sensitiveValueProtector);
     },
     async delete(request) {
       return withMutationLock(request.customerKey, (mutation) =>
@@ -370,88 +362,6 @@ interface LockedBillingKeyMutationOptions {
   readonly conditionalReplaceSql: string;
 }
 
-interface LockedBillingKeySnapshot {
-  readonly record: BillingKeyRecord;
-  /** SHA-256 hex only; raw operationId는 DB row/콜백 어느 쪽에도 노출하지 않는다. */
-  readonly operationFingerprint: string | null;
-}
-
-/**
- * Public snapshot에는 record만 노출한다. 실제 복원에 사용할 record/fingerprint는 이
- * identity registry에서만 꺼내므로 `Object.create(snapshot)`나 symbol reflection으로
- * metadata를 상속/복사해도 trusted snapshot으로 오인하지 않는다.
- */
-const billingKeySnapshotRegistry = new WeakMap<
-  object,
-  Readonly<LockedBillingKeySnapshot>
->();
-
-function snapshotFromLoaded(snapshot: LockedBillingKeySnapshot): PgBillingKeySnapshot {
-  // Caller가 `snapshot.record`를 mutation하여 다른 record + prior fingerprint 조합을
-  // 만들 수 없도록 plain data를 복제해 동결한다. replacement에서는 아래 registry의
-  // trusted record를 사용한다.
-  const record = freezeBillingKeyRecord(snapshot.record);
-  const sealed = Object.freeze({ record }) as PgBillingKeySnapshot;
-  billingKeySnapshotRegistry.set(
-    sealed,
-    Object.freeze({ record, operationFingerprint: snapshot.operationFingerprint }),
-  );
-  return sealed;
-}
-
-function isPgBillingKeySnapshot(
-  value: BillingKeyRecord | PgBillingKeySnapshot,
-): value is PgBillingKeySnapshot {
-  return billingKeySnapshotRegistry.has(value);
-}
-
-function recordFromReplacement(
-  replacement: BillingKeyRecord | PgBillingKeySnapshot,
-): BillingKeyRecord {
-  return isPgBillingKeySnapshot(replacement)
-    ? billingKeySnapshotRegistry.get(replacement)?.record ?? replacement.record
-    : replacement;
-}
-
-function operationFingerprintFromReplacement(
-  replacement: BillingKeyRecord | PgBillingKeySnapshot,
-): string | null {
-  return isPgBillingKeySnapshot(replacement)
-    ? billingKeySnapshotRegistry.get(replacement)?.operationFingerprint ?? null
-    : null;
-}
-
-function freezeBillingKeyRecord(record: BillingKeyRecord): BillingKeyRecord {
-  const card =
-    record.card === null
-      ? null
-      : Object.freeze({
-          issuerCode: record.card.issuerCode,
-          number: record.card.number,
-          cardType: record.card.cardType,
-          ownerType: record.card.ownerType,
-        });
-  const transfers =
-    record.transfers === null
-      ? null
-      : Object.freeze(
-          record.transfers.map((transfer) =>
-            Object.freeze({
-              bankName: transfer.bankName,
-              bankAccountNumber: transfer.bankAccountNumber,
-            }),
-          ),
-        );
-  return Object.freeze({
-    customerKey: record.customerKey,
-    billingKey: record.billingKey,
-    method: record.method,
-    issuedAt: record.issuedAt,
-    card,
-    transfers,
-  });
-}
-
 /**
  * 하나의 `withMutationLock` callback에 귀속되는 store view.
  *
@@ -477,8 +387,8 @@ function createLockedBillingKeyMutation(
     const row = selected.rows[0];
     if (row === undefined) return null;
     return {
-      record: await decryptBillingKeyRecord(row, customerKey, sensitiveValueProtector),
-      operationFingerprint: readOperationFingerprint(row),
+      record: await unprotectBillingKeyRecord(row['billing_key'], customerKey, sensitiveValueProtector),
+      operationFingerprint: readOperationFingerprint(row['operation_fingerprint']),
     };
   };
 
@@ -531,7 +441,7 @@ function createLockedBillingKeyMutation(
       const row = selected.rows[0];
       return row === undefined
         ? null
-        : decryptBillingKeyRecord(row, customerKey, sensitiveValueProtector);
+        : unprotectBillingKeyRecord(row['billing_key'], customerKey, sensitiveValueProtector);
     },
 
     async save(record, saveOptions) {
@@ -587,154 +497,4 @@ async function saveBillingKeyRecord(
     null,
     fingerprintOperationId(options?.operationId),
   ]);
-}
-
-async function protectBillingKeyRecord(
-  record: BillingKeyRecord,
-  sensitiveValueProtector: PgSensitiveStoreOptions['sensitiveValueProtector'],
-): Promise<string> {
-  return requireProtectedString(
-    await sensitiveValueProtector.encrypt(
-      JSON.stringify(record),
-      createSensitiveValueContext(SENSITIVE_VALUE_PURPOSE.billingKey, record.customerKey),
-    ),
-    'encrypt',
-  );
-}
-
-async function decryptBillingKeyRecord(
-  row: SqlRow,
-  customerKey: BillingKeyRecord['customerKey'],
-  sensitiveValueProtector: PgSensitiveStoreOptions['sensitiveValueProtector'],
-): Promise<BillingKeyRecord> {
-  const protectedRecord = row['billing_key'];
-  if (typeof protectedRecord !== 'string') {
-    // 보안 불변식 — 메시지에 billingKey/customerKey 어느 쪽도 싣지 않는다.
-    throw new TossPostgresError(
-      'invalid-row',
-      'billing_keys 행의 보호된 레코드가 문자열이 아닙니다.',
-    );
-  }
-  const serialized = requireProtectedString(
-    await sensitiveValueProtector.decrypt(
-      protectedRecord,
-      createSensitiveValueContext(SENSITIVE_VALUE_PURPOSE.billingKey, customerKey),
-    ),
-    'decrypt',
-  );
-  return parseBillingKeyRecord(serialized, customerKey);
-}
-
-/**
- * `0002` 이후 operation_fingerprint는 nullable text다. migration 전 fixture나 과거 행의
- * undefined/null은 fence 미지원(false)으로 취급한다. 다른 타입은 손상 행이므로 숨기지 않는다.
- */
-function readOperationFingerprint(row: SqlRow): string | null {
-  const value = row['operation_fingerprint'];
-  if (value === undefined || value === null) return null;
-  if (typeof value !== 'string' || !/^[0-9a-f]{64}$/.test(value)) {
-    throw new TossPostgresError(
-      'invalid-row',
-      'billing_keys 행의 operation fingerprint가 올바른 SHA-256 hex가 아닙니다.',
-    );
-  }
-  return value;
-}
-
-/**
- * raw operationId는 저장하지 않는다. SHA-256은 authorization secret가 아니라 correlation
- * identifier의 DB 노출 면적을 줄이는 fingerprint이며, 일치 판정은 아래 constant-time 비교로
- * 다시 수행한다.
- */
-function fingerprintOperationId(operationId: string | undefined): string | null {
-  if (operationId === undefined) return null;
-  if (
-    typeof operationId !== 'string' ||
-    operationId.length === 0 ||
-    operationId.length > MAX_OPERATION_ID_LENGTH
-  ) {
-    throw new TypeError(
-      '[@gj-kit/toss-payments-postgresql] operationId는 1~512자 문자열이어야 합니다.',
-    );
-  }
-  return createHash('sha256').update(operationId, 'utf8').digest('hex');
-}
-
-function operationFingerprintsEqual(left: string, right: string | null): boolean {
-  if (right === null) return false;
-  const leftBytes = Buffer.from(left, 'utf8');
-  const rightBytes = Buffer.from(right, 'utf8');
-  return leftBytes.length === rightBytes.length && timingSafeEqual(leftBytes, rightBytes);
-}
-
-function assertRecordCustomerKey(
-  record: BillingKeyRecord,
-  customerKey: BillingKeyRecord['customerKey'],
-  label: 'record' | 'replacement',
-): void {
-  if (typeof record !== 'object' || record === null || record.customerKey !== customerKey) {
-    // customerKey·billingKey를 에러에 싣지 않는다.
-    throw new TypeError(
-      `[@gj-kit/toss-payments-postgresql] ${label}의 customerKey는 대상 customerKey와 같아야 합니다.`,
-    );
-  }
-}
-
-/**
- * Node crypto의 timingSafeEqual은 길이가 같아야 한다. billing key의 실제 비교는 raw
- * `===`가 아니라 UTF-8 바이트의 상수 시간 비교로 하고, 길이만 별도 판정한다.
- */
-function billingKeysEqualConstantTime(left: string, right: string): boolean {
-  const leftBytes = Buffer.from(left, 'utf8');
-  const rightBytes = Buffer.from(right, 'utf8');
-  return leftBytes.length === rightBytes.length && timingSafeEqual(leftBytes, rightBytes);
-}
-
-/**
- * 보호된 payload 복원. 암호문이 다른 customerKey의 행으로 옮겨졌다면 제대로 AAD를 쓴
- * 보호기는 decrypt 단계에서 먼저 거부한다. 그 구현 실수를 방어하고 data corruption을
- * 조용히 전파하지 않기 위해 payload 안의 customerKey도 조회 키와 일치시킨다.
- */
-function parseBillingKeyRecord(serialized: string, customerKey: string): BillingKeyRecord {
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(serialized);
-  } catch {
-    // 복호화 평문은 민감하다. JSON 파서 cause는 런타임에 따라 입력 일부를 포함할 수 있어
-    // 의도적으로 cause 체인에 보존하지 않는다.
-    throw new TossPostgresError(
-      'invalid-row',
-      'billing_keys 보호된 레코드의 JSON 파싱에 실패했습니다.',
-    );
-  }
-
-  if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
-    throw new TossPostgresError('invalid-row', 'billing_keys 행이 BillingKeyRecord 계약 형태가 아닙니다.');
-  }
-  const record = parsed as Record<string, unknown>;
-  const billingKey = record['billingKey'];
-  const method = record['method'];
-  const issuedAt = record['issuedAt'];
-  const storedCustomerKey = record['customerKey'];
-  const card = record['card'];
-  const transfers = record['transfers'];
-  if (
-    typeof billingKey !== 'string' ||
-    typeof method !== 'string' ||
-    !METHODS.has(method) ||
-    typeof issuedAt !== 'string' ||
-    storedCustomerKey !== customerKey ||
-    (card !== null && (typeof card !== 'object' || Array.isArray(card))) ||
-    (transfers !== null && !Array.isArray(transfers))
-  ) {
-    throw new TossPostgresError('invalid-row', 'billing_keys 행이 BillingKeyRecord 계약 형태가 아닙니다.');
-  }
-  return {
-    customerKey,
-    billingKey,
-    method: method as BillingKeyRecord['method'],
-    issuedAt,
-    card: card as BillingKeyRecord['card'],
-    transfers: transfers as BillingKeyRecord['transfers'],
-  };
 }

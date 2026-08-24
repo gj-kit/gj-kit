@@ -129,6 +129,11 @@ ADD COLUMN operation_fingerprint text`,
   },
 ];
 
+/** @internal 적용 순서 그대로의 migration id — `./testing` 인메모리 대역이 같은 결과 형태를 보고한다. */
+export const MIGRATION_IDS: readonly string[] = Object.freeze(
+  MIGRATIONS.map((migration) => migration.id),
+);
+
 const ADVISORY_LOCK_NAMESPACE = '@gj-kit/toss-payments-postgresql:';
 
 // FNV-1a 64bit 상수 (표준값) — BigInt 연산으로 64bit wrap-around를 재현한다.

@@ -2,7 +2,7 @@
 
 [`@gj-kit/toss-payments`](../toss-payments/README.md)가 공개한 저장소 주입 seam 6종 — 주문 금액 원본(`OrderStore`), 가상계좌 secret(`DepositSecretStore`), 빌링키(`BillingKeyStore`), 취소 재시도 티켓(`CancelRetryStore`), 웹훅 중복 제거(`WebhookDedupeStore`), 감사 로그(`AuditSink`) — 의 PostgreSQL 구현입니다. 테이블 7종과 마이그레이션을 이 패키지가 소유하므로 프로덕션 채택이 "테이블을 설계하는 일"이 아니라 "설정하는 일"이 됩니다. billing key 레코드 전체·deposit secret·cancel retry 레코드는 앱이 제공한 비동기 `SensitiveValueProtector`를 거쳐서만 저장됩니다. 즉, 암호 알고리즘/KMS는 앱이 소유하되 평문 저장은 기본값으로 존재하지 않습니다. 웹훅 dedupe의 `claim`은 단일 문 CTE로 원자적으로 전이해 동시 재전송 N건 중 정확히 1건만 처리권을 얻고, 코어에 seam이 없는 이벤트 원문 보존은 웹훅 inbox 헬퍼(`withWebhookInbox`)로 제공합니다.
 
-> **원칙 경계**: direct runtime dependency 0 — **`pg`조차 peer가 아닙니다.** `fromPgPool`은 구조적 타입 `PgPoolLike`만 소비하므로 `pg.Pool`이 그대로 대입되고, TypeORM 등 다른 드라이버 사용자는 `SqlClient`를 직접 구현하면 됩니다. `@nestjs/common`·`reflect-metadata`·`rxjs`는 `./nestjs` 서브패스 전용 optional peer이며, 루트 엔트리 `.`는 Nest 없이 동작합니다. 코어 `BillingKeyStore`에는 그대로 대입되며, stale webhook·projection 경쟁 방어는 PostgreSQL 전용 `PgBillingKeyStore` 확장으로 별도 제공됩니다.
+> **원칙 경계**: direct runtime dependency 0 — **`pg`조차 peer가 아닙니다.** `fromPgPool`은 구조적 타입 `PgPoolLike`만 소비하므로 `pg.Pool`이 그대로 대입되고, TypeORM 등 다른 드라이버 사용자는 `SqlClient`를 직접 구현하면 됩니다. `@nestjs/common`·`reflect-metadata`·`rxjs`는 `./nestjs` 서브패스 전용 optional peer이며, 루트 엔트리 `.`는 Nest 없이 동작합니다. 코어 `BillingKeyStore`에는 그대로 대입되며, stale webhook·projection 경쟁 방어는 PostgreSQL 전용 `PgBillingKeyStore` 확장으로 별도 제공됩니다. `./testing` 서브패스는 같은 aggregate 표면을 **DB 없이** 재현하는 인메모리 대역(`createMemoryTossPaymentsPostgres`)을 제공하고, 루트 엔트리의 `createAes256GcmSensitiveValueProtector`는 `node:crypto`만 쓰는 레퍼런스 보호기입니다 — 키 custody/rotation은 여전히 앱 소유입니다.
 
 ## 설치
 
@@ -11,7 +11,7 @@ pnpm add @gj-kit/toss-payments @gj-kit/toss-payments-postgresql
 pnpm add pg   # 앱이 선택한 드라이버 — 이 패키지의 peer가 아닙니다
 ```
 
-NestJS 배선(`./nestjs`)까지 쓰려면 [`@gj-kit/toss-payments-nestjs`](../toss-payments-nestjs/README.md)를 함께 설치하세요. Nest 앱에는 보통 이미 `@nestjs/common`, `reflect-metadata`, `rxjs`가 있습니다. 모든 주입은 명시적 토큰이므로 `emitDecoratorMetadata` 없이 SWC·esbuild에서도 동작합니다.
+NestJS 배선(`./nestjs`)까지 쓰려면 [`@gj-kit/toss-payments-nestjs`](../toss-payments-nestjs/README.md)를 함께 설치하세요. Nest 앱에는 보통 이미 `@nestjs/common`, `reflect-metadata`, `rxjs`가 있습니다. 모든 주입은 명시적 토큰이므로 `emitDecoratorMetadata` 없이 SWC·esbuild에서도 동작합니다. `./testing` 서브패스는 추가 설치 없이 Node 내장 모듈만 씁니다.
 
 ## 골든 패스 — Pool 하나로 저장소 6종 + 파사드 배선
 
@@ -74,9 +74,10 @@ export const toss = createTossPayments(tossConfig);
 
 `createTossPaymentsPostgres`와 세 개의 개별 스토어 팩토리(`createPgBillingKeyStore`,
 `createPgDepositSecretStore`, `createPgCancelRetryStore`)는 모두
-`sensitiveValueProtector`를 **필수**로 받습니다. 이 패키지는 Node `crypto`·특정 KMS에
-의존하지 않습니다. 대신 앱의 AEAD/envelope-encryption/KMS 어댑터가 아래 contract를
-구현합니다.
+`sensitiveValueProtector`를 **필수**로 받습니다. seam 자체는 특정 KMS·암호 라이브러리에
+의존하지 않습니다 — 앱의 AEAD/envelope-encryption/KMS 어댑터가 아래 contract를 구현하거나,
+KMS 없이 키 하나로 충분하다면 바로 다음 절의 [레퍼런스 AES-256-GCM 보호기](#레퍼런스-aes-256-gcm-보호기--키만-넘기면-seam-context를-aad로-결속한다)를
+씁니다.
 
 ```ts
 import type {
@@ -142,6 +143,97 @@ cutover를 수행하세요. `0001_init`은 변경하지 않았으며 이 보안 
 형식 변경이므로 release notes의 breaking migration 안내를 따릅니다. 현재 release의
 `0002_billing_key_operation_fingerprint`도 append-only로 적용됩니다. 이것은 raw key나
 operationId를 저장하지 않고 lifecycle fence용 SHA-256 fingerprint만 추가합니다.
+
+## 레퍼런스 AES-256-GCM 보호기 — 키만 넘기면 seam context를 AAD로 결속한다
+
+`createAes256GcmSensitiveValueProtector({ key, keyId? })`는 `node:crypto`만으로
+`SensitiveValueProtector`를 만드는 레퍼런스 구현입니다. 앱이 contract를 직접 구현하면서 AAD를
+빠뜨리거나 IV를 재사용하는 실수를 없애기 위한 것이고, 설계 §10의 경계는 그대로입니다:
+**키 생성·보관·회전·폐기는 앱 소유**이며 이 패키지는 키를 만들거나 어디에도 저장하지 않습니다.
+KMS envelope encryption이 필요한 조직은 이 구현 대신 자기 어댑터를 씁니다.
+
+```ts
+// payments/protector.ts — 키는 secret manager에서, 보호기는 프로세스당 1회 조립
+import { createAes256GcmSensitiveValueProtector } from '@gj-kit/toss-payments-postgresql';
+
+// `openssl rand -hex 32`로 만든 64자 hex(또는 32-byte Uint8Array). 로그·에러 어디에도 찍히지 않는다.
+export const sensitiveValueProtector = createAes256GcmSensitiveValueProtector({
+  key: process.env.TOSS_PG_SENSITIVE_VALUE_KEY!,
+  keyId: '2026-08', // 선택 — 봉투 kid + AAD에 결속. 회전 시 어느 키로 봉했는지 식별한다.
+});
+```
+
+계약:
+
+- **알고리즘/봉투**: AES-256-GCM, `encrypt`마다 새 random 12-byte IV, 16-byte tag. 저장 문자열은 JSON
+  `{ "v": 1, "alg": "A256GCM", "kid"?: string, "iv": base64, "tag": base64, "value": base64 }`이며
+  키 순서가 고정된 공개 형식이라 다른 언어/도구에서 재구현할 수 있습니다.
+- **AAD** — 아래 바이트열이 정본이며, ECMAScript 없이도 그대로 재현할 수 있습니다. 스토어가
+  전달하는 `purpose`와 `recordId`(customerKey/orderId/ticketId)가 모두 결속되므로 암호문을 다른
+  행·다른 용도로 옮기면 복호화가 거부됩니다.
+  1. ASCII namespace `@gj-kit/toss-payments-postgresql:sensitive-value:A256GCM:v1`
+  2. 단일 바이트 `0x00`
+  3. 다음 규칙의 JSON 객체를 UTF-8로: **공백 없음** · **키 순서 고정** `purpose`, `recordId`,
+     `kid`(keyId가 없으면 JSON `null`) · 문자열 escaping은 `"`→`\"`, `\`→`\\`,
+     U+0008/0009/000A/000C/000D→`\b` `\t` `\n` `\f` `\r`, 그 외 U+0000–U+001F→`\u00XX`(소문자
+     hex), 비페어 서로게이트→`\uDXXX`(소문자 hex)뿐이고, **그 밖의 모든 문자**(비ASCII·`/`·
+     U+007F·U+2028/2029 포함)는 escape 없이 UTF-8 원문 그대로입니다.
+
+  예: purpose `billing-key`, recordId `cust_é`, keyId 없음 →
+  `{"purpose":"billing-key","recordId":"cust_é","kid":null}` (é는 `0xC3 0xA9` 두 바이트).
+  이 규칙은 ECMAScript `JSON.stringify`의 출력과 바이트 단위로 일치하지만, 다른 언어의 기본
+  직렬화(구분자 뒤 공백, 비ASCII `\uXXXX` escaping — 예: Python `json.dumps` 기본값)는 다른
+  바이트를 만들어 **모든 복호화가 진단 없는 `'authentication-failed'`가 됩니다**. 고정
+  test vector와 독립 재구현 상호 운용 검증은 `tests/unit/aes-gcm-protector.test.ts`에 있습니다.
+- **평문**: well-formed UTF-16만 받습니다 — 비페어 서로게이트가 있으면 UTF-8 인코딩이 U+FFFD로
+  치환해 **원문과 다른 값을 조용히 봉인**하게 되므로, `encrypt`가 `TypeError`로 거부합니다
+  (메시지에 평문은 실리지 않습니다).
+- **키**: 정확히 32 bytes — `Uint8Array`/`Buffer` 또는 64자 hex. 아니면 조립 시점에 `TypeError`.
+  bytes는 조립 시 복사되어 호출자 버퍼를 지워도 영향이 없습니다. `keyId`는 1~128자 문자열입니다.
+- **실패**: `decrypt`는 `SensitiveValueProtectorError`로 거부하고 `code`가 공개 계약입니다
+  (`isSensitiveValueProtectorError`로 판별 — `instanceof`는 ESM/CJS 이중 로드에서 불안정).
+  메시지·`cause` 어디에도 키·평문·암호문이 없습니다.
+
+| `code` | 뜻 |
+|---|---|
+| `'invalid-envelope'` | 저장 문자열이 v1 A256GCM 봉투가 아님 — 0.1.x 평문 행, 손상, 다른 구현의 포맷 |
+| `'key-id-mismatch'` | 봉투 `kid`와 보호기 `keyId`가 다름(한쪽만 있는 경우 포함). 암호 연산 전에 판정 |
+| `'authentication-failed'` | 잘못된 키·다른 purpose/recordId·변조 — **원인을 구분하지 않는 단일 code** |
+
+회전은 앱이 합니다. 새 `keyId`의 보호기를 `sensitiveValueProtector`로 배선하고, 옛 행은
+`'key-id-mismatch'`를 받으면 옛 키 보호기로 복호화해 다시 저장하는 cutover를 앱이 수행합니다.
+`kid`가 AAD에도 들어가므로 `keyId`를 바꾸는 것은 키를 바꾸는 것과 같이 재암호화가 필요합니다.
+회전 시점에는 **키별 encrypt 예산**도 포함하세요: 이 구현은 `encrypt`마다 random 96-bit IV를
+쓰므로 NIST SP 800-38D §8.3에 따라 **한 키로 2^32회의 `encrypt` 호출을 넘기기 전에** 새 키로
+회전해야 합니다(IV 충돌 확률 한계). 라이브러리는 호출 횟수를 세지 않습니다 — 카운팅과 회전
+시점 판단(달력 기준이든 호출량 기준이든 먼저 오는 쪽)은 키 custody와 함께 앱 소유입니다.
+
+```ts
+// payments/protector-rotation.ts — 옛 키를 읽기 전용으로 두는 앱 소유 합성 예시
+import {
+  createAes256GcmSensitiveValueProtector,
+  isSensitiveValueProtectorError,
+} from '@gj-kit/toss-payments-postgresql';
+import type { SensitiveValueProtector } from '@gj-kit/toss-payments-postgresql';
+
+const current = createAes256GcmSensitiveValueProtector({ key: process.env.TOSS_PG_KEY_2026_08!, keyId: '2026-08' });
+const previous = createAes256GcmSensitiveValueProtector({ key: process.env.TOSS_PG_KEY_2026_02!, keyId: '2026-02' });
+
+// 쓰기는 항상 current, 읽기는 kid가 안 맞을 때만 previous로 — 재저장(재암호화)은 앱의 cutover 작업
+export const sensitiveValueProtector: SensitiveValueProtector = {
+  encrypt: (plaintext, context) => current.encrypt(plaintext, context),
+  async decrypt(ciphertext, context) {
+    try {
+      return await current.decrypt(ciphertext, context);
+    } catch (error) {
+      if (isSensitiveValueProtectorError(error) && error.code === 'key-id-mismatch') {
+        return previous.decrypt(ciphertext, context);
+      }
+      throw error;
+    }
+  },
+};
+```
 
 부팅 시퀀스는 항상 **migrate → listen** 순서입니다. 이 패키지는 부팅 시 자동 DDL을 실행하지 않습니다 — `migrate()`는 명시 호출 전용입니다.
 
@@ -290,8 +382,12 @@ idempotencyKey/operationId를 생략한 발급은 이 fence로 확인할 수 없
 
 중요한 운영 경계:
 
-- callback 안에서는 전달받은 `mutation` handle만 사용하세요. 바깥 `pg.billingKeys`를 다시
-  호출하면 다른 connection이 같은 advisory lock을 기다려 deadlock이 납니다. handle은 해당
+- callback 안에서는 전달받은 `mutation` handle만 사용하세요. 바깥 `pg.billingKeys`의 변경
+  API(`save`/`delete`/`replaceAndGetPrevious`/conditional/lock API)를 다시 호출하면 다른
+  connection이 같은 advisory lock을 기다려 deadlock이 납니다. lock을 잡지 않는 바깥
+  `pg.billingKeys.find`는 deadlock은 아니지만 **다른 connection의 READ COMMITTED 읽기**라
+  callback이 아직 COMMIT하지 않은 값을 보지 못하고(이전 값 또는 `null`), pool `max: 1`에서는
+  connection이 없어 멈춥니다 — callback 안의 읽기도 `mutation.find()`를 쓰세요. handle은 해당
   customerKey에 고정되어 다른 customerKey record를 저장하면 throw합니다.
 - callback에는 Toss/provider 호출·HTTP·긴 네트워크 I/O를 넣지 마세요. 보호기에 필요한
   encrypt/decrypt만 라이브러리 내부에서 수행되므로 protector는 low-latency로 유지합니다.
@@ -651,6 +747,134 @@ export function fromTypeOrmDataSource(dataSource: DataSource): SqlClient {
 
 이 DataSource 역시 primary를 향해야 합니다. Prisma/postgres.js도 같은 방식으로 `SqlClient` 두 메서드만 구현하면 됩니다.
 
+## PostgreSQL 없이 테스트하기 — `./testing`
+
+`createMemoryTossPaymentsPostgres(options?)`는 `TossPaymentsPostgres` 표면 전체(`orders`·
+`depositSecrets`·`billingKeys`·`cancelRetries`·`webhookDedupe`·`audit.flush()`·`inbox`·`opaqueLocks`·
+`migrate()`·`cleanup()`)를 **DB 없이** 재현하는 인메모리 대역입니다. 소비 앱이 lock·rollback·
+protector 계약을 `jest.fn()`으로 다시 흉내 내지 않도록, "빠른 Map"이 아니라 계약을 그대로 따르는
+구현입니다:
+
+- `billingKeys.withMutationLock` / `withOpaqueMutationLock` / `opaqueLocks.withLock`은 customerKey별·
+  opaque key별 **실제 in-process mutex**(promise chain)로 직렬화됩니다. 같은 키의 두 번째 callback은
+  첫 번째가 끝나기 전에 시작되지 않고, combined API는 PostgreSQL과 같은 **opaque → customer** 순서로
+  잡아 역순으로 풉니다. handle의 쓰기는 callback이 성공적으로 끝날 때까지 **transaction
+  overlay**에 머뭅니다(READ COMMITTED 재현): handle의 읽기만 자기 쓰기를 보고(read-your-writes),
+  lock 없는 바깥 `billingKeys.find`는 진행 중 callback의 미커밋 쓰기가 아니라 **committed 상태만**
+  봅니다 — PostgreSQL에서 통과할 수 없는 dirty read에 의존하는 테스트는 이 대역에서도 통과할 수
+  없습니다. callback이 반환하면 lock을 풀기 전에 overlay가 적용되고(COMMIT), throw하면 통째로
+  버려집니다(ROLLBACK — 되돌려질 값이 다른 읽기에 한 번도 보이지 않습니다).
+- PostgreSQL에서 self-deadlock이 되는 **같은 키 재진입**(`'reentrant-lock'`)과 README가 금지한 **public
+  lock API 중첩**(`'nested-lock-api'`)은 테스트를 멈추게 두지 않고 `MemoryLockContractError`로 즉시
+  드러냅니다(`isMemoryLockContractError`). callback 밖으로 빠져나간 handle 사용도 쓰기가 조용히
+  버려지는 대신 `'handle-outside-callback'`으로 거부됩니다. 중첩 판정은 lock API 호출이 **시작된
+  위치** 기준이라 callback 안에서 await 없이 띄운 lock 호출도 같은 이유로 거부됩니다 — 경쟁
+  호출자는 아래 contention 예시처럼 callback 밖에서 "started" gate 뒤에 시작하세요. lock 없는
+  `billingKeys.find`·다른 스토어 호출은 callback 안에서도 허용됩니다. PostgreSQL의 deadlock
+  detection(서로 다른 두 키를 역순으로 잡는 경우)은 재현하지 않습니다.
+- billing key 레코드·deposit secret·cancel retry 레코드는 PostgreSQL 스토어와 **같은 codec**으로
+  `sensitiveValueProtector`를 통과합니다(같은 purpose/recordId context, 같은 `invalid-row` 판정).
+  기본값은 `unsafePlaintextSensitiveValueProtector`입니다 — 이 대역은 DB에 닿지 않는 테스트 더블이라
+  허용되며, AAD 결속까지 검증하려면 프로덕션에 배선한 보호기(예: AES-256-GCM)를 그대로 넘기세요.
+- `orders`는 insert-only + 동일값 멱등 + `order-conflict`이고 `loadOrder`도 PostgreSQL과 같은
+  5필드 투영·검증(`invalid-row`/`unsafe-amount`, 여분 필드 버림)을 거칩니다. `audit.record`는 같은
+  id 재호출이 행을 늘리지 않는 멱등입니다(`ON CONFLICT (id) DO NOTHING` 동일). `webhookDedupe`는
+  lease 만료 재점유·`completed` 보존, `inbox`는 동일 마스킹 + `deliveries` 증가, `migrate()`는 실제
+  migration id를 첫 호출에 `applied`, 이후 `skipped`로 보고하고, `cleanup()`은
+  `dedupe.completedTtlSeconds`·`retention.cancelRetryDays` 보존 기간을 `now()`로 적용합니다.
+- 모든 동작은 `recorded.events`에 호출 순서대로 남습니다 — lock 요청/획득/해제(`api`·`lock`·`key`·
+  `outcome`), 스토어 호출(`store`·`operation`·`recordId`·조건부 결과), migrate/cleanup. 값에는 lookup key만
+  있고 billing key·secret·operationId 원문은 없습니다. `recorded.auditEntries`·`recorded.inbox`는 PostgreSQL에
+  읽기 API가 없는 두 테이블의 관측용 view입니다. `reset()`은 테이블·migration 기록·recorded를 모두
+  비웁니다(lock을 쥔 채 호출하지 마세요).
+
+옵션은 PostgreSQL aggregate에서 `sql`을 뺀 형태(`sensitiveValueProtector?`·`schema?`·`dedupe?`·`retention?`)에
+테스트용 시계 `now?: () => number`(epoch ms, 기본 `Date.now`)를 더한 것입니다. 한 인스턴스가 "DB 하나"이므로
+여러 앱 인스턴스의 경쟁은 같은 인스턴스에 대한 동시 호출로 모델링합니다. 프로덕션 사용 금지 —
+프로세스 생존 기간만 상태를 유지합니다.
+
+```ts
+// test/toss-memory.ts — 소비 앱 테스트가 공유하는 aggregate 대역. 프로덕션 배선과 같은 보호기를 넘긴다.
+import { createAes256GcmSensitiveValueProtector } from '@gj-kit/toss-payments-postgresql';
+import { createMemoryTossPaymentsPostgres } from '@gj-kit/toss-payments-postgresql/testing';
+import type { MemoryTossPaymentsPostgres } from '@gj-kit/toss-payments-postgresql/testing';
+
+export const pg: MemoryTossPaymentsPostgres = createMemoryTossPaymentsPostgres({
+  sensitiveValueProtector: createAes256GcmSensitiveValueProtector({ key: 'ab'.repeat(32), keyId: 'test' }),
+  now: () => Date.now(),
+});
+```
+
+lock contention 시나리오 — 발급 callback이 host projection을 끝내기 전에는 늦게 도착한
+`BILLING_DELETED`가 같은 customerKey의 generic record에 닿지 못한다는 것을 이벤트 로그로 단언합니다:
+
+```ts
+import assert from 'node:assert/strict';
+import type { BillingKeyRecord } from '@gj-kit/toss-payments/server';
+import { createOpaqueAdvisoryLockKey } from '@gj-kit/toss-payments-postgresql/testing';
+import { pg } from '@/test/toss-memory';
+
+const issued = undefined as unknown as BillingKeyRecord;
+const opaqueKey = createOpaqueAdvisoryLockKey('v1:billing-credential-lifecycle:blind-index');
+
+pg.reset();
+let issuanceStarted!: () => void;
+const started = new Promise<void>((resolve) => {
+  issuanceStarted = resolve;
+});
+let finishProjection!: () => void;
+const projection = new Promise<void>((resolve) => {
+  finishProjection = resolve;
+});
+
+// 발급: opaque → customer lock을 쥔 채 host projection이 끝날 때까지 머문다.
+const issuance = pg.billingKeys.withOpaqueMutationLock(opaqueKey, issued.customerKey, async (mutation) => {
+  issuanceStarted();
+  await mutation.replaceAndGetPrevious(issued, { operationId: 'billing_auth_intent-1' });
+  await projection;
+});
+// 같은 customerKey의 늦은 webhook — callback이 COMMIT하기 전에는 customer lock을 얻지 못한다.
+// (lock 요청은 FIFO다 — 발급이 lock을 잡기도 전에 보내면 PostgreSQL처럼 webhook이 먼저 잡을 수 있다.)
+await started;
+const lateWebhook = pg.billingKeys.deleteIfBillingKeyMatches({
+  customerKey: issued.customerKey,
+  expectedBillingKey: issued.billingKey,
+});
+
+finishProjection();
+const [, deleted] = await Promise.all([issuance, lateWebhook]);
+assert.equal(deleted, true);
+
+const order = pg.recorded.events
+  .filter((event) => event.type === 'lock-acquired' || event.type === 'lock-released')
+  .map((event) => `${event.type}:${event.api}:${event.lock}`);
+assert.deepEqual(order, [
+  'lock-acquired:billingKeys.withOpaqueMutationLock:opaque',
+  'lock-acquired:billingKeys.withOpaqueMutationLock:customer',
+  'lock-released:billingKeys.withOpaqueMutationLock:customer',
+  'lock-released:billingKeys.withOpaqueMutationLock:opaque',
+  'lock-acquired:billingKeys.withMutationLock:customer',
+  'lock-released:billingKeys.withMutationLock:customer',
+]);
+```
+
+금지된 중첩은 hang 대신 즉시 실패하므로 unit 테스트가 프로덕션 deadlock을 먼저 잡습니다:
+
+```ts
+import assert from 'node:assert/strict';
+import type { BillingKeyRecord } from '@gj-kit/toss-payments/server';
+import { createOpaqueAdvisoryLockKey, isMemoryLockContractError } from '@gj-kit/toss-payments-postgresql/testing';
+import { pg } from '@/test/toss-memory';
+
+const customerKey = undefined as unknown as BillingKeyRecord['customerKey'];
+const opaqueKey = createOpaqueAdvisoryLockKey('v1:billing-credential-lifecycle:blind-index');
+
+await assert.rejects(
+  pg.opaqueLocks.withLock(opaqueKey, () => pg.billingKeys.withMutationLock(customerKey, async () => undefined)),
+  (error: unknown) => isMemoryLockContractError(error) && error.code === 'nested-lock-api',
+);
+```
+
 ## 공개 표면
 
 ### `.` (루트)
@@ -662,6 +886,8 @@ export function fromTypeOrmDataSource(dataSource: DataSource): SqlClient {
 | `PgPoolLike` / `PgPoolClientLike` / `PgQueryResultLike` | `pg`를 import하지 않고 `pg.Pool`이 대입되는 구조적 타입 |
 | `SensitiveValueProtector` / `SensitiveValueContext` / `SENSITIVE_VALUE_PURPOSE` | 앱 소유 async at-rest 보호 seam + billing/deposit/cancel AAD context 값 |
 | `unsafePlaintextSensitiveValueProtector` | **개발 DB 전용** 명시적 평문 opt-in — 기본값이 아니며 프로덕션 금지 |
+| `createAes256GcmSensitiveValueProtector({ key, keyId? })` | `node:crypto` AES-256-GCM 레퍼런스 보호기 — 32-byte 키(`Uint8Array` 또는 64자 hex), random IV, purpose/recordId/kid AAD 결속, v1 JSON 봉투. 키 custody/rotation은 앱 소유 (`Aes256GcmSensitiveValueProtectorOptions`) |
+| `SensitiveValueProtectorError` / `isSensitiveValueProtectorError` / `SensitiveValueProtectorErrorCode` | 레퍼런스 보호기의 decrypt 실패 — `'invalid-envelope'` · `'key-id-mismatch'` · `'authentication-failed'`(원인 비구분) |
 | `createTossPaymentsPostgres(options)` | 스토어 집합체 팩토리 — 순수 조립, 즉시 DB 접속 없음. `sensitiveValueProtector` 필수 (`TossPaymentsPostgres` / `TossPaymentsPostgresOptions` / `CleanupResult`) |
 | `pg.opaqueLocks.withLock(key, callback)` | aggregate가 제공하는 앱 lifecycle 순서화. `key`는 `createOpaqueAdvisoryLockKey(appHmacOrBlindIndex)`로 만든 nonsecret branded value여야 하며, callback에는 짧은 local durable work만 둔다. |
 | `createOpaqueAdvisoryLockKey(value)` / `createPgOpaqueAdvisoryLocks(sql, { schema? })` | aggregate 밖에서 같은 facility를 조립할 때의 public factory와 `OpaqueAdvisoryLockKey` / `PgOpaqueAdvisoryLocks` / `PgOpaqueAdvisoryLocksOptions` 타입. raw identifier/HMAC secret 생성은 앱 책임이다. |
@@ -684,7 +910,16 @@ export function fromTypeOrmDataSource(dataSource: DataSource): SqlClient {
 | `TossPaymentsPostgresModule.forRootAsync({ imports?, inject?, useFactory, global? })` | Nest provider 기반 비동기 조립 — `useFactory` 반환값에 `sensitiveValueProtector` 필수 |
 | `TossPaymentsPostgres` / `TossPaymentsPostgresOptions` / `SensitiveValueProtector` / `PgBillingKeyStore` / `PgBillingKeyMutation` (type 재export) | 주입부 타이핑 — 루트 엔트리 없이 사용 가능 |
 
-에러 모델: `TossPostgresError.code`는 `'invalid-identifier'`(스키마 식별자 위반) · `'order-conflict'`(saveOrder가 다른 값으로 재저장 시도 — 금액 대조 원본 보호) · `'unsafe-amount'`(bigint가 `Number.isSafeInteger` 범위 밖) · `'invalid-row'`(DB 행이 코어 계약 형태로 복원 불가) · `'migration-failed'` 5종입니다. 메시지가 아니라 **code가 공개 계약**이고, 드라이버 에러는 감싸지 않고 그대로 통과합니다(SQLSTATE 등 cause 체인 보존). 어떤 에러 메시지에도 secret·billingKey 값은 포함되지 않습니다.
+### `./testing`
+
+| export | 설명 |
+|---|---|
+| `createMemoryTossPaymentsPostgres(options?)` | DB 없는 aggregate 대역 — `TossPaymentsPostgres` 전체 + `recorded` + `reset()` (`MemoryTossPaymentsPostgres` / `MemoryTossPaymentsPostgresOptions`). customerKey·opaque key별 실제 mutex, opaque → customer 순서, callback throw rollback, PostgreSQL 동일 protector codec·insert-only·lease/TTL·redaction |
+| `pg.recorded.events` / `recorded.auditEntries` / `recorded.inbox` | 호출 순서 그대로의 관측 로그 (`MemoryTossPaymentsPostgresEvent` = lock-requested/acquired/released · store · migrate · cleanup, `MemoryLockApi` / `MemoryLockClass` / `MemoryStoreName` / `MemoryWebhookInboxRow`). secret·billing key·operationId 원문 없음 |
+| `MemoryLockContractError` / `isMemoryLockContractError` / `MemoryLockContractErrorCode` | hang 대신 throw — `'reentrant-lock'`(같은 키 재진입 = PostgreSQL self-deadlock) · `'nested-lock-api'`(public lock API 중첩) · `'handle-outside-callback'`(callback 종료 후 handle 사용 — COMMIT/ROLLBACK된 connection에 묶인 handle) |
+| `createOpaqueAdvisoryLockKey` / `unsafePlaintextSensitiveValueProtector` + type 재export | 테스트 파일이 루트 엔트리 없이 lock key를 만들고 `TossPaymentsPostgres` / `PgBillingKeyStore` / `PgBillingKeyMutation` / `PgBillingKeySnapshot` / `PgOpaqueAdvisoryLocks` / `OpaqueAdvisoryLockKey` / `SensitiveValueProtector` / `SensitiveValueContext` / `MigrationResult` / `CleanupResult`를 읽을 수 있게 |
+
+에러 모델: `TossPostgresError.code`는 `'invalid-identifier'`(스키마 식별자 위반) · `'order-conflict'`(saveOrder가 다른 값으로 재저장 시도 — 금액 대조 원본 보호) · `'unsafe-amount'`(bigint가 `Number.isSafeInteger` 범위 밖) · `'invalid-row'`(DB 행이 코어 계약 형태로 복원 불가) · `'migration-failed'` 5종입니다. 메시지가 아니라 **code가 공개 계약**이고, 드라이버 에러는 감싸지 않고 그대로 통과합니다(SQLSTATE 등 cause 체인 보존). 어떤 에러 메시지에도 secret·billingKey 값은 포함되지 않습니다. 레퍼런스 AES-256-GCM 보호기의 복호화 실패는 별도 클래스 `SensitiveValueProtectorError`(`code` 3종)이고, `./testing` 대역의 lock 계약 위반은 `MemoryLockContractError`(`code` 3종)입니다 — 둘 다 `TossPostgresErrorCode` 유니언을 넓히지 않습니다.
 
 ## 배포 산출물 handoff
 

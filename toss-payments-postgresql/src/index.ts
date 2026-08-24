@@ -50,6 +50,17 @@ export type {
   SensitiveValuePurpose,
 } from './sensitive-values';
 
+// 레퍼런스 AES-256-GCM 보호기 — node:crypto만 사용, key custody/rotation은 앱 소유
+export {
+  SensitiveValueProtectorError,
+  createAes256GcmSensitiveValueProtector,
+  isSensitiveValueProtectorError,
+} from './aes-gcm-protector';
+export type {
+  Aes256GcmSensitiveValueProtectorOptions,
+  SensitiveValueProtectorErrorCode,
+} from './aes-gcm-protector';
+
 // 마이그레이션 (설계 §4)
 export { advisoryLockKey, migrate, renderMigrationSql } from './migrations';
 export type { MigrateOptions, MigrationResult } from './migrations';

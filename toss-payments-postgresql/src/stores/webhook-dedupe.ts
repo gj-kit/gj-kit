@@ -19,6 +19,7 @@
 import type { WebhookClaimState, WebhookDedupeStore } from '@gj-kit/toss-payments/webhook';
 
 import { schemaRef } from '../identifiers';
+import { DEFAULT_LEASE_SECONDS } from '../options';
 import type { SqlExecutor } from '../sql';
 import type { PgStoreOptions } from './orders';
 
@@ -26,8 +27,6 @@ export interface PgWebhookDedupeStoreOptions extends PgStoreOptions {
   /** processing 행의 crash-recovery lease(초). 기본 60. */
   readonly leaseSeconds?: number;
 }
-
-const DEFAULT_LEASE_SECONDS = 60;
 
 export function createPgWebhookDedupeStore(
   sql: SqlExecutor,

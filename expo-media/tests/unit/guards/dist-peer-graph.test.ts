@@ -81,6 +81,13 @@ function expectedFor(subpath: string, set: ConditionSet): readonly string[] {
   return [...listed].filter((peer) => !absent.includes(peer)).sort();
 }
 
+function packageNameForSpecifier(specifier: string): string {
+  const segments = specifier.split('/');
+  return specifier.startsWith('@')
+    ? segments.slice(0, 2).join('/')
+    : (segments[0] ?? specifier);
+}
+
 describe('dist-peer-graph — §2.2 표 × 조건 3세트 × 형식 2', () => {
   const pkg = readPackageJson();
 
@@ -91,6 +98,32 @@ describe('dist-peer-graph — §2.2 표 × 조건 3세트 × 형식 2', () => {
   it('exports 맵의 공개 서브패스가 §2.2 표와 일치한다', () => {
     const subpaths = Object.keys(pkg.exports).filter((key) => key !== './package.json');
     expect(subpaths.sort()).toEqual(Object.keys(TABLE).sort());
+  });
+
+  it('산출물이 import하는 모든 peer를 manifest에 optional peer로 선언한다', () => {
+    const importedPeers = new Set<string>();
+    for (const set of SETS) {
+      for (const format of FORMATS) {
+        for (const subpath of Object.keys(TABLE)) {
+          for (const specifier of externalSpecifiers(
+            resolveSubpath(pkg, subpath, set, format),
+          )) {
+            importedPeers.add(packageNameForSpecifier(specifier));
+          }
+        }
+      }
+    }
+
+    for (const peer of importedPeers) {
+      expect(
+        pkg.peerDependencies?.[peer],
+        `${peer}가 산출물에는 있지만 peerDependencies에 없다`,
+      ).toBeTypeOf('string');
+      expect(
+        pkg.peerDependenciesMeta?.[peer]?.optional,
+        `${peer}는 서브패스별 선택 설치를 위해 optional peer여야 한다`,
+      ).toBe(true);
+    }
   });
 
   for (const set of SETS) {

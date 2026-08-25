@@ -30,6 +30,10 @@ type ExportsValue = string | { readonly [key: string]: ExportsValue };
 
 interface PackageJson {
   readonly exports: Readonly<Record<string, ExportsValue>>;
+  readonly peerDependencies?: Readonly<Record<string, string>>;
+  readonly peerDependenciesMeta?: Readonly<
+    Record<string, { readonly optional?: boolean }>
+  >;
 }
 
 export function readPackageJson(): PackageJson {

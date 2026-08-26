@@ -18,6 +18,7 @@
     "check:expo-media-consumer": "node scripts/check-expo-media-consumer.mjs",
     "check:expo-workouts-consumer": "node scripts/check-expo-workouts-consumer.mjs",
     "check:docs": "corepack pnpm --filter @gj-kit/docs run build && corepack pnpm --filter @gj-kit/docs run check && node scripts/sync-doc-metadata.mjs",
+    "verify:published-docs": "node scripts/verify-published-docs.mjs",
     "verify:release": "corepack pnpm run build && corepack pnpm run typecheck && corepack pnpm run test && corepack pnpm run test:types && corepack pnpm run check:readme && corepack pnpm run check:pack && corepack pnpm run check:toss-payments-consumer && corepack pnpm run check:expo-sdk && corepack pnpm run check:expo-ui-consumer && corepack pnpm run check:expo-media-consumer && corepack pnpm run check:expo-workouts-consumer && corepack pnpm run check:docs",
     "changeset": "changeset",
     "docs:prepare-release": "corepack pnpm run build && corepack pnpm --filter @gj-kit/docs run generate:api -- --write-snapshot && corepack pnpm --filter @gj-kit/docs run generate:api -- --write-snapshot --next",

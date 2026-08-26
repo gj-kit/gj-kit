@@ -1,6 +1,6 @@
 {
   "name": "@gj-kit/expo-ui",
-  "version": "0.8.0",
+  "version": "0.8.1",
   "description": "Accessible, token-driven UI primitives for Expo, React Native, and React Native Web.",
   "keywords": [
     "expo",

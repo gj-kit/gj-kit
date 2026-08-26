@@ -1,5 +1,11 @@
 # @gj-kit/expo-ui
 
+## 0.8.1
+
+### Patch Changes
+
+- 9c3cbc4: Publish English-first and Korean README files, add package discovery metadata, and link every package to the generated global API documentation portal.
+
 ## 0.8.0
 
 ### Minor Changes

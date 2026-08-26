@@ -1,6 +1,6 @@
 {
   "name": "@gj-kit/nest-notifications",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "NestJS notification relay and dispatch primitives with durable stores, typed outcomes, and Expo push adapters.",
   "keywords": [
     "nestjs",

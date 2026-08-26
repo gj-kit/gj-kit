@@ -1,6 +1,6 @@
 {
   "name": "@gj-kit/toss-payments-postgresql",
-  "version": "0.5.0",
+  "version": "0.5.1",
   "description": "PostgreSQL stores, migrations, webhook inbox, and encryption seams for @gj-kit/toss-payments.",
   "homepage": "https://gj-kit.github.io/gj-kit/packages/toss-payments-postgresql/",
   "repository": {

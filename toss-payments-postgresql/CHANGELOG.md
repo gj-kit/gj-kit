@@ -1,5 +1,11 @@
 # @gj-kit/toss-payments-postgresql
 
+## 0.5.1
+
+### Patch Changes
+
+- 9c3cbc4: Publish English-first and Korean README files, add package discovery metadata, and link every package to the generated global API documentation portal.
+
 ## 0.5.0
 
 ### Minor Changes

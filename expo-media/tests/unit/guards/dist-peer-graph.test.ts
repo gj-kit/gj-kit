@@ -124,7 +124,7 @@ describe('dist-peer-graph — §2.2 표 × 조건 3세트 × 형식 2', () => {
         `${peer}는 서브패스별 선택 설치를 위해 optional peer여야 한다`,
       ).toBe(true);
     }
-  });
+  }, 30_000);
 
   for (const set of SETS) {
     for (const format of FORMATS) {

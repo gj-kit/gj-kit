@@ -1,5 +1,11 @@
 # @gj-kit/toss-payments
 
+## 0.6.1
+
+### Patch Changes
+
+- 9c3cbc4: Publish English-first and Korean README files, add package discovery metadata, and link every package to the generated global API documentation portal.
+
 ## 0.6.0
 
 ### Minor Changes
@@ -72,8 +78,8 @@
   `confirmed-without-deposit-secret` 분기를 반환하므로 주문을 보류해 운영 복구로 처리해야
   합니다.
 
-  JavaScript 우회 설정도 안전하게 처리하도록 양의 안전한 정수 금액, 1~600,000ms 승인 창,
-  2~5회 재시도와 0~60,000ms 비어 있지 않은 retry delay를 런타임에서 검증합니다.
+  JavaScript 우회 설정도 안전하게 처리하도록 양의 안전한 정수 금액, 1~~600,000ms 승인 창,
+  2~~5회 재시도와 0~60,000ms 비어 있지 않은 retry delay를 런타임에서 검증합니다.
 
 ### Patch Changes
 

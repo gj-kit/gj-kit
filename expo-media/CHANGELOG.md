@@ -1,5 +1,11 @@
 # @gj-kit/expo-media
 
+## 0.6.1
+
+### Patch Changes
+
+- 9c3cbc4: Publish English-first and Korean README files, add package discovery metadata, and link every package to the generated global API documentation portal.
+
 ## 0.6.0
 
 ### Minor Changes

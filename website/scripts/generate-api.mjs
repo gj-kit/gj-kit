@@ -12,6 +12,7 @@ const generatedDocsDir = path.join(websiteDir, 'src', 'content', 'docs');
 const publicDir = path.join(websiteDir, 'public');
 const publishedSnapshotPath = path.join(snapshotsDir, 'published.json');
 const nextSnapshotPath = path.join(snapshotsDir, 'next.json');
+const siteBasePath = new URL(SITE_URL).pathname.replace(/\/$/u, '');
 
 const args = new Set(process.argv.slice(2));
 const snapshotTarget = args.has('--next') ? nextSnapshotPath : publishedSnapshotPath;
@@ -207,7 +208,13 @@ async function loadSnapshot() {
 }
 
 function pagePath(locale, route) {
-  return locale === 'ko' ? `/ko/${route}` : `/${route}`;
+  // Astro preserves root-relative Markdown links verbatim. The documentation
+  // portal is a GitHub Pages project site, so every internal link must include
+  // the repository base path instead of resolving from gj-kit.github.io/.
+  const relativeRoute = route.replace(/^\/+/, '');
+  return locale === 'ko'
+    ? `${siteBasePath}/ko/${relativeRoute}`
+    : `${siteBasePath}/${relativeRoute}`;
 }
 
 function markdownLink(locale, route, label) {

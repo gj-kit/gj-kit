@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url';
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
 const websiteDir = path.resolve(scriptDir, '..');
 const distDir = path.join(websiteDir, 'dist');
+const siteBasePath = '/gj-kit';
 const snapshot = JSON.parse(await readFile(path.join(websiteDir, 'api-snapshots', 'published.json'), 'utf8'));
 
 function fail(message) {
@@ -43,6 +44,14 @@ for (const [html, label, expected] of [
   if (!html.includes(expected)) fail(`${label} is missing its localized title`);
   if (!html.includes('rel="canonical"')) fail(`${label} is missing a canonical URL`);
   if (!html.includes('hreflang=')) fail(`${label} is missing hreflang links`);
+}
+for (const pkg of snapshot.packages) {
+  if (!rootHtml.includes(`href="${siteBasePath}/packages/${pkg.slug}/"`)) {
+    fail(`English root package link is missing the Pages base path for ${pkg.name}`);
+  }
+  if (!koreanRootHtml.includes(`href="${siteBasePath}/ko/packages/${pkg.slug}/"`)) {
+    fail(`Korean root package link is missing the Pages base path for ${pkg.name}`);
+  }
 }
 for (const [html, label, llmsHref, apiHref] of [
   [rootHtml, 'English root', 'href="llms.txt"', 'href="api/index.json"'],
@@ -114,10 +123,20 @@ async function collectHtml(directory) {
     else if (entry.name === 'index.html') generatedPages.push(target);
   }
 }
-await collectHtml(path.join(distDir, 'api'));
+await collectHtml(distDir);
+for (const page of generatedPages) {
+  const html = await readFile(page, 'utf8');
+  for (const match of html.matchAll(/\bhref="(\/[^"?#]*)/gu)) {
+    const href = match[1];
+    if (href !== siteBasePath && !href.startsWith(`${siteBasePath}/`)) {
+      fail(`root-relative link outside the Pages base path in ${path.relative(distDir, page)}: ${href}`);
+    }
+  }
+}
 const expectedApiPages = [...expectedPaths].filter((target) => target.includes(`${path.sep}api${path.sep}`)).length;
-if (generatedPages.length < expectedApiPages / 2) {
-  fail(`expected at least ${expectedApiPages / 2} English API pages, found ${generatedPages.length}`);
+const generatedApiPages = generatedPages.filter((page) => page.includes(`${path.sep}api${path.sep}`)).length;
+if (generatedApiPages < expectedApiPages / 2) {
+  fail(`expected at least ${expectedApiPages / 2} English API pages, found ${generatedApiPages}`);
 }
 
 console.log(`Docs check passed: ${snapshot.packages.length} packages, ${expectedApiPages} localized API pages, Pagefind and machine indexes present.`);

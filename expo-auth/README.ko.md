@@ -6,10 +6,35 @@
 
 공동 refresh와 storage adapter를 포함한 Expo, React Native, 웹용 토큰 수명주기 프리미티브입니다.
 
-## 설치
+## Golden path
+
+> **완료 상태:** 로그인 상태를 저장하고 동시 refresh를 조정하는 앱 소유 세션 하나를 만듭니다.
+
+### 1. 설치
 
 ```sh
 pnpm add @gj-kit/expo-auth
+```
+
+### 2. 앱이 소유할 경계를 정합니다
+
+storage adapter를 한 번 선택하고, 앱의 refresh endpoint 콜백만 연결합니다.
+
+### 3. 최소 연결부터 시작합니다
+
+먼저 아래 코드를 복사한 뒤, 위에서 언급한 앱 소유 값만 교체하세요.
+
+```ts
+import { createAuthSession, type RefreshRequest } from '@gj-kit/expo-auth';
+import { createTokenStorage, createWebLocksRefreshLock } from '@gj-kit/expo-auth/storage';
+
+declare const refresh: RefreshRequest; // Your API client classifies rotated, invalid, or transient.
+
+export const session = createAuthSession({
+  storage: createTokenStorage({ keyPrefix: 'myapp.auth' }),
+  lock: createWebLocksRefreshLock({ name: 'myapp.auth' }),
+  refresh,
+});
 ```
 
 ## 사용할 때
@@ -19,16 +44,6 @@ pnpm add @gj-kit/expo-auth
 ## 사용하지 않을 때
 
 앱 route, identity provider 정책, telemetry, API client 소유권을 패키지에 넣지 마세요.
-
-## Golden path
-
-root 토큰 수명주기 API에서 시작하고 필요한 플랫폼 storage adapter에만 storage subpath를 가져옵니다.
-
-```ts
-import * as gjKit from '@gj-kit/expo-auth';
-
-void gjKit;
-```
 
 ## 런타임과 peer 조건
 

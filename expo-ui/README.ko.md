@@ -6,10 +6,37 @@
 
 Expo, React Native, 웹을 위한 접근성 중심 토큰 기반 UI 프리미티브입니다.
 
-## 설치
+## Golden path
+
+> **완료 상태:** 앱 전체 provider 하나에서 테마와 접근성이 적용된 버튼을 렌더링합니다.
+
+### 1. 설치
 
 ```sh
 pnpm add @gj-kit/expo-ui
+```
+
+### 2. 앱이 소유할 경계를 정합니다
+
+테마는 한 번만 만들고 앱을 감싸는 컴포넌트에 `UiProvider`를 둡니다.
+
+### 3. 최소 연결부터 시작합니다
+
+먼저 아래 코드를 복사한 뒤, 위에서 언급한 앱 소유 값만 교체하세요.
+
+```tsx
+import { Button, UiProvider, enStrings } from '@gj-kit/expo-ui';
+import { createThemes } from '@gj-kit/expo-ui/theme';
+
+const themes = createThemes();
+
+export function App() {
+  return (
+    <UiProvider theme={themes} strings={enStrings}>
+      <Button label="Get started" onPress={() => {}} />
+    </UiProvider>
+  );
+}
 ```
 
 ## 사용할 때
@@ -19,16 +46,6 @@ pnpm add @gj-kit/expo-ui
 ## 사용하지 않을 때
 
 제품 route, 데이터 store, analytics, 제품 고유 문구를 이 패키지에 넣기 위한 용도로는 사용하지 마세요.
-
-## Golden path
-
-패키지를 설치한 뒤 테마를 한 번 만들고, 프리미티브를 조합하기 전에 앱 루트에 UiProvider를 둡니다.
-
-```ts
-import * as gjKit from '@gj-kit/expo-ui';
-
-void gjKit;
-```
 
 ## 런타임과 peer 조건
 

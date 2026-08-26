@@ -53,7 +53,7 @@ export const packages = [
       en: 'Provide the two backend upload operations and explicit limits, then let createMediaKit compose the supported Expo adapters.',
       ko: '백엔드 업로드 작업 두 개와 명시적 limits를 제공하고 createMediaKit이 지원되는 Expo adapter를 조합하게 합니다.',
     },
-    code: "import { createMediaKit } from '@gj-kit/expo-media';\n\nconst media = createMediaKit({\n  api: uploadApi,\n  limits: { image: { maxBytes: 15 * 1024 * 1024 } },\n});",
+    code: "import { createMediaKit, type MediaUploadApi } from '@gj-kit/expo-media';\n\ntype Asset = { readonly id: string };\ndeclare const uploadApi: MediaUploadApi<Asset>; // Your app owns auth and upload URLs.\n\nexport const media = createMediaKit({\n  api: uploadApi,\n  limits: { image: { maxBytes: 15 * 1024 * 1024 } },\n});",
     safety: {
       en: 'Never expose presigned URLs or native URI details in public errors. Keep cleanup authorization and attachment transactions in the consuming application.',
       ko: 'presigned URL이나 native URI 세부 정보를 공개 오류에 노출하지 말고, 정리 권한과 attachment 트랜잭션은 소비 앱에 둡니다.',
@@ -80,7 +80,7 @@ export const packages = [
       en: 'Start from the root token lifecycle API and import the storage subpath only for the platform storage adapter you need.',
       ko: 'root 토큰 수명주기 API에서 시작하고 필요한 플랫폼 storage adapter에만 storage subpath를 가져옵니다.',
     },
-    code: "import * as auth from '@gj-kit/expo-auth';\n\n// Compose the public token lifecycle contracts with your app-owned API client.\nvoid auth;",
+    code: "import { createAuthSession, type RefreshRequest } from '@gj-kit/expo-auth';\nimport { createTokenStorage, createWebLocksRefreshLock } from '@gj-kit/expo-auth/storage';\n\ndeclare const refresh: RefreshRequest; // Your API client classifies rotated, invalid, or transient.\n\nexport const session = createAuthSession({\n  storage: createTokenStorage({ keyPrefix: 'myapp.auth' }),\n  lock: createWebLocksRefreshLock({ name: 'myapp.auth' }),\n  refresh,\n});",
     safety: {
       en: 'Treat tokens as secrets: use the supplied error contracts and never log token strings or raw authorization responses.',
       ko: '토큰은 secret으로 취급하세요. 제공된 오류 계약을 사용하고 토큰 문자열이나 원본 authorization 응답을 로그에 남기지 마세요.',
@@ -107,7 +107,7 @@ export const packages = [
       en: 'Add the config plugin, build a native app, request only the required authorization, then persist the returned sync token in your app.',
       ko: 'config plugin을 추가하고 native 앱을 빌드한 뒤 필요한 권한만 요청하고, 반환된 sync token을 앱에 저장합니다.',
     },
-    code: "import { getAvailability, requestAuthorization } from '@gj-kit/expo-workouts';\n\nconst availability = await getAvailability();\nif (availability.available) {\n  await requestAuthorization({ read: ['workouts'] });\n}",
+    code: "import { getAvailability, requestAuthorization } from '@gj-kit/expo-workouts';\n\nexport async function requestWorkoutAccess() {\n  const availability = await getAvailability();\n  if (availability.status === 'available') {\n    await requestAuthorization({ read: ['workouts'] });\n  }\n  return availability;\n}",
     safety: {
       en: 'This is a native module: Expo Go and web/Node are intentionally unsupported for native calls. Explain health permissions before requesting them.',
       ko: '이는 native module입니다. Expo Go와 web/Node에서는 native 호출을 의도적으로 지원하지 않습니다. 권한 요청 전에 건강 데이터 권한의 이유를 설명하세요.',
@@ -131,10 +131,10 @@ export const packages = [
       ko: '문서화된 계약 밖의 앱 문구, 사용자 locale 선호, 금융 반올림 정책을 소유시키기 위해 사용하지 마세요.',
     },
     goldenPath: {
-      en: 'Parse instants once, then pass required timezone and locale options to the formatter that owns the rendering choice.',
-      ko: 'instant를 한 번 파싱한 뒤 표시 선택을 소유하는 formatter에 필수 시간대와 locale 옵션을 전달합니다.',
+      en: 'Parse instants once, then pass the required timezone and separator to the formatter that owns the rendering choice.',
+      ko: 'instant를 한 번 파싱한 뒤 표시 선택을 소유하는 formatter에 필수 시간대와 구분자를 전달합니다.',
     },
-    code: "import { formatDateTime } from '@gj-kit/format';\n\nconst label = formatDateTime('2026-08-26T00:00:00.000Z', {\n  timeZone: 'Asia/Seoul',\n  locale: 'en-US',\n});\nvoid label;",
+    code: "import { formatDateTime } from '@gj-kit/format';\n\nexport const dateLabel = formatDateTime(Date.UTC(2026, 7, 26, 0, 0), {\n  timeZone: 'Asia/Seoul',\n  separator: '-',\n});",
     safety: {
       en: 'Do not rely on implicit device timezone or locale defaults for persisted or operational values.',
       ko: '영속 데이터나 운영 값에 암묵적인 기기 시간대 또는 locale 기본값을 의존하지 마세요.',
@@ -161,7 +161,7 @@ export const packages = [
       en: 'Implement the public store and authenticator ports in your application, register the module, then expose only the jobs your operators should run.',
       ko: '앱에서 공개 store와 authenticator port를 구현하고 module을 등록한 뒤 운영자가 실행해야 하는 작업만 노출합니다.',
     },
-    code: "import { OperationsJobsModule } from '@gj-kit/nest-operations-jobs';\n\nvoid OperationsJobsModule;",
+    code: "import { OperationsJobsModule, type JobRunStore } from '@gj-kit/nest-operations-jobs';\n\ndeclare const store: JobRunStore; // Your database-backed run store.\ndeclare const secret: string; // At least 32 characters; keep it outside source control.\n\nexport const operations = OperationsJobsModule.forRoot({\n  store,\n  auth: { secret },\n  trigger: { path: 'internal/jobs' },\n});",
     safety: {
       en: 'Keep job-trigger authorization and app data ownership in the host application. Never turn a convenience route into an unauthenticated operations endpoint.',
       ko: '작업 실행 권한과 앱 데이터 소유권은 host 앱에 둡니다. 편의 route를 인증 없는 운영 endpoint로 만들지 마세요.',
@@ -188,7 +188,7 @@ export const packages = [
       en: 'Provide the application stores and presentation policy, register the Nest module, then run relay and dispatch workers through your normal operations boundary.',
       ko: '앱 store와 presentation 정책을 제공하고 Nest module을 등록한 뒤 일반 운영 경계에서 relay와 dispatch worker를 실행합니다.',
     },
-    code: "import { NestNotificationsModule } from '@gj-kit/nest-notifications';\n\nvoid NestNotificationsModule;",
+    code: "import { NestNotificationsModule, type NestNotificationsOptions } from '@gj-kit/nest-notifications';\n\ndeclare const options: NestNotificationsOptions; // App stores, presenter, policy, and push gateway.\n\nexport const notifications = NestNotificationsModule.forRoot(options);",
     safety: {
       en: 'Keep credentials, endpoint ownership, and user-visible product wording in the application. Use the typed error and delivery outcomes instead of raw provider failures.',
       ko: 'credential, endpoint 소유권, 사용자 노출 제품 문구는 앱에 둡니다. 원본 provider 실패 대신 typed error와 delivery outcome을 사용하세요.',
@@ -215,7 +215,7 @@ export const packages = [
       en: 'Parse the server key at boot, compose the kit with your app-owned stores, and confirm only against the server-side order record.',
       ko: '부팅 시 서버 키를 파싱하고 앱 소유 store로 kit을 조합하며 서버 측 주문 레코드와 대조한 경우에만 승인합니다.',
     },
-    code: "import { createTossPayments, parseApiSecretKey } from '@gj-kit/toss-payments/server';\n\nconst secretKey = parseApiSecretKey(process.env.TOSS_SECRET_KEY ?? '');\nvoid createTossPayments;\nvoid secretKey;",
+    code: "import { orThrow } from '@gj-kit/toss-payments';\nimport { createTossPayments, parseApiSecretKey } from '@gj-kit/toss-payments/server';\n\ndeclare const apiSecretFromEnv: string; // Read this once from your server environment.\n\nexport const toss = createTossPayments({\n  secretKey: orThrow(parseApiSecretKey(apiSecretFromEnv)),\n});\n\n// Add your OrderStore to enable toss.confirm; the type exposes only wired flows.",
     safety: {
       en: 'Never import server key parsers into browser code or trust a redirect/webhook without the documented verification path. Keep secrets and exact audit bodies encrypted at rest.',
       ko: 'server 키 parser를 브라우저 코드에 import하거나 문서화된 검증 경로 없이 redirect/웹훅을 신뢰하지 마세요. secret과 정확한 audit body는 저장 시 암호화하세요.',
@@ -242,7 +242,7 @@ export const packages = [
       en: 'Register TossPaymentsModule with your stores, inject the typed kit, and enable rawBody before binding a webhook handler.',
       ko: 'store와 함께 TossPaymentsModule을 등록하고 typed kit을 주입하며 웹훅 handler를 연결하기 전에 rawBody를 활성화합니다.',
     },
-    code: "import { TossPaymentsModule } from '@gj-kit/toss-payments-nestjs';\n\nvoid TossPaymentsModule;",
+    code: "import { orThrow } from '@gj-kit/toss-payments';\nimport { defineTossPaymentsConfig, parseApiSecretKey } from '@gj-kit/toss-payments/server';\nimport { TossPaymentsModule } from '@gj-kit/toss-payments-nestjs';\n\ndeclare const apiSecretFromEnv: string; // Read this once from your server environment.\n\nconst config = defineTossPaymentsConfig({\n  secretKey: orThrow(parseApiSecretKey(apiSecretFromEnv)),\n});\n\nexport const payments = TossPaymentsModule.forRoot(config);",
     safety: {
       en: 'Preserve raw request bytes for verified webhooks and make every store dependency explicit in the host Nest module.',
       ko: '검증되는 웹훅은 원본 request bytes를 보존하고, 모든 store 의존성을 host Nest module에 명시하세요.',
@@ -269,7 +269,7 @@ export const packages = [
       en: 'Provide a SqlClient or pg pool, run migrations explicitly in deployment, then compose the store factory with an application-owned sensitive-value protector.',
       ko: 'SqlClient 또는 pg pool을 제공하고 배포 중 migration을 명시적으로 실행한 뒤 앱 소유 sensitive-value protector로 store factory를 조합합니다.',
     },
-    code: "import { createTossPaymentsPostgres, migrate } from '@gj-kit/toss-payments-postgresql';\n\nvoid createTossPaymentsPostgres;\nvoid migrate;",
+    code: "import { createTossPaymentsPostgres, fromPgPool, type PgPoolLike, type SensitiveValueProtector } from '@gj-kit/toss-payments-postgresql';\n\ndeclare const pool: PgPoolLike;\ndeclare const sensitiveValueProtector: SensitiveValueProtector; // App KMS/encryption boundary.\n\nexport const stores = createTossPaymentsPostgres({\n  sql: fromPgPool(pool),\n  sensitiveValueProtector,\n});\n\n// Run await stores.migrate() once in deployment, never per request.",
     safety: {
       en: 'Use an app-owned KMS or key-management boundary for sensitive values, run explicit migrations once, and keep cleanup operations idempotent.',
       ko: '민감값에는 앱 소유 KMS 또는 key-management 경계를 사용하고, 명시적 migration은 한 번 실행하며, 정리 작업은 멱등적으로 유지하세요.',
@@ -277,5 +277,113 @@ export const packages = [
     related: ['toss-payments', 'toss-payments-nestjs'],
   },
 ];
+
+/**
+ * The package pages use this compact, task-first framing before the full API
+ * reference. It answers what a developer can run first and which host-owned
+ * boundary they must wire.
+ */
+export const quickStartBySlug = {
+  'expo-ui': {
+    en: {
+      outcome: 'A themed, accessible button rendered from one application-wide provider.',
+      boundary: 'Create themes once and mount `UiProvider` at the component that wraps your app.',
+    },
+    ko: {
+      outcome: '앱 전체 provider 하나에서 테마와 접근성이 적용된 버튼을 렌더링합니다.',
+      boundary: '테마는 한 번만 만들고 앱을 감싸는 컴포넌트에 `UiProvider`를 둡니다.',
+    },
+  },
+  'expo-media': {
+    en: {
+      outcome: 'An Expo-backed media kit while your application keeps upload authorization.',
+      boundary: 'Implement `uploadApi` in your app for upload intent and completion, then declare explicit file limits.',
+    },
+    ko: {
+      outcome: '앱이 업로드 권한을 계속 소유하는 Expo 기반 미디어 kit을 만듭니다.',
+      boundary: '앱에서 upload intent와 완료를 담당하는 `uploadApi`를 구현하고, 파일 제한을 명시합니다.',
+    },
+  },
+  'expo-auth': {
+    en: {
+      outcome: 'One app-owned session that persists login state and coordinates concurrent refreshes.',
+      boundary: 'Choose the storage adapter once and connect only your refresh-endpoint callback.',
+    },
+    ko: {
+      outcome: '로그인 상태를 저장하고 동시 refresh를 조정하는 앱 소유 세션 하나를 만듭니다.',
+      boundary: 'storage adapter를 한 번 선택하고, 앱의 refresh endpoint 콜백만 연결합니다.',
+    },
+  },
+  'expo-workouts': {
+    en: {
+      outcome: 'A native Expo app can check HealthKit or Health Connect availability and request workout access.',
+      boundary: 'Add the config plugin and use a development build; Expo Go and the web cannot call the native module.',
+    },
+    ko: {
+      outcome: 'native Expo 앱에서 HealthKit 또는 Health Connect 사용 가능 여부를 확인하고 운동 권한을 요청합니다.',
+      boundary: 'config plugin을 추가하고 development build를 사용하세요. Expo Go와 웹은 native module을 호출할 수 없습니다.',
+    },
+  },
+  format: {
+    en: {
+      outcome: 'A stable display label whose timezone and separator are explicit at the call site.',
+      boundary: 'Choose the timezone and separator in code; do not let persisted or operational values inherit device defaults.',
+    },
+    ko: {
+      outcome: '호출 위치에서 시간대와 구분자가 명시된 안정적인 표시 문자열을 만듭니다.',
+      boundary: '코드에서 시간대와 구분자를 선택하세요. 영속·운영 값에 기기 기본값을 물려주지 마세요.',
+    },
+  },
+  'nest-operations-jobs': {
+    en: {
+      outcome: 'An authenticated operations boundary backed by application-owned run storage.',
+      boundary: 'Implement `JobRunStore`, then configure a 32+ character shared secret or a token verifier before module registration.',
+    },
+    ko: {
+      outcome: '앱 소유 실행 저장소로 뒷받침되는 인증된 운영 작업 경계를 만듭니다.',
+      boundary: '`JobRunStore`를 구현한 뒤 module을 등록하기 전에 32자 이상의 shared secret 또는 token verifier를 설정합니다.',
+    },
+  },
+  'nest-notifications': {
+    en: {
+      outcome: 'Durable relay and dispatch runners wired to your stores and push gateway.',
+      boundary: 'Keep product policy in app-owned stores, presenter, and scheduling policy before registering the Nest module.',
+    },
+    ko: {
+      outcome: '앱의 store와 push gateway에 연결된 내구성 있는 relay·dispatch runner를 만듭니다.',
+      boundary: 'Nest module을 등록하기 전에 제품 정책은 앱 소유 store, presenter, scheduling policy에 둡니다.',
+    },
+  },
+  'toss-payments': {
+    en: {
+      outcome: 'A server-only payment kit whose available flows match the stores you pass in.',
+      boundary: 'Parse the API secret at boot and provide your server-owned order store before enabling confirmation.',
+    },
+    ko: {
+      outcome: '전달한 store에 맞는 결제 흐름만 노출하는 서버 전용 payment kit을 만듭니다.',
+      boundary: '부팅 시 API secret을 파싱하고, 승인을 활성화하기 전에 서버 소유 order store를 제공합니다.',
+    },
+  },
+  'toss-payments-nestjs': {
+    en: {
+      outcome: 'One Nest provider that injects a typed payment kit.',
+      boundary: 'Build the core payment config, register it once, and preserve raw request bytes for webhook routes.',
+    },
+    ko: {
+      outcome: 'typed payment kit을 주입하는 Nest provider 하나를 만듭니다.',
+      boundary: 'core payment config을 만들고 한 번만 등록하며, webhook route에서는 원본 request bytes를 보존합니다.',
+    },
+  },
+  'toss-payments-postgresql': {
+    en: {
+      outcome: 'PostgreSQL-backed Toss stores with one explicit migration step.',
+      boundary: 'Adapt your pool with `fromPgPool`, use a real encrypted `sensitiveValueProtector`, and run migration during deployment.',
+    },
+    ko: {
+      outcome: '명시적인 migration 단계 하나를 갖는 PostgreSQL 기반 Toss store를 만듭니다.',
+      boundary: '`fromPgPool`로 pool을 adapter에 연결하고 실제 암호화 `sensitiveValueProtector`를 사용하며, migration은 배포 중에 실행합니다.',
+    },
+  },
+};
 
 export const packageBySlug = new Map(packages.map((entry) => [entry.slug, entry]));

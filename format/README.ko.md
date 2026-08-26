@@ -6,10 +6,31 @@
 
 TypeScript용 명시성 강제 날짜, 숫자, 바이트, 기간, 한국 원화 포매팅 유틸리티입니다.
 
-## 설치
+## Golden path
+
+> **완료 상태:** 호출 위치에서 시간대와 구분자가 명시된 안정적인 표시 문자열을 만듭니다.
+
+### 1. 설치
 
 ```sh
 pnpm add @gj-kit/format
+```
+
+### 2. 앱이 소유할 경계를 정합니다
+
+코드에서 시간대와 구분자를 선택하세요. 영속·운영 값에 기기 기본값을 물려주지 마세요.
+
+### 3. 최소 연결부터 시작합니다
+
+먼저 아래 코드를 복사한 뒤, 위에서 언급한 앱 소유 값만 교체하세요.
+
+```ts
+import { formatDateTime } from '@gj-kit/format';
+
+export const dateLabel = formatDateTime(Date.UTC(2026, 7, 26, 0, 0), {
+  timeZone: 'Asia/Seoul',
+  separator: '-',
+});
 ```
 
 ## 사용할 때
@@ -19,16 +40,6 @@ pnpm add @gj-kit/format
 ## 사용하지 않을 때
 
 문서화된 계약 밖의 앱 문구, 사용자 locale 선호, 금융 반올림 정책을 소유시키기 위해 사용하지 마세요.
-
-## Golden path
-
-instant를 한 번 파싱한 뒤 표시 선택을 소유하는 formatter에 필수 시간대와 locale 옵션을 전달합니다.
-
-```ts
-import * as gjKit from '@gj-kit/format';
-
-void gjKit;
-```
 
 ## 런타임과 peer 조건
 

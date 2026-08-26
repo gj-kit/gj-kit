@@ -4,10 +4,35 @@
 
 Type-safe Toss Payments widget and API v2 flows for TypeScript servers and browsers.
 
-## Install
+## Golden path
+
+> **Outcome:** A server-only payment kit whose available flows match the stores you pass in.
+
+### 1. Install
 
 ```sh
 pnpm add @gj-kit/toss-payments
+```
+
+### 2. Keep the app-owned boundary explicit
+
+Parse the API secret at boot and provide your server-owned order store before enabling confirmation.
+
+### 3. Start with the smallest integration
+
+Copy this first, then replace only the app-owned values named above.
+
+```ts
+import { orThrow } from '@gj-kit/toss-payments';
+import { createTossPayments, parseApiSecretKey } from '@gj-kit/toss-payments/server';
+
+declare const apiSecretFromEnv: string; // Read this once from your server environment.
+
+export const toss = createTossPayments({
+  secretKey: orThrow(parseApiSecretKey(apiSecretFromEnv)),
+});
+
+// Add your OrderStore to enable toss.confirm; the type exposes only wired flows.
 ```
 
 ## Use it when
@@ -17,16 +42,6 @@ Use it when payment key boundaries, order-amount verification, webhook trust, an
 ## Do not use it when
 
 Do not treat it as a complete order system or store raw secrets, audit payloads, and refund policy in its generic layer.
-
-## Golden path
-
-Parse the server key at boot, compose the kit with your app-owned stores, and confirm only against the server-side order record.
-
-```ts
-import * as gjKit from '@gj-kit/toss-payments';
-
-void gjKit;
-```
 
 ## Runtime and peers
 

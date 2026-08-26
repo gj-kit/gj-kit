@@ -4,10 +4,37 @@
 
 Accessible, token-driven UI primitives for Expo, React Native, and the web.
 
-## Install
+## Golden path
+
+> **Outcome:** A themed, accessible button rendered from one application-wide provider.
+
+### 1. Install
 
 ```sh
 pnpm add @gj-kit/expo-ui
+```
+
+### 2. Keep the app-owned boundary explicit
+
+Create themes once and mount `UiProvider` at the component that wraps your app.
+
+### 3. Start with the smallest integration
+
+Copy this first, then replace only the app-owned values named above.
+
+```tsx
+import { Button, UiProvider, enStrings } from '@gj-kit/expo-ui';
+import { createThemes } from '@gj-kit/expo-ui/theme';
+
+const themes = createThemes();
+
+export function App() {
+  return (
+    <UiProvider theme={themes} strings={enStrings}>
+      <Button label="Get started" onPress={() => {}} />
+    </UiProvider>
+  );
+}
 ```
 
 ## Use it when
@@ -17,16 +44,6 @@ Use it when one design language, controlled component state, overlays, and acces
 ## Do not use it when
 
 Do not use it for product routes, data stores, analytics, or product-specific copy.
-
-## Golden path
-
-Install the package, create your theme once, and place UiProvider at the application root before composing primitives.
-
-```ts
-import * as gjKit from '@gj-kit/expo-ui';
-
-void gjKit;
-```
 
 ## Runtime and peers
 

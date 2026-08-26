@@ -4,10 +4,31 @@
 
 Explicit-by-construction date, number, byte, duration, and Korean currency formatting for TypeScript.
 
-## Install
+## Golden path
+
+> **Outcome:** A stable display label whose timezone and separator are explicit at the call site.
+
+### 1. Install
 
 ```sh
 pnpm add @gj-kit/format
+```
+
+### 2. Keep the app-owned boundary explicit
+
+Choose the timezone and separator in code; do not let persisted or operational values inherit device defaults.
+
+### 3. Start with the smallest integration
+
+Copy this first, then replace only the app-owned values named above.
+
+```ts
+import { formatDateTime } from '@gj-kit/format';
+
+export const dateLabel = formatDateTime(Date.UTC(2026, 7, 26, 0, 0), {
+  timeZone: 'Asia/Seoul',
+  separator: '-',
+});
 ```
 
 ## Use it when
@@ -17,16 +38,6 @@ Use it when timezone, locale, unit, and currency rendering choices must be visib
 ## Do not use it when
 
 Do not use it to own application copy, user locale preference, or financial rounding policy outside its documented contract.
-
-## Golden path
-
-Parse instants once, then pass required timezone and locale options to the formatter that owns the rendering choice.
-
-```ts
-import * as gjKit from '@gj-kit/format';
-
-void gjKit;
-```
 
 ## Runtime and peers
 

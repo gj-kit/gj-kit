@@ -6,10 +6,36 @@
 
 @gj-kit/toss-payments를 위한 NestJS DI 및 raw-body 웹훅 조합 패키지입니다.
 
-## 설치
+## Golden path
+
+> **완료 상태:** typed payment kit을 주입하는 Nest provider 하나를 만듭니다.
+
+### 1. 설치
 
 ```sh
 pnpm add @gj-kit/toss-payments-nestjs
+```
+
+### 2. 앱이 소유할 경계를 정합니다
+
+core payment config을 만들고 한 번만 등록하며, webhook route에서는 원본 request bytes를 보존합니다.
+
+### 3. 최소 연결부터 시작합니다
+
+먼저 아래 코드를 복사한 뒤, 위에서 언급한 앱 소유 값만 교체하세요.
+
+```ts
+import { orThrow } from '@gj-kit/toss-payments';
+import { defineTossPaymentsConfig, parseApiSecretKey } from '@gj-kit/toss-payments/server';
+import { TossPaymentsModule } from '@gj-kit/toss-payments-nestjs';
+
+declare const apiSecretFromEnv: string; // Read this once from your server environment.
+
+const config = defineTossPaymentsConfig({
+  secretKey: orThrow(parseApiSecretKey(apiSecretFromEnv)),
+});
+
+export const payments = TossPaymentsModule.forRoot(config);
 ```
 
 ## 사용할 때
@@ -19,16 +45,6 @@ Nest 앱에서 core payment kit의 타입과 안전 경계를 의존성 주입�
 ## 사용하지 않을 때
 
 controller에서 결제 검증을 다시 구현하거나 웹훅 검증에 raw bytes가 필요한데 파싱된 JSON에 의존하지 마세요.
-
-## Golden path
-
-store와 함께 TossPaymentsModule을 등록하고 typed kit을 주입하며 웹훅 handler를 연결하기 전에 rawBody를 활성화합니다.
-
-```ts
-import * as gjKit from '@gj-kit/toss-payments-nestjs';
-
-void gjKit;
-```
 
 ## 런타임과 peer 조건
 

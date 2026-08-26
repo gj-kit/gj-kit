@@ -4,10 +4,35 @@
 
 NestJS composition for durable, authenticated, observable operational jobs with explicit store ports.
 
-## Install
+## Golden path
+
+> **Outcome:** An authenticated operations boundary backed by application-owned run storage.
+
+### 1. Install
 
 ```sh
 pnpm add @gj-kit/nest-operations-jobs
+```
+
+### 2. Keep the app-owned boundary explicit
+
+Implement `JobRunStore`, then configure a 32+ character shared secret or a token verifier before module registration.
+
+### 3. Start with the smallest integration
+
+Copy this first, then replace only the app-owned values named above.
+
+```ts
+import { OperationsJobsModule, type JobRunStore } from '@gj-kit/nest-operations-jobs';
+
+declare const store: JobRunStore; // Your database-backed run store.
+declare const secret: string; // At least 32 characters; keep it outside source control.
+
+export const operations = OperationsJobsModule.forRoot({
+  store,
+  auth: { secret },
+  trigger: { path: 'internal/jobs' },
+});
 ```
 
 ## Use it when
@@ -17,16 +42,6 @@ Use it when a Nest application needs scheduled or operator-triggered work with e
 ## Do not use it when
 
 Do not hide product business rules, queue infrastructure, or application authorization policy behind this integration.
-
-## Golden path
-
-Implement the public store and authenticator ports in your application, register the module, then expose only the jobs your operators should run.
-
-```ts
-import * as gjKit from '@gj-kit/nest-operations-jobs';
-
-void gjKit;
-```
 
 ## Runtime and peers
 

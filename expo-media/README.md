@@ -4,10 +4,34 @@
 
 A hardened Expo and React Native media pipeline with explicit adapters and durable file boundaries.
 
-## Install
+## Golden path
+
+> **Outcome:** An Expo-backed media kit while your application keeps upload authorization.
+
+### 1. Install
 
 ```sh
 pnpm add @gj-kit/expo-media
+```
+
+### 2. Keep the app-owned boundary explicit
+
+Implement `uploadApi` in your app for upload intent and completion, then declare explicit file limits.
+
+### 3. Start with the smallest integration
+
+Copy this first, then replace only the app-owned values named above.
+
+```ts
+import { createMediaKit, type MediaUploadApi } from '@gj-kit/expo-media';
+
+type Asset = { readonly id: string };
+declare const uploadApi: MediaUploadApi<Asset>; // Your app owns auth and upload URLs.
+
+export const media = createMediaKit({
+  api: uploadApi,
+  limits: { image: { maxBytes: 15 * 1024 * 1024 } },
+});
 ```
 
 ## Use it when
@@ -17,16 +41,6 @@ Use it for media selection, upload preparation, hashing, device-library access, 
 ## Do not use it when
 
 Do not put record ownership, presign authorization, or orphan-cleanup policy in this library.
-
-## Golden path
-
-Provide the two backend upload operations and explicit limits, then let createMediaKit compose the supported Expo adapters.
-
-```ts
-import * as gjKit from '@gj-kit/expo-media';
-
-void gjKit;
-```
 
 ## Runtime and peers
 

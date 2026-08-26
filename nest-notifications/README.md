@@ -4,10 +4,30 @@
 
 NestJS composition for transactional notification relay, dispatch, presentation, and Expo push boundaries.
 
-## Install
+## Golden path
+
+> **Outcome:** Durable relay and dispatch runners wired to your stores and push gateway.
+
+### 1. Install
 
 ```sh
 pnpm add @gj-kit/nest-notifications
+```
+
+### 2. Keep the app-owned boundary explicit
+
+Keep product policy in app-owned stores, presenter, and scheduling policy before registering the Nest module.
+
+### 3. Start with the smallest integration
+
+Copy this first, then replace only the app-owned values named above.
+
+```ts
+import { NestNotificationsModule, type NestNotificationsOptions } from '@gj-kit/nest-notifications';
+
+declare const options: NestNotificationsOptions; // App stores, presenter, policy, and push gateway.
+
+export const notifications = NestNotificationsModule.forRoot(options);
 ```
 
 ## Use it when
@@ -17,16 +37,6 @@ Use it when product events must become durable, deduplicated notification work w
 ## Do not use it when
 
 Do not move product copy, recipient policy, or user-preference decisions into the generic relay.
-
-## Golden path
-
-Provide the application stores and presentation policy, register the Nest module, then run relay and dispatch workers through your normal operations boundary.
-
-```ts
-import * as gjKit from '@gj-kit/nest-notifications';
-
-void gjKit;
-```
 
 ## Runtime and peers
 

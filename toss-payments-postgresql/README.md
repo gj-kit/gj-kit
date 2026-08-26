@@ -4,10 +4,36 @@
 
 PostgreSQL stores, migrations, inbox, and encryption seams for @gj-kit/toss-payments.
 
-## Install
+## Golden path
+
+> **Outcome:** PostgreSQL-backed Toss stores with one explicit migration step.
+
+### 1. Install
 
 ```sh
 pnpm add @gj-kit/toss-payments-postgresql
+```
+
+### 2. Keep the app-owned boundary explicit
+
+Adapt your pool with `fromPgPool`, use a real encrypted `sensitiveValueProtector`, and run migration during deployment.
+
+### 3. Start with the smallest integration
+
+Copy this first, then replace only the app-owned values named above.
+
+```ts
+import { createTossPaymentsPostgres, fromPgPool, type PgPoolLike, type SensitiveValueProtector } from '@gj-kit/toss-payments-postgresql';
+
+declare const pool: PgPoolLike;
+declare const sensitiveValueProtector: SensitiveValueProtector; // App KMS/encryption boundary.
+
+export const stores = createTossPaymentsPostgres({
+  sql: fromPgPool(pool),
+  sensitiveValueProtector,
+});
+
+// Run await stores.migrate() once in deployment, never per request.
 ```
 
 ## Use it when
@@ -17,16 +43,6 @@ Use it when Toss payment stores need a proven PostgreSQL implementation while yo
 ## Do not use it when
 
 Do not run migrations on request or application startup, and do not use the plaintext protector in production.
-
-## Golden path
-
-Provide a SqlClient or pg pool, run migrations explicitly in deployment, then compose the store factory with an application-owned sensitive-value protector.
-
-```ts
-import * as gjKit from '@gj-kit/toss-payments-postgresql';
-
-void gjKit;
-```
 
 ## Runtime and peers
 

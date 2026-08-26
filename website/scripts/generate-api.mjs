@@ -2,7 +2,7 @@ import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import ts from 'typescript';
-import { packageBySlug, packages, REPOSITORY_URL, SITE_URL } from '../src/data/catalog.mjs';
+import { packageBySlug, packages, quickStartBySlug, REPOSITORY_URL, SITE_URL } from '../src/data/catalog.mjs';
 
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
 const websiteDir = path.resolve(scriptDir, '..');
@@ -324,6 +324,8 @@ function renderRoot(snapshot, locale) {
 
 function renderPackage(snapshotPackage, locale, index) {
   const product = packageBySlug.get(snapshotPackage.slug);
+  const quickStart = quickStartBySlug[product.slug]?.[locale];
+  if (!quickStart) fail(`missing ${locale} quick start for ${product.name}`);
   const korean = locale === 'ko';
   const apiLink = markdownLink(locale, packageIndexRoute(product.slug), korean ? '전체 API reference' : 'complete API reference');
   const related = product.related
@@ -353,11 +355,19 @@ function renderPackage(snapshotPackage, locale, index) {
     `## ${korean ? '사용하지 않을 때' : 'Do not use it when'}`,
     product.avoid[locale],
     '',
-    `## ${korean ? '설치' : 'Install'}`,
+    `## ${korean ? 'Golden path' : 'Golden path'}`,
+    `> **${korean ? '완료 상태' : 'Outcome'}:** ${quickStart.outcome}`,
+    '',
+    `### 1. ${korean ? '설치' : 'Install'}`,
     fenced('sh', `pnpm add ${product.name}`),
     '',
-    `## ${korean ? 'Golden path' : 'Golden path'}`,
-    product.goldenPath[locale],
+    `### 2. ${korean ? '앱이 소유할 경계를 정합니다' : 'Keep the app-owned boundary explicit'}`,
+    quickStart.boundary,
+    '',
+    `### 3. ${korean ? '최소 연결부터 시작합니다' : 'Start with the smallest integration'}`,
+    korean
+      ? '먼저 아래 코드를 복사한 뒤, 위에서 언급한 앱 소유 값만 교체하세요.'
+      : 'Copy this first, then replace only the app-owned values named above.',
     '',
     fenced(product.slug === 'expo-ui' ? 'tsx' : 'ts', product.code),
     '',

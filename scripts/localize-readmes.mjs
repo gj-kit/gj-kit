@@ -1,7 +1,7 @@
 import { access, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { packages } from '../website/src/data/catalog.mjs';
+import { packages, quickStartBySlug } from '../website/src/data/catalog.mjs';
 
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(scriptDir, '..');
@@ -14,6 +14,36 @@ async function exists(target) {
   } catch {
     return false;
   }
+}
+
+function goldenPathBlock(product, locale) {
+  const quickStart = quickStartBySlug[product.slug]?.[locale];
+  if (!quickStart) throw new Error(`Missing ${locale} quick start for ${product.name}`);
+  const korean = locale === 'ko';
+  const language = product.slug === 'expo-ui' ? 'tsx' : 'ts';
+  return `## Golden path
+
+> **${korean ? '완료 상태' : 'Outcome'}:** ${quickStart.outcome}
+
+### 1. ${korean ? '설치' : 'Install'}
+
+\`\`\`sh
+pnpm add ${product.name}
+\`\`\`
+
+### 2. ${korean ? '앱이 소유할 경계를 정합니다' : 'Keep the app-owned boundary explicit'}
+
+${quickStart.boundary}
+
+### 3. ${korean ? '최소 연결부터 시작합니다' : 'Start with the smallest integration'}
+
+${korean
+  ? '먼저 아래 코드를 복사한 뒤, 위에서 언급한 앱 소유 값만 교체하세요.'
+  : 'Copy this first, then replace only the app-owned values named above.'}
+
+\`\`\`${language}
+${product.code}
+\`\`\``;
 }
 
 function englishReadme(product, manifest, errorCodes) {
@@ -38,11 +68,7 @@ function englishReadme(product, manifest, errorCodes) {
 
 ${product.description.en}
 
-## Install
-
-\`\`\`sh
-pnpm add ${product.name}
-\`\`\`
+${goldenPathBlock(product, 'en')}
 
 ## Use it when
 
@@ -51,16 +77,6 @@ ${product.when.en}
 ## Do not use it when
 
 ${product.avoid.en}
-
-## Golden path
-
-${product.goldenPath.en}
-
-\`\`\`ts
-import * as gjKit from '${product.name}';
-
-void gjKit;
-\`\`\`
 
 ## Runtime and peers
 
@@ -169,11 +185,7 @@ function koreanOverview(product, manifest, errorCodes) {
 
 ${product.description.ko}
 
-## 설치
-
-\`\`\`sh
-pnpm add ${product.name}
-\`\`\`
+${goldenPathBlock(product, 'ko')}
 
 ## 사용할 때
 
@@ -182,16 +194,6 @@ ${product.when.ko}
 ## 사용하지 않을 때
 
 ${product.avoid.ko}
-
-## Golden path
-
-${product.goldenPath.ko}
-
-\`\`\`ts
-import * as gjKit from '${product.name}';
-
-void gjKit;
-\`\`\`
 
 ## 런타임과 peer 조건
 

@@ -6,10 +6,30 @@
 
 트랜잭션 알림 relay, dispatch, presentation, Expo push 경계를 위한 NestJS 조합 패키지입니다.
 
-## 설치
+## Golden path
+
+> **완료 상태:** 앱의 store와 push gateway에 연결된 내구성 있는 relay·dispatch runner를 만듭니다.
+
+### 1. 설치
 
 ```sh
 pnpm add @gj-kit/nest-notifications
+```
+
+### 2. 앱이 소유할 경계를 정합니다
+
+Nest module을 등록하기 전에 제품 정책은 앱 소유 store, presenter, scheduling policy에 둡니다.
+
+### 3. 최소 연결부터 시작합니다
+
+먼저 아래 코드를 복사한 뒤, 위에서 언급한 앱 소유 값만 교체하세요.
+
+```ts
+import { NestNotificationsModule, type NestNotificationsOptions } from '@gj-kit/nest-notifications';
+
+declare const options: NestNotificationsOptions; // App stores, presenter, policy, and push gateway.
+
+export const notifications = NestNotificationsModule.forRoot(options);
 ```
 
 ## 사용할 때
@@ -19,16 +39,6 @@ pnpm add @gj-kit/nest-notifications
 ## 사용하지 않을 때
 
 제품 문구, 수신자 정책, 사용자 선호 결정을 범용 relay로 옮기지 마세요.
-
-## Golden path
-
-앱 store와 presentation 정책을 제공하고 Nest module을 등록한 뒤 일반 운영 경계에서 relay와 dispatch worker를 실행합니다.
-
-```ts
-import * as gjKit from '@gj-kit/nest-notifications';
-
-void gjKit;
-```
 
 ## 런타임과 peer 조건
 

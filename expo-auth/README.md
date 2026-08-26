@@ -4,10 +4,35 @@
 
 Token lifecycle primitives for Expo, React Native, and the web, including coordinated refresh and storage adapters.
 
-## Install
+## Golden path
+
+> **Outcome:** One app-owned session that persists login state and coordinates concurrent refreshes.
+
+### 1. Install
 
 ```sh
 pnpm add @gj-kit/expo-auth
+```
+
+### 2. Keep the app-owned boundary explicit
+
+Choose the storage adapter once and connect only your refresh-endpoint callback.
+
+### 3. Start with the smallest integration
+
+Copy this first, then replace only the app-owned values named above.
+
+```ts
+import { createAuthSession, type RefreshRequest } from '@gj-kit/expo-auth';
+import { createTokenStorage, createWebLocksRefreshLock } from '@gj-kit/expo-auth/storage';
+
+declare const refresh: RefreshRequest; // Your API client classifies rotated, invalid, or transient.
+
+export const session = createAuthSession({
+  storage: createTokenStorage({ keyPrefix: 'myapp.auth' }),
+  lock: createWebLocksRefreshLock({ name: 'myapp.auth' }),
+  refresh,
+});
 ```
 
 ## Use it when
@@ -17,16 +42,6 @@ Use it when an app needs one reusable token refresh and persistence boundary acr
 ## Do not use it when
 
 Do not put application routes, identity-provider policy, telemetry, or API client ownership in the package.
-
-## Golden path
-
-Start from the root token lifecycle API and import the storage subpath only for the platform storage adapter you need.
-
-```ts
-import * as gjKit from '@gj-kit/expo-auth';
-
-void gjKit;
-```
 
 ## Runtime and peers
 

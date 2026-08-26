@@ -6,10 +6,34 @@
 
 명시적 adapter와 지속 파일 경계를 갖춘 하드닝된 Expo·React Native 미디어 파이프라인입니다.
 
-## 설치
+## Golden path
+
+> **완료 상태:** 앱이 업로드 권한을 계속 소유하는 Expo 기반 미디어 kit을 만듭니다.
+
+### 1. 설치
 
 ```sh
 pnpm add @gj-kit/expo-media
+```
+
+### 2. 앱이 소유할 경계를 정합니다
+
+앱에서 upload intent와 완료를 담당하는 `uploadApi`를 구현하고, 파일 제한을 명시합니다.
+
+### 3. 최소 연결부터 시작합니다
+
+먼저 아래 코드를 복사한 뒤, 위에서 언급한 앱 소유 값만 교체하세요.
+
+```ts
+import { createMediaKit, type MediaUploadApi } from '@gj-kit/expo-media';
+
+type Asset = { readonly id: string };
+declare const uploadApi: MediaUploadApi<Asset>; // Your app owns auth and upload URLs.
+
+export const media = createMediaKit({
+  api: uploadApi,
+  limits: { image: { maxBytes: 15 * 1024 * 1024 } },
+});
 ```
 
 ## 사용할 때
@@ -19,16 +43,6 @@ pnpm add @gj-kit/expo-media
 ## 사용하지 않을 때
 
 레코드 소유권, presign 권한, orphan 정리 정책을 이 라이브러리에 넣지 마세요.
-
-## Golden path
-
-백엔드 업로드 작업 두 개와 명시적 limits를 제공하고 createMediaKit이 지원되는 Expo adapter를 조합하게 합니다.
-
-```ts
-import * as gjKit from '@gj-kit/expo-media';
-
-void gjKit;
-```
 
 ## 런타임과 peer 조건
 

@@ -6,10 +6,35 @@
 
 명시적 store port를 갖춘 내구성, 인증, 관측 가능한 운영 작업을 위한 NestJS 조합 패키지입니다.
 
-## 설치
+## Golden path
+
+> **완료 상태:** 앱 소유 실행 저장소로 뒷받침되는 인증된 운영 작업 경계를 만듭니다.
+
+### 1. 설치
 
 ```sh
 pnpm add @gj-kit/nest-operations-jobs
+```
+
+### 2. 앱이 소유할 경계를 정합니다
+
+`JobRunStore`를 구현한 뒤 module을 등록하기 전에 32자 이상의 shared secret 또는 token verifier를 설정합니다.
+
+### 3. 최소 연결부터 시작합니다
+
+먼저 아래 코드를 복사한 뒤, 위에서 언급한 앱 소유 값만 교체하세요.
+
+```ts
+import { OperationsJobsModule, type JobRunStore } from '@gj-kit/nest-operations-jobs';
+
+declare const store: JobRunStore; // Your database-backed run store.
+declare const secret: string; // At least 32 characters; keep it outside source control.
+
+export const operations = OperationsJobsModule.forRoot({
+  store,
+  auth: { secret },
+  trigger: { path: 'internal/jobs' },
+});
 ```
 
 ## 사용할 때
@@ -19,16 +44,6 @@ Nest 앱에서 명시적 동시성, 권한, 실행 영속성을 갖춘 스케줄
 ## 사용하지 않을 때
 
 제품 비즈니스 규칙, queue 인프라, 앱 권한 정책을 이 통합 뒤에 숨기지 마세요.
-
-## Golden path
-
-앱에서 공개 store와 authenticator port를 구현하고 module을 등록한 뒤 운영자가 실행해야 하는 작업만 노출합니다.
-
-```ts
-import * as gjKit from '@gj-kit/nest-operations-jobs';
-
-void gjKit;
-```
 
 ## 런타임과 peer 조건
 

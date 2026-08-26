@@ -68,6 +68,15 @@ for (const pkg of snapshot.packages) {
     if (!(await exists(packagePage))) fail(`${locale} package page missing for ${pkg.name}`);
     const html = await readFile(packagePage, 'utf8');
     if (!html.includes(pkg.version)) fail(`${locale} package page does not show ${pkg.name} version ${pkg.version}`);
+    const quickStartLabels = locale === 'ko'
+      ? ['완료 상태', '1. 설치', '2. 앱이 소유할 경계를 정합니다', '3. 최소 연결부터 시작합니다']
+      : ['Outcome', '1. Install', '2. Keep the app-owned boundary explicit', '3. Start with the smallest integration'];
+    for (const label of quickStartLabels) {
+      if (!html.includes(label)) fail(`${locale} package page is missing Golden path step: ${label}`);
+    }
+    if (html.includes('void gjKit')) {
+      fail(`${locale} package page still uses a no-op Golden path import for ${pkg.name}`);
+    }
   }
   for (const entry of pkg.entries) {
     const seenSymbols = new Set();

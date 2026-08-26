@@ -6,10 +6,36 @@
 
 @gj-kit/toss-payments를 위한 PostgreSQL store, migration, inbox, 암호화 seam입니다.
 
-## 설치
+## Golden path
+
+> **완료 상태:** 명시적인 migration 단계 하나를 갖는 PostgreSQL 기반 Toss store를 만듭니다.
+
+### 1. 설치
 
 ```sh
 pnpm add @gj-kit/toss-payments-postgresql
+```
+
+### 2. 앱이 소유할 경계를 정합니다
+
+`fromPgPool`로 pool을 adapter에 연결하고 실제 암호화 `sensitiveValueProtector`를 사용하며, migration은 배포 중에 실행합니다.
+
+### 3. 최소 연결부터 시작합니다
+
+먼저 아래 코드를 복사한 뒤, 위에서 언급한 앱 소유 값만 교체하세요.
+
+```ts
+import { createTossPaymentsPostgres, fromPgPool, type PgPoolLike, type SensitiveValueProtector } from '@gj-kit/toss-payments-postgresql';
+
+declare const pool: PgPoolLike;
+declare const sensitiveValueProtector: SensitiveValueProtector; // App KMS/encryption boundary.
+
+export const stores = createTossPaymentsPostgres({
+  sql: fromPgPool(pool),
+  sensitiveValueProtector,
+});
+
+// Run await stores.migrate() once in deployment, never per request.
 ```
 
 ## 사용할 때
@@ -19,16 +45,6 @@ pnpm add @gj-kit/toss-payments-postgresql
 ## 사용하지 않을 때
 
 migration을 request 또는 앱 시작 시 실행하거나 production에서 plaintext protector를 사용하지 마세요.
-
-## Golden path
-
-SqlClient 또는 pg pool을 제공하고 배포 중 migration을 명시적으로 실행한 뒤 앱 소유 sensitive-value protector로 store factory를 조합합니다.
-
-```ts
-import * as gjKit from '@gj-kit/toss-payments-postgresql';
-
-void gjKit;
-```
 
 ## 런타임과 peer 조건
 

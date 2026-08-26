@@ -6,10 +6,34 @@
 
 HealthKit과 Health Connect의 운동, 경로, 권한, 증분 동기화를 위한 native Expo bridge입니다.
 
-## 설치
+## Golden path
+
+> **완료 상태:** native Expo 앱에서 HealthKit 또는 Health Connect 사용 가능 여부를 확인하고 운동 권한을 요청합니다.
+
+### 1. 설치
 
 ```sh
 pnpm add @gj-kit/expo-workouts
+```
+
+### 2. 앱이 소유할 경계를 정합니다
+
+config plugin을 추가하고 development build를 사용하세요. Expo Go와 웹은 native module을 호출할 수 없습니다.
+
+### 3. 최소 연결부터 시작합니다
+
+먼저 아래 코드를 복사한 뒤, 위에서 언급한 앱 소유 값만 교체하세요.
+
+```ts
+import { getAvailability, requestAuthorization } from '@gj-kit/expo-workouts';
+
+export async function requestWorkoutAccess() {
+  const availability = await getAvailability();
+  if (availability.status === 'available') {
+    await requestAuthorization({ read: ['workouts'] });
+  }
+  return availability;
+}
 ```
 
 ## 사용할 때
@@ -19,16 +43,6 @@ Expo 앱이 위치 수집, UI, 동기화 소유권을 유지하면서 플랫폼 
 ## 사용하지 않을 때
 
 실시간 GPS 추적, 백그라운드 위치 정책, 서버 측 건강 데이터 처리를 위해 사용하지 마세요.
-
-## Golden path
-
-config plugin을 추가하고 native 앱을 빌드한 뒤 필요한 권한만 요청하고, 반환된 sync token을 앱에 저장합니다.
-
-```ts
-import * as gjKit from '@gj-kit/expo-workouts';
-
-void gjKit;
-```
 
 ## 런타임과 peer 조건
 

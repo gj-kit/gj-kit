@@ -4,10 +4,36 @@
 
 NestJS DI and raw-body webhook composition for @gj-kit/toss-payments.
 
-## Install
+## Golden path
+
+> **Outcome:** One Nest provider that injects a typed payment kit.
+
+### 1. Install
 
 ```sh
 pnpm add @gj-kit/toss-payments-nestjs
+```
+
+### 2. Keep the app-owned boundary explicit
+
+Build the core payment config, register it once, and preserve raw request bytes for webhook routes.
+
+### 3. Start with the smallest integration
+
+Copy this first, then replace only the app-owned values named above.
+
+```ts
+import { orThrow } from '@gj-kit/toss-payments';
+import { defineTossPaymentsConfig, parseApiSecretKey } from '@gj-kit/toss-payments/server';
+import { TossPaymentsModule } from '@gj-kit/toss-payments-nestjs';
+
+declare const apiSecretFromEnv: string; // Read this once from your server environment.
+
+const config = defineTossPaymentsConfig({
+  secretKey: orThrow(parseApiSecretKey(apiSecretFromEnv)),
+});
+
+export const payments = TossPaymentsModule.forRoot(config);
 ```
 
 ## Use it when
@@ -17,16 +43,6 @@ Use it when a Nest application needs to keep the core payment kit’s types and 
 ## Do not use it when
 
 Do not reimplement payment verification in controllers or rely on parsed JSON when webhook verification requires raw bytes.
-
-## Golden path
-
-Register TossPaymentsModule with your stores, inject the typed kit, and enable rawBody before binding a webhook handler.
-
-```ts
-import * as gjKit from '@gj-kit/toss-payments-nestjs';
-
-void gjKit;
-```
 
 ## Runtime and peers
 

@@ -4,10 +4,34 @@
 
 A native Expo bridge for HealthKit and Health Connect workouts, routes, authorization, and incremental sync.
 
-## Install
+## Golden path
+
+> **Outcome:** A native Expo app can check HealthKit or Health Connect availability and request workout access.
+
+### 1. Install
 
 ```sh
 pnpm add @gj-kit/expo-workouts
+```
+
+### 2. Keep the app-owned boundary explicit
+
+Add the config plugin and use a development build; Expo Go and the web cannot call the native module.
+
+### 3. Start with the smallest integration
+
+Copy this first, then replace only the app-owned values named above.
+
+```ts
+import { getAvailability, requestAuthorization } from '@gj-kit/expo-workouts';
+
+export async function requestWorkoutAccess() {
+  const availability = await getAvailability();
+  if (availability.status === 'available') {
+    await requestAuthorization({ read: ['workouts'] });
+  }
+  return availability;
+}
 ```
 
 ## Use it when
@@ -17,16 +41,6 @@ Use it when an Expo app needs platform health data while retaining location coll
 ## Do not use it when
 
 Do not use it for live GPS tracking, background location policy, or server-side health-data processing.
-
-## Golden path
-
-Add the config plugin, build a native app, request only the required authorization, then persist the returned sync token in your app.
-
-```ts
-import * as gjKit from '@gj-kit/expo-workouts';
-
-void gjKit;
-```
 
 ## Runtime and peers
 

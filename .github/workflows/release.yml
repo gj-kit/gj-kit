@@ -40,11 +40,16 @@ jobs:
       - id: changesets
         uses: changesets/action@v1
         with:
+          # The default Actions token cannot update workflow files when a
+          # Version Packages commit includes one. This dedicated repository
+          # secret has the additional workflow permission required for that
+          # release commit and its tags.
+          github-token: ${{ secrets.RELEASE_GITHUB_TOKEN }}
           version: pnpm run version:packages
           publish: pnpm run publish:npm
           createGithubReleases: true
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.RELEASE_GITHUB_TOKEN }}
           GITHUB_PACKAGES_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           # changesets/action reads NPM_TOKEN itself before invoking publish.
           # Keep NODE_AUTH_TOKEN too: setup-node uses it for the npm user config.

@@ -296,6 +296,7 @@ function renderRoot(snapshot, locale) {
   const chooser = korean
     ? '각 패키지 페이지에서 설치 명령, Golden path, peer/플랫폼 경계, API reference를 확인하세요. API reference는 현재 npm latest의 생성된 선언 파일만 표시합니다.'
     : 'Open a package page for its install command, golden path, peer/platform boundary, and API reference. API reference is generated only from the current npm-latest declaration snapshot.';
+  const machineIndexPath = (path) => (korean ? `../${path}` : path);
   return [
     frontmatter({ title, description, order: 0, template: 'splash' }),
     description,
@@ -309,8 +310,8 @@ function renderRoot(snapshot, locale) {
     ...sections,
     '',
     korean
-      ? `## 에이전트·자동화\n\n사람이 읽는 페이지 외에 [llms.txt](${pagePath(locale, 'llms.txt')})와 [API JSON index](${pagePath(locale, 'api/index.json')})를 제공합니다. 자동화는 반드시 JSON의 package version과 import path를 확인하세요.`
-      : `## Agents and automation\n\nAlongside these pages, GJ Kit publishes [llms.txt](${pagePath(locale, 'llms.txt')}) and an [API JSON index](${pagePath(locale, 'api/index.json')}). Automation should always check the JSON package version and import path.`,
+      ? `## 에이전트·자동화\n\n사람이 읽는 페이지 외에 [llms.txt](${machineIndexPath('llms.txt')})와 [API JSON index](${machineIndexPath('api/index.json')})를 제공합니다. 자동화는 반드시 JSON의 package version과 import path를 확인하세요.`
+      : `## Agents and automation\n\nAlongside these pages, GJ Kit publishes [llms.txt](${machineIndexPath('llms.txt')}) and an [API JSON index](${machineIndexPath('api/index.json')}). Automation should always check the JSON package version and import path.`,
   ].join('\n');
 }
 

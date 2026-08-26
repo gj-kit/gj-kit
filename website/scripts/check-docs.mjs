@@ -44,6 +44,13 @@ for (const [html, label, expected] of [
   if (!html.includes('rel="canonical"')) fail(`${label} is missing a canonical URL`);
   if (!html.includes('hreflang=')) fail(`${label} is missing hreflang links`);
 }
+for (const [html, label, llmsHref, apiHref] of [
+  [rootHtml, 'English root', 'href="llms.txt"', 'href="api/index.json"'],
+  [koreanRootHtml, 'Korean root', 'href="../llms.txt"', 'href="../api/index.json"'],
+]) {
+  if (!html.includes(llmsHref)) fail(`${label} links llms.txt outside the site base path`);
+  if (!html.includes(apiHref)) fail(`${label} links the API index outside the site base path`);
+}
 
 const expectedPaths = new Set();
 for (const pkg of snapshot.packages) {

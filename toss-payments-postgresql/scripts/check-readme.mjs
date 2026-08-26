@@ -28,7 +28,7 @@ import { fileURLToPath } from 'node:url';
 const pkgRoot = process.argv[2]
   ? resolve(process.argv[2])
   : dirname(dirname(fileURLToPath(import.meta.url)));
-const readmePath = join(pkgRoot, 'README.md');
+const readmePath = join(pkgRoot, process.env.README_PATH ?? 'README.md');
 // dist 타입에 매핑한다(소비자가 실제로 보는 표면 + skipLibCheck로 라이브러리 내부 우회).
 // 실행 전 이 패키지의 pnpm build 필요. 코어/Nest 배선 dist는 워크스페이스 빌드 산출물을
 // 그대로 본다 — 없으면 루트에서 pnpm build를 먼저 실행하라.

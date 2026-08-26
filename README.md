@@ -1,44 +1,30 @@
 # gj-kit
 
-Reusable TypeScript libraries for Expo, React Native, and Toss Payments.
+**English** · [한국어](./README.ko.md)
+
+Reusable TypeScript libraries for Expo, React Native, NestJS, and Toss Payments. Human documentation and agent-readable API indexes are published at [GJ Kit Docs](https://gj-kit.github.io/gj-kit/).
 
 | Package | Description |
 | --- | --- |
-| [`@gj-kit/expo-ui`](./expo-ui) | Accessible Expo and React Native UI primitives. |
-| [`@gj-kit/expo-media`](./expo-media) | Expo and React Native media pipeline utilities. |
-| [`@gj-kit/toss-payments`](./toss-payments) | Type-safe Toss Payments widget and API v2 integration. |
-| [`@gj-kit/toss-payments-nestjs`](./toss-payments-nestjs) | NestJS integration for `@gj-kit/toss-payments`. |
-| [`@gj-kit/toss-payments-postgresql`](./toss-payments-postgresql) | PostgreSQL stores, migrations, and webhook inbox for `@gj-kit/toss-payments`. |
+| [`@gj-kit/expo-ui`](./expo-ui) | Accessible, token-driven UI primitives for Expo, React Native, and the web. |
+| [`@gj-kit/expo-media`](./expo-media) | A hardened Expo and React Native media pipeline with explicit adapters and durable file boundaries. |
+| [`@gj-kit/expo-auth`](./expo-auth) | Token lifecycle primitives for Expo, React Native, and the web, including coordinated refresh and storage adapters. |
+| [`@gj-kit/expo-workouts`](./expo-workouts) | A native Expo bridge for HealthKit and Health Connect workouts, routes, authorization, and incremental sync. |
+| [`@gj-kit/format`](./format) | Explicit-by-construction date, number, byte, duration, and Korean currency formatting for TypeScript. |
+| [`@gj-kit/nest-operations-jobs`](./nest-operations-jobs) | NestJS composition for durable, authenticated, observable operational jobs with explicit store ports. |
+| [`@gj-kit/nest-notifications`](./nest-notifications) | NestJS composition for transactional notification relay, dispatch, presentation, and Expo push boundaries. |
+| [`@gj-kit/toss-payments`](./toss-payments) | Type-safe Toss Payments widget and API v2 flows for TypeScript servers and browsers. |
+| [`@gj-kit/toss-payments-nestjs`](./toss-payments-nestjs) | NestJS DI and raw-body webhook composition for @gj-kit/toss-payments. |
+| [`@gj-kit/toss-payments-postgresql`](./toss-payments-postgresql) | PostgreSQL stores, migrations, inbox, and encryption seams for @gj-kit/toss-payments. |
 
-## Installation
+## Install
 
-Packages published to npm install normally:
-
-```bash
-npm install @gj-kit/expo-ui
+```sh
+pnpm add @gj-kit/expo-ui
 ```
 
-For a PostgreSQL-backed Toss Payments server, install the core and adapter
-together. Your application owns its chosen PostgreSQL driver:
-
-```bash
-npm install @gj-kit/toss-payments @gj-kit/toss-payments-postgresql pg
-```
-
-To install from GitHub Packages, authenticate with a GitHub token that has the
-`read:packages` scope and add this to the consuming project's `.npmrc`:
-
-```ini
-@gj-kit:registry=https://npm.pkg.github.com
-```
+Open each package README and portal page for its supported peer/platform boundary, golden path, and complete generated API reference.
 
 ## Releases
 
-Add a Changeset for every user-facing package change. Merging it into `main`
-opens a version PR. Merging that version PR publishes to npm, creates one
-GitHub Release per changed package, and publishes the release artifacts to
-GitHub Packages.
-
-Repository administrators must add an `NPM_TOKEN` Actions secret with npm
-publish permission. GitHub Packages uses the workflow's built-in
-`GITHUB_TOKEN`.
+Every user-facing package change needs a Changeset. A Version Packages PR merged into `main` publishes through the existing CI workflow; do not run `npm publish` directly.

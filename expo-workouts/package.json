@@ -1,7 +1,7 @@
 {
   "name": "@gj-kit/expo-workouts",
   "version": "0.1.0",
-  "description": "HealthKit / Health Connect workout + GPS-route bridge for Expo. Gap-free incremental sync, idempotent writes, streamed routes — protocol in pure TypeScript, zero runtime dependencies.",
+  "description": "HealthKit and Health Connect workout, GPS-route, authorization, and incremental sync bridge for Expo.",
   "keywords": [
     "expo",
     "react-native",
@@ -13,7 +13,7 @@
     "sync",
     "typescript"
   ],
-  "homepage": "https://github.com/gj-kit/gj-kit/tree/main/expo-workouts",
+  "homepage": "https://gj-kit.github.io/gj-kit/packages/expo-workouts/",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/gj-kit/gj-kit.git",
@@ -37,7 +37,8 @@
     "plugin/build",
     "README.md",
     "CHANGELOG.md",
-    "LICENSE"
+    "LICENSE",
+    "README.ko.md"
   ],
   "publishConfig": {
     "access": "public"

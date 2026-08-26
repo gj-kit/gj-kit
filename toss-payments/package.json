@@ -1,8 +1,8 @@
 {
   "name": "@gj-kit/toss-payments",
   "version": "0.6.0",
-  "description": "토스페이먼츠 결제위젯·API v2 연동 라이브러리 — 검증(금액 대조·상태 확인·서명 검증)을 타입으로 강제한다",
-  "homepage": "https://github.com/gj-kit/gj-kit/tree/main/toss-payments",
+  "description": "Type-safe Toss Payments API v2, widget, billing, cancellation, and webhook flows for TypeScript.",
+  "homepage": "https://gj-kit.github.io/gj-kit/packages/toss-payments/",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/gj-kit/gj-kit.git",
@@ -18,7 +18,9 @@
     "node": ">=20"
   },
   "files": [
-    "dist"
+    "dist",
+    "README.md",
+    "README.ko.md"
   ],
   "exports": {
     ".": {
@@ -97,5 +99,13 @@
     "tsup": "^8",
     "typescript": "^5",
     "vitest": "^3"
-  }
+  },
+  "keywords": [
+    "toss-payments",
+    "payments",
+    "payment-widget",
+    "billing",
+    "webhook",
+    "typescript"
+  ]
 }

@@ -23,7 +23,7 @@ import { fileURLToPath } from 'node:url';
 const pkgRoot = process.argv[2]
   ? resolve(process.argv[2])
   : dirname(dirname(fileURLToPath(import.meta.url)));
-const readmePath = join(pkgRoot, 'README.md');
+const readmePath = join(pkgRoot, process.env.README_PATH ?? 'README.md');
 // dist 타입에 매핑한다(소비자가 실제로 보는 표면 + DOM lib과 @types/node의
 // Uint8Array 제네릭 충돌을 skipLibCheck로 우회). 실행 전 pnpm build 필요.
 const distDir = join(pkgRoot, 'dist');

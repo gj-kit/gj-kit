@@ -231,7 +231,7 @@ const globalStyles = `
 
 export default function Html({ children }: PropsWithChildren) {
   return (
-    <html lang="ko">
+    <html lang="en">
       <head>
         <meta charSet="utf-8" />
         <meta httpEquiv="X-UA-Compatible" content="IE=edge" />
@@ -242,6 +242,8 @@ export default function Html({ children }: PropsWithChildren) {
         <meta name="theme-color" content="#ffffff" />
         <meta name="color-scheme" content="light dark" />
         <meta name="format-detection" content="telephone=no" />
+        <meta httpEquiv="refresh" content="0; url=https://gj-kit.github.io/gj-kit/packages/expo-ui/" />
+        <link rel="canonical" href="https://gj-kit.github.io/gj-kit/packages/expo-ui/" />
         <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
         <link rel="manifest" href="/site.webmanifest" />
 

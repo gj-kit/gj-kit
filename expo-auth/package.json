@@ -1,19 +1,18 @@
 {
   "name": "@gj-kit/expo-auth",
   "version": "0.1.0",
-  "description": "Expo/React Native·웹 토큰 수명주기 코어 — 단일 비행 refresh, 크로스탭 회전 채택, transient-never-logs-out, 사전 갱신 스케줄러. exports 조건 포크가 SecureStore/웹 스토리지를 선택하며 런타임 의존성 0",
+  "description": "Token lifecycle primitives for Expo, React Native, and web applications with coordinated refresh and platform storage adapters.",
   "keywords": [
     "expo",
     "react-native",
+    "web",
     "auth",
     "token",
     "refresh-token",
-    "secure-store",
-    "jwt",
     "session",
     "typescript"
   ],
-  "homepage": "https://github.com/gj-kit/gj-kit/tree/main/expo-auth",
+  "homepage": "https://gj-kit.github.io/gj-kit/packages/expo-auth/",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/gj-kit/gj-kit.git",
@@ -29,7 +28,9 @@
     "node": ">=20"
   },
   "files": [
-    "dist"
+    "dist",
+    "README.md",
+    "README.ko.md"
   ],
   "publishConfig": {
     "access": "public"

@@ -1,32 +1,17 @@
 {
   "name": "@gj-kit/expo-ui",
   "version": "0.8.0",
-  "description": "Type-safe Expo and React Native UI components with token-based light/dark themes, accessibility contracts, and safe-area/keyboard utilities.",
+  "description": "Accessible, token-driven UI primitives for Expo, React Native, and React Native Web.",
   "keywords": [
     "expo",
-    "expo-ui",
     "react-native",
-    "react-native-ui",
     "react-native-web",
-    "ui-kit",
-    "component-library",
-    "design-system",
-    "typescript",
-    "theme",
-    "dark-mode",
+    "ui",
     "accessibility",
-    "data-table",
-    "pagination",
-    "combobox",
-    "searchable-select",
-    "table",
-    "drawer",
-    "safe-area",
-    "sheet",
-    "keyboard",
-    "tailwind"
+    "design-system",
+    "typescript"
   ],
-  "homepage": "https://gj-kit-expo-ui.expo.app/",
+  "homepage": "https://gj-kit.github.io/gj-kit/packages/expo-ui/",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/gj-kit/gj-kit.git",
@@ -42,7 +27,9 @@
     "node": ">=20"
   },
   "files": [
-    "dist"
+    "dist",
+    "README.md",
+    "README.ko.md"
   ],
   "publishConfig": {
     "access": "public"

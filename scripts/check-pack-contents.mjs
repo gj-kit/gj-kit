@@ -151,6 +151,14 @@ for (const packageConfig of packages) {
     throw new Error(`${manifest.name}: packed tarball is missing: ${missingFromTarball.join(', ')}`);
   }
 
+  // npm renders README.md as the package landing page. README.ko.md is shipped
+  // alongside it so the language switch never points to a GitHub-only file.
+  const localizedReadmes = ['README.md', 'README.ko.md'];
+  const missingReadmes = localizedReadmes.filter((file) => !files.has(file));
+  if (missingReadmes.length > 0) {
+    throw new Error(`${manifest.name}: packed tarball is missing localized README files: ${missingReadmes.join(', ')}`);
+  }
+
   // The four assertions below are opt-in: a package that declares none of these
   // options behaves exactly as it did before they existed.
   const missingRequiredFiles = (packageConfig.requiredFiles ?? []).filter((file) => !files.has(file));

@@ -1,0 +1,49 @@
+:root {
+  --sl-color-accent-low: #142d42;
+  --sl-color-accent: #4de7ff;
+  --sl-color-accent-high: #d8f8ff;
+  --sl-color-text-accent: #4de7ff;
+}
+
+:root[data-theme='dark'] {
+  --sl-color-bg: #080d16;
+  --sl-color-bg-nav: #0b111d;
+  --sl-color-bg-sidebar: #0b111d;
+  --sl-color-hairline-light: #253248;
+}
+
+:root[data-theme='light'] {
+  --sl-color-accent-low: #c8f5fb;
+  --sl-color-accent: #007f96;
+  --sl-color-accent-high: #004d5d;
+  --sl-color-text-accent: #007f96;
+}
+
+.hero {
+  background:
+    radial-gradient(circle at 8% 10%, color-mix(in srgb, var(--sl-color-accent) 18%, transparent), transparent 30rem),
+    radial-gradient(circle at 90% 0%, rgba(167, 139, 250, 0.16), transparent 28rem);
+  border: 1px solid var(--sl-color-hairline-light);
+  border-radius: 1.25rem;
+  padding: clamp(1.5rem, 4vw, 3.5rem);
+}
+
+.sl-markdown-content table {
+  display: table;
+  width: 100%;
+}
+
+.sl-markdown-content code {
+  overflow-wrap: anywhere;
+}
+
+.sl-markdown-content h1 code {
+  color: inherit;
+}
+
+@media (max-width: 50rem) {
+  .hero {
+    border-radius: 0.9rem;
+    padding: 1.25rem;
+  }
+}

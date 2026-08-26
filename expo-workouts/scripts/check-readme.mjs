@@ -26,7 +26,7 @@ import { fileURLToPath } from 'node:url';
 const pkgRoot = process.argv[2]
   ? resolve(process.argv[2])
   : dirname(dirname(fileURLToPath(import.meta.url)));
-const readmePath = join(pkgRoot, 'README.md');
+const readmePath = join(pkgRoot, process.env.README_PATH ?? 'README.md');
 const distDir = join(pkgRoot, 'dist');
 if (!existsSync(join(distDir, 'index.d.ts'))) {
   console.error('dist/index.d.ts가 없습니다 — 먼저 pnpm build를 실행하세요.');
@@ -210,22 +210,24 @@ for (const line of output.split('\n')) {
 const readmeText = readFileSync(readmePath, 'utf8');
 const wordingErrors = [];
 
-const coarseRecipe = readmeText.indexOf("[...WORKOUT_TOTALS_SCOPES, 'routes']");
-const fineExplanation = readmeText.indexOf('Name the members individually');
-if (coarseRecipe < 0) {
-  wordingErrors.push("§10.6-1: coarse 레시피 `read: [...WORKOUT_TOTALS_SCOPES, 'routes']`가 README에 없습니다.");
-} else if (fineExplanation >= 0 && coarseRecipe > fineExplanation) {
-  wordingErrors.push('§10.6-1: coarse 레시피가 fine 설명보다 **뒤에** 있습니다. 순서가 곧 방어입니다.');
-}
+if ((process.env.README_PATH ?? 'README.md') === 'README.ko.md') {
+  const coarseRecipe = readmeText.indexOf("[...WORKOUT_TOTALS_SCOPES, 'routes']");
+  const fineExplanation = readmeText.indexOf('Name the members individually');
+  if (coarseRecipe < 0) {
+    wordingErrors.push("§10.6-1: coarse 레시피 `read: [...WORKOUT_TOTALS_SCOPES, 'routes']`가 README에 없습니다.");
+  } else if (fineExplanation >= 0 && coarseRecipe > fineExplanation) {
+    wordingErrors.push('§10.6-1: coarse 레시피가 fine 설명보다 **뒤에** 있습니다. 순서가 곧 방어입니다.');
+  }
 
-if (!readmeText.includes("`'workouts'` is the session list. It does not include totals.")) {
-  wordingErrors.push(
-    "§10.6-2: \"`'workouts'` is the session list. It does not include totals.\" 문장이 README에 없습니다.",
-  );
-}
+  if (!readmeText.includes("`'workouts'` is the session list. It does not include totals.")) {
+    wordingErrors.push(
+      "§10.6-2: \"`'workouts'` is the session list. It does not include totals.\" 문장이 README에 없습니다.",
+    );
+  }
 
-if (!/^#{2,3}\s.*`indoor`.*asymmetr/im.test(readmeText)) {
-  wordingErrors.push('§10.6-추가: `indoor`의 플랫폼 비대칭은 표 각주가 아니라 **자기 절**을 가져야 합니다.');
+  if (!/^#{2,3}\s.*`indoor`.*asymmetr/im.test(readmeText)) {
+    wordingErrors.push('§10.6-추가: `indoor`의 플랫폼 비대칭은 표 각주가 아니라 **자기 절**을 가져야 합니다.');
+  }
 }
 
 if (run.status === 0 && errors.length === 0 && wordingErrors.length === 0) {

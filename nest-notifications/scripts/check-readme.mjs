@@ -26,7 +26,7 @@ import { fileURLToPath } from 'node:url';
 const pkgRoot = process.argv[2]
   ? resolve(process.argv[2])
   : dirname(dirname(fileURLToPath(import.meta.url)));
-const readmePath = join(pkgRoot, 'README.md');
+const readmePath = join(pkgRoot, process.env.README_PATH ?? 'README.md');
 const distDir = join(pkgRoot, 'dist');
 for (const entry of ['index.d.ts', 'core.d.ts', 'expo.d.ts', 'testing.d.ts']) {
   if (!existsSync(join(distDir, entry))) {

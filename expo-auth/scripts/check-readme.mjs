@@ -25,7 +25,7 @@ import { fileURLToPath } from 'node:url';
 const pkgRoot = process.argv[2]
   ? resolve(process.argv[2])
   : dirname(dirname(fileURLToPath(import.meta.url)));
-const readmePath = join(pkgRoot, 'README.md');
+const readmePath = join(pkgRoot, process.env.README_PATH ?? 'README.md');
 const distDir = join(pkgRoot, 'dist');
 if (!existsSync(join(distDir, 'index.d.ts'))) {
   console.error('dist/index.d.ts가 없습니다 — 먼저 pnpm build를 실행하세요.');

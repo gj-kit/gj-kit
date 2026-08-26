@@ -1,8 +1,8 @@
 {
   "name": "@gj-kit/toss-payments-nestjs",
   "version": "0.4.3",
-  "description": "@gj-kit/toss-payments의 NestJS 통합 — DI 토큰·DynamicModule·rawBody 웹훅 헬퍼 (설계 §4)",
-  "homepage": "https://github.com/gj-kit/gj-kit/tree/main/toss-payments-nestjs",
+  "description": "NestJS dependency injection and raw-body webhook integration for @gj-kit/toss-payments.",
+  "homepage": "https://gj-kit.github.io/gj-kit/packages/toss-payments-nestjs/",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/gj-kit/gj-kit.git",
@@ -18,7 +18,9 @@
     "node": ">=20"
   },
   "files": [
-    "dist"
+    "dist",
+    "README.md",
+    "README.ko.md"
   ],
   "exports": {
     ".": {
@@ -57,5 +59,13 @@
     "tsup": "^8",
     "typescript": "^5",
     "vitest": "^3"
-  }
+  },
+  "keywords": [
+    "toss-payments",
+    "nestjs",
+    "payments",
+    "webhook",
+    "dependency-injection",
+    "typescript"
+  ]
 }

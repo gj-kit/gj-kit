@@ -1,8 +1,8 @@
 {
   "name": "@gj-kit/toss-payments-postgresql",
   "version": "0.5.0",
-  "description": "@gj-kit/toss-payments 저장소 seam의 PostgreSQL 구현 — 테이블·마이그레이션 소유와 단일 문 원자적 dedupe로, 검증 강제 플로우의 영속화를 '설계하는 일'이 아니라 '설정하는 일'로 만든다",
-  "homepage": "https://github.com/gj-kit/gj-kit/tree/main/toss-payments-postgresql",
+  "description": "PostgreSQL stores, migrations, webhook inbox, and encryption seams for @gj-kit/toss-payments.",
+  "homepage": "https://gj-kit.github.io/gj-kit/packages/toss-payments-postgresql/",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/gj-kit/gj-kit.git",
@@ -18,7 +18,9 @@
     "node": ">=20"
   },
   "files": [
-    "dist"
+    "dist",
+    "README.md",
+    "README.ko.md"
   ],
   "exports": {
     ".": {
@@ -92,5 +94,13 @@
     "tsup": "^8",
     "typescript": "^5",
     "vitest": "^3"
-  }
+  },
+  "keywords": [
+    "toss-payments",
+    "postgresql",
+    "payments",
+    "webhook",
+    "migrations",
+    "typescript"
+  ]
 }

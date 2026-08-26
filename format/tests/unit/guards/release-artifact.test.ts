@@ -48,7 +48,7 @@ describe('package.json 배포 계약', () => {
     expect(manifest.name).toBe('@gj-kit/format');
     expect(manifest.type).toBe('module');
     expect(manifest.sideEffects).toBe(false);
-    expect(manifest.files).toEqual(['dist']);
+    expect(manifest.files).toEqual(['dist', 'README.md', 'README.ko.md']);
     expect(manifest.engines?.node).toBe('>=20');
     expect(manifest.publishConfig?.access).toBe('public');
   });

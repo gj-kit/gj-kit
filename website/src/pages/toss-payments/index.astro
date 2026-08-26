@@ -1,0 +1,19 @@
+---
+const target = `${import.meta.env.BASE_URL}packages/toss-payments/`;
+const canonical = new URL(target, 'https://gj-kit.github.io').href;
+---
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width" />
+    <meta http-equiv="refresh" content={`0;url=${target}`} />
+    <link rel="canonical" href={canonical} />
+    <meta name="robots" content="noindex, follow" />
+    <title>@gj-kit/toss-payments documentation moved</title>
+  </head>
+  <body>
+    <p><a href={target}>@gj-kit/toss-payments documentation has moved.</a></p>
+    <script is:inline define:vars={{ target }}>window.location.replace(target);</script>
+  </body>
+</html>

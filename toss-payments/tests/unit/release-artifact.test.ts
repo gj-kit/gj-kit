@@ -10,8 +10,8 @@ const manifest = JSON.parse(readFileSync(join(packageRoot, 'package.json'), 'utf
 };
 
 describe('release artifact contract', () => {
-  it('ships only dist and stamps/verifies immutable package provenance before pack', () => {
-    expect(manifest.files).toEqual(['dist']);
+  it('ships dist and both READMEs, then stamps/verifies immutable package provenance before pack', () => {
+    expect(manifest.files).toEqual(['dist', 'README.md', 'README.ko.md']);
     expect(manifest.scripts?.build).toContain('scripts/stamp-provenance.mjs');
     expect(manifest.scripts?.prepack).toContain('scripts/check-provenance.mjs --require-clean');
     expect(existsSync(join(packageRoot, 'scripts', 'stamp-provenance.mjs'))).toBe(true);

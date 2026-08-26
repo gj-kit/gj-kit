@@ -1,0 +1,13 @@
+{
+  "skipLink.label": "본문으로 건너뛰기",
+  "search.label": "문서 검색",
+  "search.cancelLabel": "취소",
+  "pagefind.search_label": "이 문서 검색",
+  "pagefind.clear_search": "지우기",
+  "pagefind.zero_results": "[SEARCH_TERM]에 대한 결과가 없습니다",
+  "pagefind.one_result": "[COUNT]개의 결과",
+  "pagefind.many_results": "[COUNT]개의 결과",
+  "pagefind.searching": "검색 중",
+  "expressiveCode.copyButtonCopied": "복사됨",
+  "expressiveCode.copyButtonTooltip": "코드 복사"
+}

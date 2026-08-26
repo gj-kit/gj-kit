@@ -13,9 +13,10 @@ import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const packageRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
-const readme = readFileSync(resolve(packageRoot, 'README.md'), 'utf8');
+const readmeName = process.env.README_PATH ?? 'README.md';
+const readme = readFileSync(resolve(packageRoot, readmeName), 'utf8');
 
-const required = [
+const koreanRequired = [
   '## 여러 Toss 키 쌍을 함께 쓴다면: named kit으로 분리',
   'TossPaymentsModule.registerAsync({',
   "name: 'billing'",
@@ -29,6 +30,16 @@ const required = [
   'dist/gj-kit-provenance.json',
   'file:vendor/...tgz',
 ];
+
+const englishRequired = [
+  '# @gj-kit/toss-payments-nestjs',
+  '[한국어](./README.ko.md)',
+  'pnpm add @gj-kit/toss-payments-nestjs',
+  'https://gj-kit.github.io/gj-kit/packages/toss-payments-nestjs/',
+  'https://gj-kit.github.io/gj-kit/api/toss-payments-nestjs/',
+];
+
+const required = readmeName === 'README.ko.md' ? koreanRequired : englishRequired;
 
 const missing = required.filter((marker) => !readme.includes(marker));
 if (missing.length > 0) {

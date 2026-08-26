@@ -34,8 +34,8 @@ interface Manifest {
 const manifest = JSON.parse(readFileSync(join(packageRoot, 'package.json'), 'utf8')) as Manifest;
 
 describe('release artifact contract', () => {
-  it('dist만 싣고 pack 전에 provenance를 찍고 검증한다', () => {
-    expect(manifest.files).toEqual(['dist']);
+  it('dist와 양언어 README를 싣고 pack 전에 provenance를 찍고 검증한다', () => {
+    expect(manifest.files).toEqual(['dist', 'README.md', 'README.ko.md']);
     expect(manifest.scripts?.build).toContain('scripts/stamp-provenance.mjs');
     expect(manifest.scripts?.prepack).toContain('scripts/check-provenance.mjs --require-clean');
     for (const script of ['stamp-provenance.mjs', 'check-provenance.mjs', 'check-readme.mjs']) {

@@ -1,0 +1,7 @@
+dist/
+.astro/
+src/content/docs/
+public/api/
+public/llms.txt
+public/llms-full.txt
+/.docs-check-*

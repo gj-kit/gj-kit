@@ -4,7 +4,25 @@
 
 <!-- gj-kit-localized-overview -->
 
-@gj-kit/toss-payments를 위한 PostgreSQL store, migration, inbox, 암호화 seam입니다.
+[![npm](https://img.shields.io/npm/v/@gj-kit/toss-payments-postgresql?label=npm&style=flat-square&color=0a7ea4)](https://www.npmjs.com/package/@gj-kit/toss-payments-postgresql)
+[![CI](https://img.shields.io/github/actions/workflow/status/gj-kit/gj-kit/ci.yml?branch=main&label=CI&style=flat-square&color=0a7ea4)](https://github.com/gj-kit/gj-kit/actions/workflows/ci.yml)
+[![types included](https://img.shields.io/badge/types-included-0a7ea4?style=flat-square)](https://www.npmjs.com/package/@gj-kit/toss-payments-postgresql)
+[![runtime dependencies: 0](https://img.shields.io/badge/runtime%20deps-0-0a7ea4?style=flat-square)](https://www.npmjs.com/package/@gj-kit/toss-payments-postgresql)
+[![license](https://img.shields.io/npm/l/@gj-kit/toss-payments-postgresql?label=license&style=flat-square&color=0a7ea4)](https://github.com/gj-kit/gj-kit/blob/main/toss-payments-postgresql/LICENSE)
+
+> **토스페이먼츠 저장소를 직접 운영하는 PostgreSQL 위에 올리되, 암호화 protector를 빠뜨리면 컴파일이 실패합니다.**
+
+## 왜 필요한가
+
+토스페이먼츠를 자체 DB에 붙이려면 테이블 7종, 원자적이어야 하는 webhook dedupe 전이, 그리고 billing key·가상계좌 secret·취소 재시도 티켓의 at-rest 암호화를 직접 설계해야 합니다. 직접 짜면 조회 후 삽입 방식의 dedupe에서 같은 이벤트의 동시 재전송 2건이 모두 처리권을 얻고, protector를 빠뜨린 store는 billing key를 평문으로 남깁니다. 둘 다 프로덕션에 올라가기 전까지는 아무 신호도 주지 않습니다.
+
+## 무엇으로 막는가
+
+- **protector 없는 조립은 컴파일 실패** — `createTossPaymentsPostgres({ sql })`은 타입 에러입니다. aggregate와 민감 store factory 3종이 모두 `sensitiveValueProtector`를 필수 필드로 요구하므로, 평문 저장은 숨은 기본값이 될 수 없고 unsafePlaintextSensitiveValueProtector를 직접 적어 넣은 코드에만 남습니다.
+- **raw string은 lock key가 아닙니다** — opaqueLocks.withLock은 branded OpaqueAdvisoryLockKey만 받습니다. customer ID를 raw string으로 넘기는 코드는 tsc가 TS2345로 거부합니다.
+- **타입이 transaction 요건을 강제합니다** — createPgBillingKeyStore는 SqlExecutor를 거부합니다. SELECT … FOR UPDATE → 복호화 → constant-time 비교 → DELETE가 한 connection, 한 transaction 안에서 끝나야 하므로 withConnection을 가진 SqlClient만 통과합니다.
+- **webhook claim은 단일 문입니다** — src/stores/webhook-dedupe.ts의 claim은 INSERT … ON CONFLICT DO UPDATE 단일 CTE로 전이합니다. 그래서 동시 재전송 N건 중 정확히 1건만 'claimed'를 받습니다.
+- **deadlock이 테스트에서 즉시 드러납니다** — ./testing 인메모리 대역은 PostgreSQL이라면 그대로 멈출 중첩에서 MemoryLockContractError('nested-lock-api' · 'reentrant-lock')를 던집니다.
 
 ## Golden path
 
@@ -37,6 +55,42 @@ export const stores = createTossPaymentsPostgres({
 
 // Run await stores.migrate() once in deployment, never per request.
 ```
+
+## 실제로는 이렇게 걸립니다
+
+protector는 빠뜨릴 수 있는 옵션이 아니고, raw 식별자는 lock key 자리에 들어가지 못합니다. 둘 다 DB에 닿기 전에 tsc가 TS2345로 거부합니다. 두 lock을 함께 잡는 API도 withOpaqueMutationLock 하나뿐이라, opaque → customer 순서는 호출자가 정할 여지가 없습니다.
+
+```ts
+import type { Pool } from 'pg';
+import type { BillingKeyRecord } from '@gj-kit/toss-payments/server';
+import { createAes256GcmSensitiveValueProtector, createOpaqueAdvisoryLockKey, createTossPaymentsPostgres, fromPgPool } from '@gj-kit/toss-payments-postgresql';
+
+declare const pool: Pool; // app owns the pg Pool
+declare const keyHex: string; // app owns key custody and rotation
+declare const blindIndex: string; // app owns the blind index of the customer id
+declare const record: BillingKeyRecord; // app owns the freshly issued billing key
+
+export const pg = createTossPaymentsPostgres({
+  sql: fromPgPool(pool),
+  sensitiveValueProtector: createAes256GcmSensitiveValueProtector({ key: keyHex, keyId: '2026-08' }),
+});
+// Without sensitiveValueProtector: TS2345 '{ sql: SqlClient; }' is not assignable to 'TossPaymentsPostgresOptions'.
+
+export const previous = await pg.billingKeys.withOpaqueMutationLock(
+  createOpaqueAdvisoryLockKey(blindIndex), // raw blindIndex: TS2345 'string' is not assignable to 'OpaqueAdvisoryLockKey'
+  record.customerKey,
+  (mutation) => mutation.replaceAndGetPrevious(record),
+);
+```
+
+## 주장 대신 검증
+
+- 런타임 의존성 0 — `pg`조차 peer가 아닙니다
+- @ts-expect-error 컴파일 가드 55개
+- unit 테스트 250개 이상 · 실 PostgreSQL 대상 31건 별도
+- 테이블 7종, 명시적 `migrate()` 한 번
+
+이 문서의 모든 코드 블록은 릴리스 전에 공개 선언 파일에 대해 타입 검사를 통과합니다. 열 개 패키지가 공유하는 게이트는 `pnpm verify:release` 하나입니다.
 
 ## 사용할 때
 

@@ -4,7 +4,25 @@
 
 <!-- gj-kit-localized-overview -->
 
-명시적 adapter와 지속 파일 경계를 갖춘 하드닝된 Expo·React Native 미디어 파이프라인입니다.
+[![npm](https://img.shields.io/npm/v/@gj-kit/expo-media?label=npm&style=flat-square&color=0a7ea4)](https://www.npmjs.com/package/@gj-kit/expo-media)
+[![CI](https://img.shields.io/github/actions/workflow/status/gj-kit/gj-kit/ci.yml?branch=main&label=CI&style=flat-square&color=0a7ea4)](https://github.com/gj-kit/gj-kit/actions/workflows/ci.yml)
+[![types included](https://img.shields.io/badge/types-included-0a7ea4?style=flat-square)](https://www.npmjs.com/package/@gj-kit/expo-media)
+[![runtime dependencies: 0](https://img.shields.io/badge/runtime%20deps-0-0a7ea4?style=flat-square)](https://www.npmjs.com/package/@gj-kit/expo-media)
+[![license](https://img.shields.io/npm/l/@gj-kit/expo-media?label=license&style=flat-square&color=0a7ea4)](https://github.com/gj-kit/gj-kit/blob/main/expo-media/LICENSE)
+
+> **Expo 미디어 업로드의 위험한 기본값을 사고가 아니라 컴파일 에러로 만듭니다.**
+
+## 왜 필요한가
+
+Expo 미디어 파이프라인의 사고는 대부분 실패처럼 보이지 않습니다. iOS 26에서 `FileSystem.uploadAsync`는 업로드를 시작하는 도중 프로세스를 그대로 종료시켜, promise가 reject될 기회도 재시도 로직이 발화할 기회도 없습니다. iOS MediaLibrary가 돌려주는 `localUri`는 앱 컨테이너가 아니라 사진 보관함 안을 가리키는 경우가 많아 `stat`은 성공하지만 업로더에 넘기는 순간 네이티브 URLSession을 종료시킵니다. Android는 `quality<1` 재인코딩 뒤에도 원본 `fileSize`를 보고해, presign 크기와 스토리지가 실제로 받은 바이트가 어긋납니다.
+
+## 무엇으로 막는가
+
+- **무제한 업로드는 명시해야 합니다** — `createMediaKit({ api })`는 컴파일되지 않습니다. `limits`는 필수이고 `Number.POSITIVE_INFINITY` 탈출구도 없어, 무제한은 `'server-enforced'`라고 적어야 합니다.
+- **duplicate는 빠뜨릴 수 없습니다** — `UploadResult.duplicate`는 옵셔널이 아니라 필수입니다. 값이 빠지면 "새로 생성"으로 오독되고, 그 뒤 중복 취소 경로가 사용자의 예전 사진을 지우기 때문입니다.
+- **사본을 만든 쪽이 정리까지 책임집니다** — `createDeviceLibrary`는 `staging` 없이는 컴파일되지 않습니다. 기기 사진을 캐시로 실체화하는 팩토리가 그 사본을 지우는 `StagingCache.cleanup`을 반드시 함께 갖습니다.
+- **iCloud 다운로드는 기본으로 켜지지 않습니다** — `adapter.getAssetInfo('id')`처럼 인자 하나로 부르면 컴파일 에러입니다. `downloadFromNetwork`를 담은 두 번째 인자가 필수라 매 호출에서 호출부가 결정하고, 무단 셀룰러 전송을 시작하던 레거시 기본값 `true`를 adapter가 조용히 물려받을 수 없습니다.
+- **peer 격리는 CI가 검증합니다** — `dist-peer-graph` 가드가 빌드 산출물에서 엔트리별 외부 지정자를 다시 뽑아 browser·node·네이티브 × ESM·CJS로 대조합니다. `./core`·`./image/pure`·`./web`·`./testing`은 peer 0으로 확인됩니다.
 
 ## Golden path
 
@@ -35,6 +53,44 @@ export const media = createMediaKit({
   limits: { image: { maxBytes: 15 * 1024 * 1024 } },
 });
 ```
+
+## 실제로는 이렇게 걸립니다
+
+업로드가 중간에 죽으면 오류가 URL 없는 복구 메타데이터로 좁혀집니다. `stage`와 `orphanedObjects`(`objectName`·`contentType`·`sizeBytes`·`storageState`)만 담기고, presigned URL이나 네이티브 예외 원문은 들어가지 않습니다.
+
+```ts
+import { createMediaKit, mediaUploadFailureInfo } from '@gj-kit/expo-media';
+import type { MediaUploadApi, MediaUploadFailureInfo } from '@gj-kit/expo-media';
+
+declare const uploadApi: MediaUploadApi<{ readonly id: string }>; // App owns auth + upload URLs.
+declare function reconcile(failure: MediaUploadFailureInfo): Promise<void>; // App owns cleanup.
+
+// `limits` is required, and there is no numeric escape hatch:
+//   createMediaKit({ api: uploadApi });
+//   -> error TS2345: Argument of type '{ api: MediaUploadApi<...>; }' is not
+//      assignable to parameter of type 'MediaKitConfig<...>'.
+export const media = createMediaKit({ api: uploadApi, limits: 'server-enforced' });
+
+export async function recover(error: unknown): Promise<void> {
+  const failure = mediaUploadFailureInfo(error);
+  if (!failure) throw error; // Not an upload failure — never swallow it.
+  // failure.stage           : 'intent' | 'put' | 'complete'
+  // failure.orphanedObjects : readonly { objectName; contentType; sizeBytes;
+  //                             storageState: 'uploaded' | 'possibly-uploaded' }[]
+  // No presigned URL and no native error text ever reach this value.
+  await reconcile(failure);
+  throw error;
+}
+```
+
+## 주장 대신 검증
+
+- 런타임 의존성 0
+- @ts-expect-error 가드 80개
+- 유닛 테스트 570개 이상, expo 모킹 없음
+- MediaError 코드 17종, 닫힌 유니언
+
+이 문서의 모든 코드 블록은 릴리스 전에 공개 선언 파일에 대해 타입 검사를 통과합니다. 열 개 패키지가 공유하는 게이트는 `pnpm verify:release` 하나입니다.
 
 ## 사용할 때
 

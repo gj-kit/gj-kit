@@ -4,7 +4,25 @@
 
 <!-- gj-kit-localized-overview -->
 
-Expo, React Native, 웹을 위한 접근성 중심 토큰 기반 UI 프리미티브입니다.
+[![npm](https://img.shields.io/npm/v/@gj-kit/expo-ui?label=npm&style=flat-square&color=0a7ea4)](https://www.npmjs.com/package/@gj-kit/expo-ui)
+[![CI](https://img.shields.io/github/actions/workflow/status/gj-kit/gj-kit/ci.yml?branch=main&label=CI&style=flat-square&color=0a7ea4)](https://github.com/gj-kit/gj-kit/actions/workflows/ci.yml)
+[![types included](https://img.shields.io/badge/types-included-0a7ea4?style=flat-square)](https://www.npmjs.com/package/@gj-kit/expo-ui)
+[![runtime dependencies: 0](https://img.shields.io/badge/runtime%20deps-0-0a7ea4?style=flat-square)](https://www.npmjs.com/package/@gj-kit/expo-ui)
+[![license](https://img.shields.io/npm/l/@gj-kit/expo-ui?label=license&style=flat-square&color=0a7ea4)](https://github.com/gj-kit/gj-kit/blob/main/expo-ui/LICENSE)
+
+> **이름 없는 IconButton·Tabs·Slider가 스크린 리더 버그가 아니라 컴파일 에러가 되는 React Native·웹 UI primitive 모음입니다.**
+
+## 왜 필요한가
+
+React Native 디자인 시스템의 사고는 조용히 일어납니다. accessibility label 없는 IconButton이 그대로 배포되고, Tabs의 value 오타 하나로 panel이 빈 화면이 되고, EmptyState의 action이 onPress 없이 눌러도 아무 일 없는 버튼으로 렌더되고, 손으로 조립한 theme 객체가 style에 undefined를 흘립니다. 어느 것도 빌드를 깨뜨리지 않으니 스크린 리더에서, 프로덕션에서, 남의 기기에서야 드러납니다.
+
+## 무엇으로 막는가
+
+- **접근성 이름을 타입이 요구합니다** — accessibilityLabel 없는 IconButton, 이름을 유추할 수 없는 rich children Button, thumb이 둘인데 label은 하나인 range Slider가 모두 타입 검사에서 거부됩니다.
+- **죽은 버튼은 컴파일되지 않습니다** — Button·IconButton의 interaction prop이 union이라 disabled도 loading도 아니면 onPress가 필수이고, EmptyState의 action은 label과 onPress를 함께 요구합니다. 눌러도 아무 일 없는 버튼은 애초에 컴파일되지 않습니다.
+- **Tabs는 panel을 잃지 않습니다** — panels 타입이 `Readonly<Record<NoInfer<ItemValue>, NonNullable<ReactNode>>>`이고 value에도 NoInfer가 걸려 있어, items에 없는 value 오타는 물론 panel 하나 누락이나 null panel까지 타입 검사에서 걸립니다.
+- **theme은 createTheme만 만듭니다** — UiProvider의 theme prop은 createTheme·createThemes가 찍어낸 branded Theme·ThemePair만 받습니다. 손으로 조립한 token 객체는 컴파일 에러라, 키가 빠진 반쪽 theme이 런타임에 undefined 스타일로 새지 않습니다.
+- **소스에 디자인 리터럴이 없습니다** — guard 테스트가 src/components 아래 .tsx 파일을 재귀로 훑어, 따옴표 안 hex 색·숫자 fontSize·따옴표 안 숫자 fontWeight가 하나라도 남아 있으면 실패합니다. 토큰만 쓴다는 규칙을 리뷰가 아니라 테스트가 지킵니다.
 
 ## Golden path
 
@@ -38,6 +56,40 @@ export function App() {
   );
 }
 ```
+
+## 실제로는 이렇게 걸립니다
+
+Tabs는 tablist의 접근성 이름과 item value마다 대응하는 panel을 필수로 받기 때문에, 빠뜨린 panel은 빈 화면이 아니라 빌드 실패로 드러납니다.
+
+```tsx
+import { Tabs, Text, UiProvider, createThemes } from '@gj-kit/expo-ui';
+
+declare const onChange: (value: 'overview' | 'history') => void; // the app owns tab state
+const items = [{ label: 'Overview', value: 'overview' }, { label: 'History', value: 'history' }] as const;
+
+export const ProfileTabs = () => (
+  <UiProvider theme={createThemes({ light: { colors: { primary: '#1769C2' } } })}>
+    <Tabs
+      accessibilityLabel="Profile sections"
+      items={items}
+      value="overview"
+      onChange={onChange}
+      // Delete the history entry below and tsc stops the build:
+      // TS2741: Property 'history' is missing in type '{ overview: JSX.Element; }'
+      panels={{ overview: <Text>Overview</Text>, history: <Text>History</Text> }}
+    />
+  </UiProvider>
+);
+```
+
+## 주장 대신 검증
+
+- 런타임 의존성 0
+- @ts-expect-error 가드 332개
+- 유닛 테스트 850개 이상
+- 컴포넌트 58개, 색상 role 31개
+
+이 문서의 모든 코드 블록은 릴리스 전에 공개 선언 파일에 대해 타입 검사를 통과합니다. 열 개 패키지가 공유하는 게이트는 `pnpm verify:release` 하나입니다.
 
 ## 사용할 때
 

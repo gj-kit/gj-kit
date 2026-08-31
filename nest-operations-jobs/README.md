@@ -1,8 +1,26 @@
 # @gj-kit/nest-operations-jobs
 
+[![npm](https://img.shields.io/npm/v/@gj-kit/nest-operations-jobs?label=npm&style=flat-square&color=0a7ea4)](https://www.npmjs.com/package/@gj-kit/nest-operations-jobs)
+[![CI](https://img.shields.io/github/actions/workflow/status/gj-kit/gj-kit/ci.yml?branch=main&label=CI&style=flat-square&color=0a7ea4)](https://github.com/gj-kit/gj-kit/actions/workflows/ci.yml)
+[![types included](https://img.shields.io/badge/types-included-0a7ea4?style=flat-square)](https://www.npmjs.com/package/@gj-kit/nest-operations-jobs)
+[![runtime dependencies: 0](https://img.shields.io/badge/runtime%20deps-0-0a7ea4?style=flat-square)](https://www.npmjs.com/package/@gj-kit/nest-operations-jobs)
+[![license](https://img.shields.io/npm/l/@gj-kit/nest-operations-jobs?label=license&style=flat-square&color=0a7ea4)](https://github.com/gj-kit/gj-kit/blob/main/nest-operations-jobs/LICENSE)
+
 **English** · [한국어](./README.ko.md)
 
-NestJS composition for durable, authenticated, observable operational jobs with explicit store ports.
+> **An unauthenticated trigger, or tuning that lets a job run twice, fails before the scheduler’s first call.**
+
+## Why this exists
+
+Hand-rolled cron endpoints fail while every dashboard stays green. Swallow the whole unique-constraint violation inside your claim and a permanently blocked job becomes a stream of SKIPPED/200 responses; set the stale-run budget below the heartbeat interval and a healthy run looks reapable to the next trigger, which starts a second body. Meanwhile the trigger route ships with a short shared secret compared by ===, the stored run row can disagree with the status you returned without anyone noticing, and a scheduler attempt deadline set under the job's own timeout records long runs that actually succeeded as failures.
+
+## What it does about it
+
+- **Omitting `auth` is a compile error** — `auth` is a required field of OperationsJobsModuleOptions, so a module wired without it does not type-check. An empty `auth`, or a secret under 32 characters, throws ERR_JOB_AUTH_MISCONFIGURED while forRoot assembles the module.
+- **Result fields exist only after narrowing** — On JobExecutionResult, `error`, `reason` and `summary` are unreachable until you switch on `status`; three @ts-expect-error fixtures pin that.
+- **The tuning that voids single execution** — createJobRunner throws ERR_JOB_INVALID when staleRunAfterMs is under 2x heartbeatIntervalMs — the floor below which a healthy run's watermark can outlive the liveness budget between its own beats.
+- **Your store's atomicity, in your suite** — jobRunStoreContractCases() returns 13 framework-free cases covering obligations S1-S6 — a concurrent claim burst, two concurrent reaps of the same three rows — that you run against your real database. Supply `inspect` and it returns 16, adding S7.
+- **/core provably contains no Nest** — A guard test scans src/core/**, src/testing/** and every built dist/core.* and dist/testing.* chunk for @nestjs, rxjs and reflect-metadata, and a control case asserts dist/index.js does contain @nestjs — so an empty result means the scanner actually looked.
 
 ## Golden path
 
@@ -34,6 +52,40 @@ export const operations = OperationsJobsModule.forRoot({
   trigger: { path: 'internal/jobs' },
 });
 ```
+
+## What that looks like
+
+`error` is unreachable until `status` is narrowed, and `recorded` sits on every branch because a stored row that disagrees with the returned status is exactly what deserves a page.
+
+```ts
+import type { JobExecutionResult } from '@gj-kit/nest-operations-jobs/core';
+
+declare const result: JobExecutionResult; // await runner.execute(...)
+declare function pageOncall(jobKey: string, runId: string): void; // the app owns this
+
+export function report(): void {
+  // console.error(result.error.code);
+  // -> error TS2339: Property 'error' does not exist on type 'JobExecutionResult'.
+  if (result.status === 'TIMED_OUT') {
+    console.error(result.jobKey, result.error.code); // 'ERR_JOB_TIMEOUT'
+  } else if (result.status === 'SKIPPED') {
+    console.warn(result.jobKey, result.reason); // 'overlap' - the only value
+  }
+
+  // `recorded` sits on every branch: 'superseded' means a reaper already
+  // finalised the row, so a second body may run under a different runId.
+  if (result.recorded === 'superseded') pageOncall(result.jobKey, result.runId);
+}
+```
+
+## Verified, not asserted
+
+- 230+ unit tests
+- 11 @ts-expect-error guards
+- 13 store contract cases
+- 0 runtime dependencies
+
+Every code block on this page is type-checked against the published declarations before release; `pnpm verify:release` is the gate all ten packages share.
 
 ## Use it when
 

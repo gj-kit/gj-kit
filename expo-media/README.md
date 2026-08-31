@@ -1,8 +1,26 @@
 # @gj-kit/expo-media
 
+[![npm](https://img.shields.io/npm/v/@gj-kit/expo-media?label=npm&style=flat-square&color=0a7ea4)](https://www.npmjs.com/package/@gj-kit/expo-media)
+[![CI](https://img.shields.io/github/actions/workflow/status/gj-kit/gj-kit/ci.yml?branch=main&label=CI&style=flat-square&color=0a7ea4)](https://github.com/gj-kit/gj-kit/actions/workflows/ci.yml)
+[![types included](https://img.shields.io/badge/types-included-0a7ea4?style=flat-square)](https://www.npmjs.com/package/@gj-kit/expo-media)
+[![runtime dependencies: 0](https://img.shields.io/badge/runtime%20deps-0-0a7ea4?style=flat-square)](https://www.npmjs.com/package/@gj-kit/expo-media)
+[![license](https://img.shields.io/npm/l/@gj-kit/expo-media?label=license&style=flat-square&color=0a7ea4)](https://github.com/gj-kit/gj-kit/blob/main/expo-media/LICENSE)
+
 **English** · [한국어](./README.ko.md)
 
-A hardened Expo and React Native media pipeline with explicit adapters and durable file boundaries.
+> **An upload with no size limit, or an iCloud download nobody asked for, is a compile error.**
+
+## Why this exists
+
+Expo media failures rarely look like failures. On iOS 26 `FileSystem.uploadAsync` ends the process while it is *starting* an upload, so no promise ever rejects and no retry fires; the `localUri` MediaLibrary hands back points inside the photo library rather than your app container, so it passes `stat` and then kills URLSession mid-upload. Android still reports the original `fileSize` after a `quality<1` re-encode, so the presigned size and the bytes storage actually receives disagree.
+
+## What it does about it
+
+- **Unlimited uploads must be spelled out** — `createMediaKit({ api })` does not compile: `limits` is required, and `Number.POSITIVE_INFINITY` is rejected, so unlimited is written `'server-enforced'`.
+- **duplicate cannot be forgotten** — `UploadResult.duplicate` is required rather than optional, because a missing flag reads as "newly created" and the cancel path then deletes the user's older photo.
+- **Whoever copies owns the cleanup** — `createDeviceLibrary` will not compile without `staging`, so the factory that materializes cache copies of device photos always carries the `StagingCache.cleanup` that deletes them.
+- **iCloud downloads never default on** — `adapter.getAssetInfo('id')` is a compile error: the second argument is required and carries `downloadFromNetwork`, so the caller decides on every call and no adapter can quietly inherit the legacy default of `true` that started cellular transfers.
+- **Peer isolation is a CI assertion** — The `dist-peer-graph` guard re-extracts each entry's external specifiers from the built output across browser/node/native by ESM/CJS; `./core`, `./image/pure`, `./web` and `./testing` resolve zero peers.
 
 ## Golden path
 
@@ -33,6 +51,44 @@ export const media = createMediaKit({
   limits: { image: { maxBytes: 15 * 1024 * 1024 } },
 });
 ```
+
+## What that looks like
+
+When an upload dies mid-flight the error narrows into URL-free recovery metadata — a stage plus frozen object records — never the presigned URL and never the native error text.
+
+```ts
+import { createMediaKit, mediaUploadFailureInfo } from '@gj-kit/expo-media';
+import type { MediaUploadApi, MediaUploadFailureInfo } from '@gj-kit/expo-media';
+
+declare const uploadApi: MediaUploadApi<{ readonly id: string }>; // App owns auth + upload URLs.
+declare function reconcile(failure: MediaUploadFailureInfo): Promise<void>; // App owns cleanup.
+
+// `limits` is required, and there is no numeric escape hatch:
+//   createMediaKit({ api: uploadApi });
+//   -> error TS2345: Argument of type '{ api: MediaUploadApi<...>; }' is not
+//      assignable to parameter of type 'MediaKitConfig<...>'.
+export const media = createMediaKit({ api: uploadApi, limits: 'server-enforced' });
+
+export async function recover(error: unknown): Promise<void> {
+  const failure = mediaUploadFailureInfo(error);
+  if (!failure) throw error; // Not an upload failure — never swallow it.
+  // failure.stage           : 'intent' | 'put' | 'complete'
+  // failure.orphanedObjects : readonly { objectName; contentType; sizeBytes;
+  //                             storageState: 'uploaded' | 'possibly-uploaded' }[]
+  // No presigned URL and no native error text ever reach this value.
+  await reconcile(failure);
+  throw error;
+}
+```
+
+## Verified, not asserted
+
+- 0 runtime dependencies
+- 80 @ts-expect-error guards
+- 570+ unit tests, no expo mocking
+- 17 MediaError codes, one closed union
+
+Every code block on this page is type-checked against the published declarations before release; `pnpm verify:release` is the gate all ten packages share.
 
 ## Use it when
 

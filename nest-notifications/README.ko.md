@@ -4,7 +4,25 @@
 
 <!-- gj-kit-localized-overview -->
 
-트랜잭션 알림 relay, dispatch, presentation, Expo push 경계를 위한 NestJS 조합 패키지입니다.
+[![npm](https://img.shields.io/npm/v/@gj-kit/nest-notifications?label=npm&style=flat-square&color=0a7ea4)](https://www.npmjs.com/package/@gj-kit/nest-notifications)
+[![CI](https://img.shields.io/github/actions/workflow/status/gj-kit/gj-kit/ci.yml?branch=main&label=CI&style=flat-square&color=0a7ea4)](https://github.com/gj-kit/gj-kit/actions/workflows/ci.yml)
+[![types included](https://img.shields.io/badge/types-included-0a7ea4?style=flat-square)](https://www.npmjs.com/package/@gj-kit/nest-notifications)
+[![runtime dependencies: 0](https://img.shields.io/badge/runtime%20deps-0-0a7ea4?style=flat-square)](https://www.npmjs.com/package/@gj-kit/nest-notifications)
+[![license](https://img.shields.io/npm/l/@gj-kit/nest-notifications?label=license&style=flat-square&color=0a7ea4)](https://github.com/gj-kit/gj-kit/blob/main/nest-notifications/LICENSE)
+
+> **알림 파이프라인에서 위험한 결정은 프로덕션이 아니라 컴파일 단계에서 막습니다.**
+
+## 왜 필요한가
+
+직접 짠 알림 outbox는 claim이 원자적이지 않아 두 워커가 같은 행을 집고, inbox 메시지가 중복으로 쓰이며, relay 도중 삭제된 계정으로 push가 나갑니다. 조용시간은 대개 Date에 고정 offset을 더하는 식이라 DST 전환마다 한 시간씩 어긋나고, 24시간으로 나누어떨어지지 않는 batch 창은 집계 버킷을 매일 옮겨 놓습니다.
+
+## 무엇으로 막는가
+
+- **필수 옵션은 컴파일 에러입니다** — presenter 없는 createNotificationDispatcher, timeZone 없는 createQuietHoursPolicy는 컴파일되지 않습니다. 기본 카피도 기본 지역도 두지 않기 때문입니다.
+- **직접 만든 저장소에 돌리는 적합성 케이스 30개** — notificationStoreContractCases()가 원자적 claim, 배치 유일성, purge와 relay의 교차까지 29개 저장소 의무를 실행 가능한 케이스 30개로 돌려줍니다.
+- **Nest가 스며들 수 없는 core** — 가드가 src/core·src/expo·src/testing 소스와 dist/core.*·dist/expo.*·dist/testing.* 모듈 그래프 전체에서 @nestjs·rxjs·reflect-metadata 문자열을 한 건도 찾지 못해야 통과합니다. 반대로 dist/index.js에는 @nestjs가 있어야 통과하는 대조군이 함께 있어, 이 가드가 빈 집합을 검사하고 있는 게 아니라는 것까지 확인합니다.
+- **wakeup 힌트의 반환 타입은 void입니다** — NotificationPipelineWakeup.request()의 반환 타입은 void입니다. await할 것도, 확인할 결과도, 잡을 에러도 없으니 여기에 정확성을 기댈 수 없습니다. 힌트만 배선한 호스트에서 시계를 12시간 앞으로 돌려도 배치 배달은 그대로 남아 있고, dispatchDue()를 부른 뒤에야 나간다는 것을 테스트가 고정합니다.
+- **DST 해석은 계약입니다** — 봄 전진 갭에 삼켜진 조용시간 해제 시각은 갭 직후 첫 순간으로, 가을 후퇴로 두 번 존재하는 시각은 이른 쪽으로 확정됩니다. batchWindowMs는 24시간이 나누어떨어지는 값이어야 하고, 아니면 조립 시점에 ERR_NOTIFICATION_POLICY_INVALID로 부팅이 멈춥니다.
 
 ## Golden path
 
@@ -31,6 +49,42 @@ declare const options: NestNotificationsOptions; // App stores, presenter, polic
 
 export const notifications = NestNotificationsModule.forRoot(options);
 ```
+
+## 실제로는 이렇게 걸립니다
+
+두 대목 모두 실제로 강제됩니다 — 시간대 없이는 정책을 만들 수 없고, 라이브러리가 자기 인메모리 저장소에 돌리는 케이스 30개가 그대로 직접 만든 저장소의 인수 조건이 됩니다.
+
+```ts
+import { createQuietHoursPolicy } from '@gj-kit/nest-notifications/core';
+import { notificationStoreContractCases } from '@gj-kit/nest-notifications/testing';
+import type { NotificationStoreSuite } from '@gj-kit/nest-notifications/testing';
+
+declare function myPostgresStores(): Promise<NotificationStoreSuite>; // the app owns this
+
+// The library holds no regional default, so the zone cannot be left unsaid.
+export const policy = createQuietHoursPolicy({
+  timeZone: 'Asia/Seoul',
+  quietHours: { startHour: 22, endHour: 8 },
+  batchWindowMs: 600_000, // must divide 24h, or assembly throws ERR_NOTIFICATION_POLICY_INVALID
+});
+// Drop timeZone and tsc stops the build:
+//   error TS2345: Argument of type '{ quietHours: { startHour: number; endHour: number; }; }'
+//   is not assignable to parameter of type 'QuietHoursPolicyOptions'.
+
+// The 30 cases the library runs on its own in-memory stores, now run on yours.
+for (const testCase of notificationStoreContractCases({ concurrency: 8 })) {
+  it(testCase.name, () => testCase.run(myPostgresStores));
+}
+```
+
+## 주장 대신 검증
+
+- unit 테스트 230개 이상
+- 직접 만든 저장소용 계약 케이스 30개
+- 런타임 의존성 0
+- 공개 entry point 4개, ESM + CJS
+
+이 문서의 모든 코드 블록은 릴리스 전에 공개 선언 파일에 대해 타입 검사를 통과합니다. 열 개 패키지가 공유하는 게이트는 `pnpm verify:release` 하나입니다.
 
 ## 사용할 때
 

@@ -18,9 +18,9 @@
     "check:breakpoints": "node scripts/check-breakpoints.mjs"
   },
   "dependencies": {
-    "@expo/metro-runtime": "~56.0.19",
+    "@expo/metro-runtime": "~56.0.21",
     "@gj-kit/expo-ui": "workspace:*",
-    "expo": "~56.0.19",
+    "expo": "~56.0.21",
     "expo-constants": "~56.0.23",
     "expo-linking": "~56.0.16",
     "expo-router": "~56.2.18",

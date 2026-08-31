@@ -128,7 +128,7 @@
     }
   },
   "devDependencies": {
-    "expo": "~56.0.20",
+    "expo": "~56.0.21",
     "expo-modules-core": "~56.0.24",
     "tsup": "^8",
     "typescript": "~6.0.3",

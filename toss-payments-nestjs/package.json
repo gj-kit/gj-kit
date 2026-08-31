@@ -1,6 +1,6 @@
 {
   "name": "@gj-kit/toss-payments-nestjs",
-  "version": "0.4.4",
+  "version": "0.4.5",
   "description": "NestJS dependency injection and raw-body webhook integration for @gj-kit/toss-payments.",
   "homepage": "https://gj-kit.github.io/gj-kit/packages/toss-payments-nestjs/",
   "repository": {

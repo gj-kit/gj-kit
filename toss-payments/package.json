@@ -1,6 +1,6 @@
 {
   "name": "@gj-kit/toss-payments",
-  "version": "0.6.1",
+  "version": "0.6.2",
   "description": "Type-safe Toss Payments API v2, widget, billing, cancellation, and webhook flows for TypeScript.",
   "homepage": "https://gj-kit.github.io/gj-kit/packages/toss-payments/",
   "repository": {

@@ -1,6 +1,6 @@
 {
   "name": "@gj-kit/expo-media",
-  "version": "0.6.1",
+  "version": "0.6.2",
   "description": "Hardened Expo and React Native media pipeline utilities for upload, picker, metadata, durable files, and device libraries.",
   "keywords": [
     "expo",

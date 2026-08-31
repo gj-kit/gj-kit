@@ -1,6 +1,6 @@
 {
   "name": "@gj-kit/expo-workouts",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "HealthKit and Health Connect workout, GPS-route, authorization, and incremental sync bridge for Expo.",
   "keywords": [
     "expo",

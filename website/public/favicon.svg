@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32" role="img" aria-label="GJ Kit">
+  <!-- A check inside a rounded square: the family's whole premise is that the
+       mistake is caught before it ships. Solid accent fill rather than a
+       monogram, because two lowercase letters are illegible at 16px. -->
+  <style>
+    .plate { fill: #0e7490; }
+    .mark { stroke: #ecfeff; }
+    @media (prefers-color-scheme: dark) {
+      .plate { fill: #4de7ff; }
+      .mark { stroke: #06202b; }
+    }
+  </style>
+  <rect class="plate" x="1" y="1" width="30" height="30" rx="7" />
+  <path
+    class="mark"
+    d="M8.5 16.75 13.5 21.75 23.5 10.5"
+    fill="none"
+    stroke-width="3.5"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+  />
+</svg>

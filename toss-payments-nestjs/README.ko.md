@@ -4,7 +4,25 @@
 
 <!-- gj-kit-localized-overview -->
 
-@gj-kit/toss-payments를 위한 NestJS DI 및 raw-body 웹훅 조합 패키지입니다.
+[![npm](https://img.shields.io/npm/v/@gj-kit/toss-payments-nestjs?label=npm&style=flat-square&color=0a7ea4)](https://www.npmjs.com/package/@gj-kit/toss-payments-nestjs)
+[![CI](https://img.shields.io/github/actions/workflow/status/gj-kit/gj-kit/ci.yml?branch=main&label=CI&style=flat-square&color=0a7ea4)](https://github.com/gj-kit/gj-kit/actions/workflows/ci.yml)
+[![types included](https://img.shields.io/badge/types-included-0a7ea4?style=flat-square)](https://www.npmjs.com/package/@gj-kit/toss-payments-nestjs)
+[![runtime dependencies: 0](https://img.shields.io/badge/runtime%20deps-0-0a7ea4?style=flat-square)](https://www.npmjs.com/package/@gj-kit/toss-payments-nestjs)
+[![license](https://img.shields.io/npm/l/@gj-kit/toss-payments-nestjs?label=license&style=flat-square&color=0a7ea4)](https://github.com/gj-kit/gj-kit/blob/main/toss-payments-nestjs/LICENSE)
+
+> **DI token은 타입을 싣고 다니지 않습니다. `TossPaymentsFor<typeof config>`가 그 타입을 되살려, 배선하지 않은 flow는 그대로 컴파일 에러로 남습니다.**
+
+## 왜 필요한가
+
+DI token은 타입을 싣고 다니지 않습니다. `forRoot()`가 돌려주는 건 `unique symbol`에 바인딩된 `DynamicModule`이라, 주입 지점에 적은 생성자 타입 표기가 유일한 근거로 남습니다 — `BillingKeyStore`를 배선한 적 없는 config인데도 `toss.billing`이 타입 검사를 통과하고, 런타임에는 그 프로퍼티가 `undefined`입니다. 여기에 webhook controller를 붙이면 Nest 기본 body parser가 요청을 이미 객체로 바꿔 놓은 뒤입니다. 다시 직렬화한 JSON으로는 서명 검증을 복구할 수 없습니다.
+
+## 무엇으로 막는가
+
+- **배선 안 한 flow는 프로퍼티가 없습니다** — `TossPaymentsFor<typeof config>`가 DI 경계 뒤에서도 조건부 kit 타입을 복원하므로, `BillingKeyStore` 배선 없이 `toss.billing`을 쓰면 컴파일 에러입니다.
+- **rawBody 부재는 조용히 넘어가지 않습니다** — `req.rawBody`가 없으면 `toNestWebhookHandler`는 handler를 호출하지 않습니다. 500을 돌려주고 확인할 설정 세 가지를 로그로 남깁니다 — `NestFactory.create`의 `rawBody: true`, Fastify의 raw body 지원 설정, 그리고 webhook route 앞에 걸린 JSON 미들웨어.
+- **source IP가 wrapper를 통과합니다** — handler가 원본 Node `socket`을 그대로 전달해 코어의 fail-closed IP 검증이 유지되고, proxy 헤더를 신뢰하려면 `sourceIp` extractor를 명시해야 합니다.
+- **ESM·CJS 어디서든 같은 token** — `TOSS_PAYMENTS`와 `getTossPaymentsToken(name)`은 `Symbol.for` 기반이라, 패키지가 ESM/CJS로 이중 로드돼도 provider 바인딩이 하나로 유지됩니다.
+- **emitDecoratorMetadata 없이 동작합니다** — `InjectTossPayments()`는 `@Inject(token)`에 위임하는 얇은 래퍼이고 `src/` 어디에도 `design:paramtypes`를 읽는 코드가 없습니다. 그래서 패키지는 `emitDecoratorMetadata: false`로 배포되며, 해당 메타데이터를 아예 만들지 못하는 vitest의 esbuild 변환에서도 Nest DI 테스트가 그대로 해석됩니다.
 
 ## Golden path
 
@@ -37,6 +55,41 @@ const config = defineTossPaymentsConfig({
 
 export const payments = TossPaymentsModule.forRoot(config);
 ```
+
+## 실제로는 이렇게 걸립니다
+
+주석 처리한 줄은 실제 TS2339입니다. 이 config에는 `BillingKeyStore`가 배선되어 있지 않으므로, 타입을 싣지 않는 DI token을 거쳐 주입된 kit에도 `billing` 프로퍼티 자체가 존재하지 않습니다.
+
+```ts
+import { Injectable } from '@nestjs/common';
+import { orThrow } from '@gj-kit/toss-payments';
+import { defineTossPaymentsConfig, parseApiSecretKey, type OrderStore } from '@gj-kit/toss-payments/server';
+import { InjectTossPayments, TossPaymentsModule, type TossPaymentsFor } from '@gj-kit/toss-payments-nestjs';
+
+declare const SECRET: string; // the app owns this (process.env)
+declare const orders: OrderStore; // the app owns this (its own DB adapter)
+
+export const tossConfig = defineTossPaymentsConfig({ secretKey: orThrow(parseApiSecretKey(SECRET)), orders });
+export type AppToss = TossPaymentsFor<typeof tossConfig>;
+export const tossModule = TossPaymentsModule.forRoot(tossConfig);
+
+@Injectable()
+export class PaymentsService {
+  constructor(@InjectTossPayments() private readonly toss: AppToss) {}
+
+  order = () => this.toss.confirm.createOrder({ amount: 9_900, orderName: 'Pro' });
+  // this.toss.billing — TS2339: the config wired no BillingKeyStore, so there is no property.
+}
+```
+
+## 주장 대신 검증
+
+- 런타임 의존성 0
+- @ts-expect-error로 고정한 거부 9건
+- Nest 10·11 실제 부팅 검증
+- unit 테스트 20개, 그중 8개는 실제 Nest DI 부팅
+
+이 페이지의 골든 패스와 예제가 주장하는 타입 동작은 `tests/types/docs-golden-path.test-d.ts`가 실제 공개 표면에 대해 고정하고, 필수 운영 표식은 릴리스마다 검사합니다. 열 개 패키지가 공유하는 게이트는 `pnpm verify:release` 하나입니다.
 
 ## 사용할 때
 

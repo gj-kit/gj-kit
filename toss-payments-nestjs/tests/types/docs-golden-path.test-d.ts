@@ -113,5 +113,13 @@ describe('README Nest 골든 패스', () => {
     expectTypeOf(service.createOrder).returns.toMatchTypeOf<Promise<unknown>>();
     expectTypeOf(named.billing.client.keyKind).toEqualTypeOf<'api'>();
     expectTypeOf(named.widget.client.keyKind).toEqualTypeOf<'widget'>();
+
+    // README의 "실제로는 이렇게 걸립니다" 예제가 주장하는 바로 그 거부.
+    // buildTossConfig는 BillingKeyStore를 배선하지 않으므로, DI token을 거쳐
+    // 주입된 뒤에도 billing 프로퍼티 자체가 타입에 없어야 한다. 이 패키지의
+    // README 코드 블록은 컴파일 검사 대상이 아니므로(scripts/check-readme.mjs는
+    // 표식만 확인한다) 그 예제의 핵심 주장은 여기서 고정한다.
+    // @ts-expect-error 배선하지 않은 flow는 프로퍼티로 존재하지 않는다.
+    void service.toss.billing;
   });
 });

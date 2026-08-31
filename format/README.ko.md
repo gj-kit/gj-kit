@@ -4,7 +4,25 @@
 
 <!-- gj-kit-localized-overview -->
 
-TypeScript용 명시성 강제 날짜, 숫자, 바이트, 기간, 한국 원화 포매팅 유틸리티입니다.
+[![npm](https://img.shields.io/npm/v/@gj-kit/format?label=npm&style=flat-square&color=0a7ea4)](https://www.npmjs.com/package/@gj-kit/format)
+[![CI](https://img.shields.io/github/actions/workflow/status/gj-kit/gj-kit/ci.yml?branch=main&label=CI&style=flat-square&color=0a7ea4)](https://github.com/gj-kit/gj-kit/actions/workflows/ci.yml)
+[![types included](https://img.shields.io/badge/types-included-0a7ea4?style=flat-square)](https://www.npmjs.com/package/@gj-kit/format)
+[![runtime dependencies: 0](https://img.shields.io/badge/runtime%20deps-0-0a7ea4?style=flat-square)](https://www.npmjs.com/package/@gj-kit/format)
+[![license](https://img.shields.io/npm/l/@gj-kit/format?label=license&style=flat-square&color=0a7ea4)](https://github.com/gj-kit/gj-kit/blob/main/format/LICENSE)
+
+> **timestamp가 화면마다 달라지려면 누군가 그렇게 적어야 합니다. timeZone에는 기본값이 없어서, 생략하면 컴파일이 되지 않습니다.**
+
+## 왜 필요한가
+
+한 제품의 admin 앱과 mobile 앱에 포매터가 세 벌 있었습니다. 같은 timestamp가 화면마다 9시간씩 어긋났고, 같은 금액이 한쪽에서는 ₩1,000, 다른 쪽에서는 1,000원으로 찍혔으며, null은 조용히 0이 됐습니다. 원인은 그 선택마다 기본값이 있었다는 것입니다. new Date('2026-06-08T09:05:00')은 포매터가 값을 보기 전에 기기 시간대로 해석해 버리고, Intl의 currency 경로는 호출부가 currencyDisplay: 'symbol'을 적어도 es-ES 기기에서는 '1000 KRW'를 냅니다.
+
+## 무엇으로 막는가
+
+- **timeZone에 기본값이 없습니다** — `formatDateTime(instant)`은 물론, `timeZone`과 `separator` 중 하나만 넘긴 호출도 컴파일 에러입니다. 둘 다 필수이고, 기기 시간에 기대려면 `'device'`라고 직접 적어야 하므로 그 의존이 호출부에 글자로 남습니다.
+- **날짜 문자열은 포매터에 닿지 못합니다** — FormatDateInput은 Date | number입니다. API가 준 문자열은 assumeNoOffset('utc' | 'device' | 'reject')이 필수인 parseIsoInstant를 거쳐야 하고, 이 파서는 정규식과 Date.UTC 산술만 씁니다 — 엔진마다 결과가 갈리는 Date.parse·new Date(문자열) 경로를 아예 타지 않습니다.
+- **바이트 라벨은 거짓말하지 못합니다** — `{ system: 'binary', maxUnit: 'GB' }`는 컴파일되지 않습니다. 리터럴에서도, as const 변수를 거쳐도 막힙니다 — 두 단위 체계가 서로 다른 union 멤버이기 때문입니다.
+- **상대시간은 시계를 인자로 받습니다** — now가 필수라 함수가 몰래 new Date()를 부르지 않습니다. maxDays와 onOverflow는 쌍으로만 존재해서, 컷오프 뒤 절대시각 표기를 라이브러리가 임의로 정하는 일이 타입상 불가능합니다.
+- **₩ 기호는 locale을 따라 움직이지 않습니다** — formatKrw는 decimal formatter 위에 ₩과 원을 직접 붙이고, style: 'currency'·'percent'는 src와 dist 양쪽 스캔에서 걸립니다. locale이 정하는 것은 그룹핑·소수점·숫자 글리프까지고, 통화 기호와 % 기호는 정하지 못합니다.
 
 ## Golden path
 
@@ -32,6 +50,40 @@ export const dateLabel = formatDateTime(Date.UTC(2026, 7, 26, 0, 0), {
   separator: '-',
 });
 ```
+
+## 실제로는 이렇게 걸립니다
+
+두 @ts-expect-error 줄은 배포되는 dist/index.d.ts에 대해 strict + exactOptionalPropertyTypes로 검증한 결과입니다. fallback: null은 반환 타입을 딱 string | null 만큼만 넓힙니다.
+
+```ts
+import { formatBytes, formatDateTime, parseIsoInstant } from '@gj-kit/format';
+
+declare const createdAt: string; // app-owned: an ISO string straight off the API
+
+// @ts-expect-error 'GB' labels a decimal divisor, but 'binary' divides by 1024.
+formatBytes(1, { system: 'binary', maxUnit: 'GB', unitSpace: true, nonPositive: 'render' });
+
+// @ts-expect-error a wall-clock string never reaches a formatter — parse it first.
+formatDateTime(createdAt, { timeZone: 'Asia/Seoul', separator: '-' });
+
+const instant = parseIsoInstant(createdAt, { assumeNoOffset: 'utc' });
+
+export const stamp: string = formatDateTime(instant, { timeZone: 'Asia/Seoul', separator: '-' });
+
+// fallback widens the return type by exactly what you passed, and nothing more.
+export const sizeChip: string | null = formatBytes(0, {
+  system: 'decimal', unitSpace: false, nonPositive: 'fallback', fallback: null,
+});
+```
+
+## 주장 대신 검증
+
+- 런타임 의존성 0 · peer 0
+- unit 테스트 350개 이상
+- @ts-expect-error 오용 차단 17건
+- 금지 Intl API를 src·dist 양쪽에서 스캔
+
+이 문서의 모든 코드 블록은 릴리스 전에 공개 선언 파일에 대해 타입 검사를 통과합니다. 열 개 패키지가 공유하는 게이트는 `pnpm verify:release` 하나입니다.
 
 ## 사용할 때
 

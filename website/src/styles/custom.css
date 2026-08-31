@@ -28,6 +28,21 @@
   padding: clamp(1.5rem, 4vw, 3.5rem);
 }
 
+/* The landing hero carries the whole family's promise in one line, so it is
+   allowed to be louder than a normal page title. */
+.hero h1 {
+  font-size: clamp(2.25rem, 6vw, 3.75rem);
+  line-height: 1.1;
+  letter-spacing: -0.02em;
+}
+
+.hero .tagline {
+  font-size: clamp(1.05rem, 2.2vw, 1.35rem);
+  line-height: 1.5;
+  max-width: 46ch;
+  color: var(--sl-color-white);
+}
+
 .sl-markdown-content table {
   display: table;
   width: 100%;
@@ -39,6 +54,98 @@
 
 .sl-markdown-content h1 code {
   color: inherit;
+}
+
+/* ── Proof strip ────────────────────────────────────────────────────────────
+   Short verified facts (dependency count, guard count, build matrix) shown as
+   pills directly under the hero. Rendered from a plain markdown list so the
+   same data reads correctly in the README, where the pills are just bullets. */
+.gjk-proof ul {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  padding: 0;
+  margin: 0;
+  list-style: none;
+}
+
+.gjk-proof li {
+  margin: 0;
+  padding: 0.3rem 0.75rem;
+  border: 1px solid var(--sl-color-hairline-light);
+  border-radius: 999px;
+  background: var(--sl-color-bg-nav);
+  font-size: var(--sl-text-xs);
+  line-height: 1.6;
+  color: var(--sl-color-gray-2);
+  white-space: nowrap;
+}
+
+.gjk-proof li code {
+  background: none;
+  border: none;
+  padding: 0;
+  font-size: inherit;
+}
+
+@media (max-width: 30rem) {
+  .gjk-proof li {
+    white-space: normal;
+  }
+}
+
+/* ── Cards ──────────────────────────────────────────────────────────────────
+   Starlight's Card/LinkCard already handle layout; these rules only add the
+   accent edge and hover affordance that make a grid of ten packages scannable. */
+.sl-markdown-content .card {
+  border-radius: 0.75rem;
+  border-color: var(--sl-color-hairline-light);
+  background: var(--sl-color-bg-nav);
+}
+
+.sl-markdown-content .sl-link-card {
+  border-radius: 0.75rem;
+  border-color: var(--sl-color-hairline-light);
+  background: var(--sl-color-bg-nav);
+  transition: border-color 150ms ease, transform 150ms ease, box-shadow 150ms ease;
+}
+
+.sl-markdown-content .sl-link-card:hover {
+  border-color: color-mix(in srgb, var(--sl-color-accent) 55%, transparent);
+  transform: translateY(-2px);
+  box-shadow: 0 10px 24px -18px var(--sl-color-accent);
+}
+
+.sl-markdown-content .sl-link-card .title {
+  font-family: var(--__sl-font-mono, ui-monospace, monospace);
+  font-size: var(--sl-text-sm);
+  letter-spacing: -0.01em;
+}
+
+.sl-markdown-content .sl-link-card .description {
+  color: var(--sl-color-gray-3);
+}
+
+/* ── Package page lead ──────────────────────────────────────────────────────
+   The first thing on a package page is the payoff sentence, not the taxonomy. */
+.sl-markdown-content .gjk-lead {
+  font-size: clamp(1.15rem, 1.6vw, 1.45rem);
+  font-weight: 500;
+  line-height: 1.45;
+  letter-spacing: -0.01em;
+  color: var(--sl-color-white);
+  border-left: 3px solid var(--sl-color-accent);
+  padding-left: 1rem;
+  margin-block: 1rem 1.5rem;
+}
+
+/* Highlight lists lead with a bold capability name; give that name room. */
+.sl-markdown-content .gjk-highlights li {
+  margin-block: 0.6rem;
+}
+
+.sl-markdown-content .gjk-highlights li > strong {
+  color: var(--sl-color-white);
 }
 
 @media (max-width: 50rem) {

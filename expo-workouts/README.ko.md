@@ -4,7 +4,25 @@
 
 <!-- gj-kit-localized-overview -->
 
-HealthKit과 Health Connect의 운동, 경로, 권한, 증분 동기화를 위한 native Expo bridge입니다.
+[![npm](https://img.shields.io/npm/v/@gj-kit/expo-workouts?label=npm&style=flat-square&color=0a7ea4)](https://www.npmjs.com/package/@gj-kit/expo-workouts)
+[![CI](https://img.shields.io/github/actions/workflow/status/gj-kit/gj-kit/ci.yml?branch=main&label=CI&style=flat-square&color=0a7ea4)](https://github.com/gj-kit/gj-kit/actions/workflows/ci.yml)
+[![types included](https://img.shields.io/badge/types-included-0a7ea4?style=flat-square)](https://www.npmjs.com/package/@gj-kit/expo-workouts)
+[![runtime dependencies: 0](https://img.shields.io/badge/runtime%20deps-0-0a7ea4?style=flat-square)](https://www.npmjs.com/package/@gj-kit/expo-workouts)
+[![license](https://img.shields.io/npm/l/@gj-kit/expo-workouts?label=license&style=flat-square&color=0a7ea4)](https://github.com/gj-kit/gj-kit/blob/main/expo-workouts/LICENSE)
+
+> **Expo에서 HealthKit·Health Connect 운동 데이터를 다룹니다. 저장된 데이터를 지워 버리는 실수는 컴파일 단계에서 막힙니다.**
+
+## 왜 필요한가
+
+Health Connect의 upsert는 full-state입니다. `saveWorkout`에서 route를 빠뜨리면 이미 저장돼 있던 route가 함께 지워지고, 더 낮은 version으로 쓰면 insert가 같은 record id를 돌려주며 정상 반환해서 성공한 쓰기와 구분되지 않습니다 — read-back 말고는 알아낼 방법이 없습니다. HealthKit은 읽기 권한 상태를 아예 돌려주지 않기 때문에, scope 하나를 선언하지 않으면 모든 워크아웃의 `distanceM`이 아무 에러 없이 `undefined`로만 들어옵니다. 그리고 방금 받은 항목보다 cursor를 먼저 커밋하는 sync 루프는 그 사이의 워크아웃을 영구히 잃습니다.
+
+## 무엇으로 막는가
+
+- **route 누락은 컴파일 에러입니다** — Health Connect의 upsert는 full-state여서 route 없이 다시 저장하면 저장돼 있던 route가 지워지기 때문에, `WorkoutWrite.route`를 `readonly RoutePoint[] | 'none'` 필수 필드로 두어 누락을 TS2741로 막습니다.
+- **잠긴 기기 분기를 건너뛸 수 없습니다** — `SaveResult`는 `status`로 갈라지는 discriminated union이라, 잠긴 기기에서만 나타나는 `pendingUnlock` 분기를 `status === 'saved'`로 좁혀내기 전에는 `saved.nativeId`가 TS2339로 막힙니다.
+- **빠진 scope를 읽기 전에 알려줍니다** — `unpopulatedWorkoutMetrics(state)`는 워크아웃을 한 건도 읽기 전에, 읽기 scope가 거부됐거나 요청된 적이 없어서 `undefined`로 들어올 `Workout` 필드 이름을 `distanceM`까지 포함해 돌려줍니다.
+- **어디서 import해도 안전합니다** — `node`/`browser` 조건은 빌드 산출물에 `expo`가 전혀 없는 `index.unsupported`로 라우팅되고 Expo Go에서는 `requireOptionalNativeModule`이 `null`을 돌려주므로, import는 던지지 않고 `getAvailability()`가 `unavailable`을 resolve합니다.
+- **동기화 갭을 Node에서 재현합니다** — `createFakeWorkouts()`가 대체하는 것은 `WorkoutsApi`가 아니라 그 아래 `NativeWorkoutsModule` seam이라, `CursorResetReason` 6종과 drain 도중 크래시를 실제 `./core` 코드로 vitest에서 돌려 볼 수 있습니다.
 
 ## Golden path
 
@@ -35,6 +53,41 @@ export async function requestWorkoutAccess() {
   return availability;
 }
 ```
+
+## 실제로는 이렇게 걸립니다
+
+`saveWorkout`에서 production에 가서야 드러나는 실수는 둘입니다. route 누락과 잠긴 기기 분기 미처리 — 각각 TS2741과 TS2339로 컴파일 단계에서 걸립니다.
+
+```ts
+import { workouts } from '@gj-kit/expo-workouts';
+import type { WorkoutWrite } from '@gj-kit/expo-workouts/core';
+
+export const write: WorkoutWrite = {
+  id: 'a2f6c0b8-0d7e-4f31-9d1a-7c2b5e8f0a11', // your own idempotency key, not the platform's
+  version: 3, // never Date.now(): a crash retry would mint a second workout
+  kind: 'running',
+  startMs: 1_754_000_000_000,
+  endMs: 1_754_000_600_000,
+  route: 'none', // delete this line -> TS2741; an Android upsert without it erases the stored route
+};
+
+export async function save(): Promise<string | null> {
+  const saved = await workouts.saveWorkout(write);
+  // @ts-expect-error TS2339 — `nativeId` is absent on the `pendingUnlock` branch
+  void saved.nativeId;
+  if (saved.status === 'pendingUnlock') return null; // locked device: retry the same id + version
+  return saved.nativeId; // narrowed past pendingUnlock, so it exists
+}
+```
+
+## 주장 대신 검증
+
+- unit·native·plugin 테스트 460개 이상
+- @ts-expect-error 가드 33개
+- 런타임 의존성 0
+- 공유 fixture로 도는 XCTest 60개 + Kotlin 테스트 70개
+
+이 문서의 모든 코드 블록은 릴리스 전에 공개 선언 파일에 대해 타입 검사를 통과합니다. 열 개 패키지가 공유하는 게이트는 `pnpm verify:release` 하나입니다.
 
 ## 사용할 때
 

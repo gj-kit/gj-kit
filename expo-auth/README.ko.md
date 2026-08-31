@@ -4,7 +4,25 @@
 
 <!-- gj-kit-localized-overview -->
 
-공동 refresh와 storage adapter를 포함한 Expo, React Native, 웹용 토큰 수명주기 프리미티브입니다.
+[![npm](https://img.shields.io/npm/v/@gj-kit/expo-auth?label=npm&style=flat-square&color=0a7ea4)](https://www.npmjs.com/package/@gj-kit/expo-auth)
+[![CI](https://img.shields.io/github/actions/workflow/status/gj-kit/gj-kit/ci.yml?branch=main&label=CI&style=flat-square&color=0a7ea4)](https://github.com/gj-kit/gj-kit/actions/workflows/ci.yml)
+[![types included](https://img.shields.io/badge/types-included-0a7ea4?style=flat-square)](https://www.npmjs.com/package/@gj-kit/expo-auth)
+[![runtime dependencies: 0](https://img.shields.io/badge/runtime%20deps-0-0a7ea4?style=flat-square)](https://www.npmjs.com/package/@gj-kit/expo-auth)
+[![license](https://img.shields.io/npm/l/@gj-kit/expo-auth?label=license&style=flat-square&color=0a7ea4)](https://github.com/gj-kit/gj-kit/blob/main/expo-auth/LICENSE)
+
+> **Expo·React Native·웹을 한 벌의 코드로 다루는 token refresh 코어입니다. transient 분기를 빠뜨리면 컴파일이 실패합니다.**
+
+## 왜 필요한가
+
+직접 짠 refresh 코드는 5xx·timeout·CORS 실패를 확정 거절로 오분류해 사용자를 로그아웃시킵니다. 갱신 결과를 raw `switch`로 소비하는데 TypeScript가 exhaustiveness를 강제하지 않고, 빠뜨리는 분기는 늘 transient이기 때문입니다. 여기에 `Platform.OS` 분기가 웹 번들까지 expo-secure-store를 끌고 들어오고, 두 탭이 같은 단일 사용 refresh token을 두고 경합하고, 재진입 여부를 boolean 플래그로 다루다 401 재시도가 다시 refresh 경로로 떨어지고, signOut 뒤 옵션 없이 다시 로그인하면 세션 로그인이 조용히 durable로 승격돼 공용 PC에서 사용자가 고른 범위가 무너집니다.
+
+## 무엇으로 막는가
+
+- **transient 누락은 컴파일 에러입니다** — matchRefreshOutcome은 다섯 결말을 전부 핸들러 키로 받으므로, 하나라도 빠지면 "Property 'transient' is missing"으로 컴파일이 실패합니다.
+- **5xx에서는 저장된 토큰에 손대지 않습니다** — transient 결말에서는 코어가 storage에 아무것도 쓰지 않고, runAuthorized는 원래 에러를 그대로 다시 던져 사용자를 로그인 화면으로 보내지 않습니다.
+- **재시도 두 번은 표현할 수 없습니다** — runAuthorized는 기본값 없는 shouldRetryAfterRefresh를 요구하고, 단 한 번 수행하는 재시도는 refresh 경로 밖에서 실행되므로 공개 API에 재진입 스위치 자체가 없습니다.
+- **signIn은 persistence를 잊을 수 없습니다** — signIn의 두 번째 인자에서 persistence는 필수 옵션이라, "세션 로그인 → signOut → 옵션 없는 재로그인"이 토큰을 조용히 durable로 승격시키는 일이 생기지 않습니다.
+- **웹 번들에 SecureStore가 없습니다** — `./storage` 하나가 exports 조건으로 갈라지므로 앱에는 Platform.OS 분기가 한 줄도 없고, 브라우저 그래프에는 expo-secure-store가 들어가지 않습니다.
 
 ## Golden path
 
@@ -36,6 +54,40 @@ export const session = createAuthSession({
   refresh,
 });
 ```
+
+## 실제로는 이렇게 걸립니다
+
+refresh()의 다섯 결말을 키로 소비하므로, 네트워크 오류를 오탐 로그아웃으로 바꾸는 누락이 컴파일 단계에서 걸립니다. `tokens`는 refreshed·adopted로 좁힌 뒤에만 접근할 수 있고, refresh 콜백이 throw하면 던진 값이 `cause`에 담긴 채 `transient`로 도착합니다.
+
+```ts
+import { matchRefreshOutcome, type RefreshOutcome } from '@gj-kit/expo-auth';
+
+declare const outcome: RefreshOutcome; // the app owns this — it is `await session.refresh()`
+declare const goToSignIn: () => null; // the app owns navigation
+declare const report: (cause: unknown) => void; // the app owns telemetry
+
+export const accessToken = matchRefreshOutcome<string | null>(outcome, {
+  refreshed: ({ tokens }) => tokens.accessToken, // `tokens` exists here and on `adopted` only
+  adopted: ({ tokens }) => tokens.accessToken,
+  'signed-out': () => goToSignIn(),
+  invalid: () => goToSignIn(), // a definitive server rejection
+  transient: ({ cause }) => {
+    report(cause); // stored tokens are left untouched — a 5xx is not a sign-out
+    return null;
+  },
+});
+// Delete the `transient` line above and tsc refuses the call:
+// error TS2345: ... Property 'transient' is missing in type ... but required in type ...
+```
+
+## 주장 대신 검증
+
+- 테스트 140건 이상 통과 (unit·native·web)
+- @ts-expect-error 컴파일 가드 19건
+- 런타임 의존성 0, optional peer 1개
+- ./testing 테스트 더블 5종, peer 불필요
+
+이 문서의 모든 코드 블록은 릴리스 전에 공개 선언 파일에 대해 타입 검사를 통과합니다. 열 개 패키지가 공유하는 게이트는 `pnpm verify:release` 하나입니다.
 
 ## 사용할 때
 

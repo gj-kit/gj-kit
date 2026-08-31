@@ -4,7 +4,25 @@
 
 <!-- gj-kit-localized-overview -->
 
-TypeScript 서버와 브라우저를 위한 타입 안전 Toss Payments 위젯 및 API v2 흐름입니다.
+[![npm](https://img.shields.io/npm/v/@gj-kit/toss-payments?label=npm&style=flat-square&color=0a7ea4)](https://www.npmjs.com/package/@gj-kit/toss-payments)
+[![CI](https://img.shields.io/github/actions/workflow/status/gj-kit/gj-kit/ci.yml?branch=main&label=CI&style=flat-square&color=0a7ea4)](https://github.com/gj-kit/gj-kit/actions/workflows/ci.yml)
+[![types included](https://img.shields.io/badge/types-included-0a7ea4?style=flat-square)](https://www.npmjs.com/package/@gj-kit/toss-payments)
+[![runtime dependencies: 0](https://img.shields.io/badge/runtime%20deps-0-0a7ea4?style=flat-square)](https://www.npmjs.com/package/@gj-kit/toss-payments)
+[![license](https://img.shields.io/npm/l/@gj-kit/toss-payments?label=license&style=flat-square&color=0a7ea4)](https://github.com/gj-kit/gj-kit/blob/main/toss-payments/LICENSE)
+
+> **토스페이먼츠 연동에서 검증 단계를 빠뜨리면 런타임이 아니라 컴파일에서 막힙니다.**
+
+## 왜 필요한가
+
+토스 연동 사고는 대부분 프로덕션에서야 드러납니다. 저장해 둔 금액과 대조하지 않고 confirm을 호출하거나, 멱등키 없이 cron이 billing approve를 두 번 돌려 이중 과금이 나거나, 서명 없는 PAYMENT_STATUS_CHANGED payload를 그대로 믿고 주문을 이행하거나, 가상계좌 secret 저장을 빠뜨려 입금 webhook이 전부 unknown-order로 거부되는 식입니다. transport 실패로 끝난 confirm이 결제 실패가 아니라는 점도 마찬가지입니다. 뭉뚱그려 실패로 처리하면 돈은 이미 빠져나간 상태에서 고객에게는 실패했다고 안내하게 됩니다.
+
+## 무엇으로 막는가
+
+- **배선한 flow만 타입에 존재** — createTossPayments가 돌려주는 타입에는 BillingKeyStore를 넘기지 않으면 billing 프로퍼티가, OrderStore를 넘기지 않으면 confirm 프로퍼티가 아예 없습니다.
+- **브라우저에 닿지 못하는 secret key** — 토스 key 4종이 서로 다른 brand입니다. parseApiSecretKey·parseWidgetSecretKey는 node 조건으로만 해석되는 /server entry에만 있고, loadWidgets는 WidgetClientKey만 받습니다.
+- **검증을 통과해야 confirm 가능** — flow.confirm은 VerifiedCheckout만 받습니다. 이 brand는 flow.verify가 createOrder 시점에 저장한 금액과 callback의 amount를 대조하고 10분 승인 시한까지 확인해야 발급됩니다.
+- **취소에는 지름길이 없음** — paymentKey로 바로 취소하는 API가 없습니다. getPayment → asCancelable → kind narrowing을 거쳐야 하고, 입금 완료 가상계좌는 refundAccount가 필수, 가상계좌가 아닌 결제는 `refundAccount?: never`로 아예 막힙니다.
+- **webhook 신뢰도 3등급 분리** — verify()는 raw body만 받고, 이벤트는 signature / secret / unverified 3등급으로 나뉩니다. 토스가 빌링 승인 webhook을 보내지 않기 때문에 WebhookHandlers에는 onBillingApproved key 자체가 없습니다.
 
 ## Golden path
 
@@ -36,6 +54,42 @@ export const toss = createTossPayments({
 
 // Add your OrderStore to enable toss.confirm; the type exposes only wired flows.
 ```
+
+## 실제로는 이렇게 걸립니다
+
+코드 리뷰는 통과하고 프로덕션에서 터지는 두 실수, 반쪽만 배선된 kit과 멱등키 없는 billing approve. 여기서는 둘 다 컴파일 에러입니다.
+
+```ts
+import { idempotencyKey, orThrow } from '@gj-kit/toss-payments';
+import type { BillingKeyStore, BillingOrder, BillingProfile, OrderStore } from '@gj-kit/toss-payments/server';
+import { createTossPayments, parseApiSecretKey } from '@gj-kit/toss-payments/server';
+
+declare const apiSecret: string; // app owns
+declare const orderStore: OrderStore; // app owns
+declare const billingKeyStore: BillingKeyStore; // app owns
+declare const profile: BillingProfile; // app owns
+declare const order: BillingOrder; // app owns
+
+export const toss = createTossPayments({
+  secretKey: orThrow(parseApiSecretKey(apiSecret)),
+  orders: orderStore, // omit and `toss.confirm` is not on the type
+  billingKeys: billingKeyStore, // omit and `toss.billing` is not on the type
+});
+
+// toss.billing.approve(profile, order); -> error TS2554: Expected 3 arguments, but got 2.
+export const charged = toss.billing.approve(profile, order, {
+  idempotencyKey: orThrow(idempotencyKey(`sub:2026-09:${profile.customerKey}`)),
+});
+```
+
+## 주장 대신 검증
+
+- 런타임 의존성 0
+- unit 테스트 550개 이상
+- @ts-expect-error 컴파일 차단 144건
+- 토스 에러 코드 42종 분류
+
+이 문서의 모든 코드 블록은 릴리스 전에 공개 선언 파일에 대해 타입 검사를 통과합니다. 열 개 패키지가 공유하는 게이트는 `pnpm verify:release` 하나입니다.
 
 ## 사용할 때
 

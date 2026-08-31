@@ -2,7 +2,8 @@ import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import ts from 'typescript';
-import { packageBySlug, packages, quickStartBySlug, REPOSITORY_URL, SITE_URL } from '../src/data/catalog.mjs';
+import { categoryBlurbs, family, packageBySlug, packages, quickStartBySlug, REPOSITORY_URL, SITE_URL } from '../src/data/catalog.mjs';
+import { compileGuardStats, copyTokens, resolveCopy } from '../src/data/verification.mjs';
 
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
 const websiteDir = path.resolve(scriptDir, '..');
@@ -13,6 +14,11 @@ const publicDir = path.join(websiteDir, 'public');
 const publishedSnapshotPath = path.join(snapshotsDir, 'published.json');
 const nextSnapshotPath = path.join(snapshotsDir, 'next.json');
 const siteBasePath = new URL(SITE_URL).pathname.replace(/\/$/u, '');
+
+// Guard counts appear in the copy as {{guards}} / {{guardTotal}} /
+// {{guardFixtureFiles}} and are filled in from the fixtures at generation time.
+const guardStats = await compileGuardStats();
+const familyTokens = copyTokens(guardStats);
 
 const args = new Set(process.argv.slice(2));
 const snapshotTarget = args.has('--next') ? nextSnapshotPath : publishedSnapshotPath;
@@ -225,16 +231,39 @@ function fenced(language, source) {
   return `\`\`\`${language}\n${source.trim()}\n\`\`\``;
 }
 
-function frontmatter({ title, description, order, hidden = false, template = 'doc' }) {
+function frontmatter({ title, description, order, hidden = false, template = 'doc', extra = [], label }) {
+  const sidebar = label === undefined
+    ? `sidebar: { order: ${order}, hidden: ${hidden} }`
+    : `sidebar: { order: ${order}, hidden: ${hidden}, label: ${JSON.stringify(label)} }`;
   const fields = [
     '---',
     `title: ${JSON.stringify(title)}`,
     `description: ${JSON.stringify(description)}`,
     `template: ${template}`,
-    `sidebar: { order: ${order}, hidden: ${hidden} }`,
+    ...extra,
+    sidebar,
     '---',
   ];
   return fields.join('\n');
+}
+
+// Package pages and the landing page are MDX so they can use Starlight's card
+// and aside components. MDX parses a bare `<` or `{` in prose as JSX, which
+// turns a copy edit into a build error with an unhelpful message. Catalog copy
+// is allowed to name types, but only inside code spans, and this asserts it —
+// a stray angle bracket fails generation with the offending sentence quoted.
+function assertMdxSafe(text, where) {
+  const withoutCode = String(text).replace(/`[^`]*`/gu, '');
+  const offender = /[<{]/u.exec(withoutCode);
+  if (offender) {
+    fail(`${where} contains a bare "${offender[0]}" outside a code span, which MDX parses as JSX: ${text}`);
+  }
+  return text;
+}
+
+function mdx(text, where, slug) {
+  const tokens = slug ? copyTokens(guardStats, slug) : familyTokens;
+  return assertMdxSafe(resolveCopy(text, tokens, where), where);
 }
 
 function peerTable(entry) {
@@ -285,34 +314,77 @@ function renderRoot(snapshot, locale) {
   const description = korean
     ? 'Expo, React Native, NestJS, Toss Payments를 위한 재사용 가능한 TypeScript 라이브러리입니다.'
     : 'Reusable TypeScript libraries for Expo, React Native, NestJS, and Toss Payments.';
+
+  // The hero carries the family promise; Starlight renders `hero.title` in place
+  // of the page title, so the frontmatter title stays the descriptive, indexable
+  // one and the visible headline stays short.
+  const heroBlock = [
+    'hero:',
+    '  title: "GJ Kit"',
+    `  tagline: ${JSON.stringify(mdx(family.heroTagline[locale], `${locale} hero tagline`))}`,
+    '  actions:',
+    `    - text: ${JSON.stringify(korean ? '패키지 둘러보기' : 'Browse the packages')}`,
+    `      link: ${pagePath(locale, packageRoute('expo-ui'))}`,
+    '      icon: right-arrow',
+    '      variant: primary',
+    `    - text: ${JSON.stringify(korean ? 'GitHub에서 보기' : 'View on GitHub')}`,
+    `      link: ${REPOSITORY_URL}`,
+    '      icon: external',
+    '      variant: minimal',
+  ];
+
+  const proofStrip = `<div class="gjk-proof">\n\n${family.proof
+    .map((item) => `- ${mdx(item[locale], `${locale} family proof`)}`)
+    .join('\n')}\n\n</div>`;
+
+  const pillars = family.pillars
+    .map((pillar) => {
+      const pillarTitle = mdx(pillar.title[locale], `${locale} pillar title`);
+      return `<Card title=${JSON.stringify(pillarTitle)} icon="approve-check">\n${mdx(pillar.body[locale], `${locale} pillar body`)}\n</Card>`;
+    })
+    .join('\n');
+
+  // Cards, not a table: ten packages across four categories is a browsing
+  // problem, and the tagline is the field a reader actually scans.
   const groups = new Map();
   for (const entry of snapshot.packages) {
     const product = packageBySlug.get(entry.slug);
     const category = product.category[locale];
-    const current = groups.get(category) ?? [];
-    current.push({ entry, product });
-    groups.set(category, current);
+    groups.set(category, [...(groups.get(category) ?? []), { entry, product }]);
   }
   const sections = [...groups.entries()].map(([category, entries]) => {
-    const rows = entries.map(({ entry, product }) => {
-      const link = markdownLink(locale, packageRoute(entry.slug), `\`${entry.name}\``);
-      return `| ${link} | ${product.description[locale]} | \`${entry.version}\` |`;
-    });
-    return `## ${category}\n\n| Package | What it is | npm latest |\n| --- | --- | --- |\n${rows.join('\n')}`;
+    const blurb = categoryBlurbs[entries[0].product.category.en]?.[locale] ?? '';
+    const cards = entries
+      .map(({ entry, product }) => {
+        const cardTitle = `${entry.name} · ${entry.version}`;
+        const summary = mdx(product.tagline[locale], `${locale} ${entry.slug} tagline`, entry.slug);
+        return `<LinkCard title=${JSON.stringify(cardTitle)} href=${JSON.stringify(pagePath(locale, packageRoute(entry.slug)))} description=${JSON.stringify(summary)} />`;
+      })
+      .join('\n');
+    return `## ${category}\n\n${mdx(blurb, `${locale} ${category} blurb`)}\n\n<CardGrid>\n${cards}\n</CardGrid>`;
   });
-  const chooser = korean
-    ? '각 패키지 페이지에서 설치 명령, Golden path, peer/플랫폼 경계, API reference를 확인하세요. API reference는 현재 npm latest의 생성된 선언 파일만 표시합니다.'
-    : 'Open a package page for its install command, golden path, peer/platform boundary, and API reference. API reference is generated only from the current npm-latest declaration snapshot.';
-  const machineIndexPath = (path) => (korean ? `../${path}` : path);
+
+  const machineIndexPath = (target) => (korean ? `../${target}` : target);
   return [
-    frontmatter({ title, description, order: 0, template: 'splash' }),
-    description,
+    frontmatter({
+      title,
+      description,
+      order: 0,
+      template: 'splash',
+      extra: heroBlock,
+      label: korean ? '개요' : 'Overview',
+    }),
+    "import { Card, CardGrid, LinkCard } from '@astrojs/starlight/components';",
     '',
-    chooser,
+    mdx(family.heroSubtitle[locale], `${locale} hero subtitle`),
     '',
-    korean
-      ? '## 빠른 선택\n\n- Expo·React Native 화면과 접근성 프리미티브: `@gj-kit/expo-ui`\n- 미디어 파일, 업로드, 기기 라이브러리: `@gj-kit/expo-media`\n- 토큰 lifecycle: `@gj-kit/expo-auth`\n- HealthKit·Health Connect: `@gj-kit/expo-workouts`\n- Nest 운영 작업·알림: `@gj-kit/nest-operations-jobs`, `@gj-kit/nest-notifications`\n- 결제, Nest 조립, PostgreSQL store: `@gj-kit/toss-payments` 계열'
-      : '## Choose a starting point\n\n- Expo and React Native UI primitives: `@gj-kit/expo-ui`\n- Media files, uploads, and device libraries: `@gj-kit/expo-media`\n- Token lifecycle: `@gj-kit/expo-auth`\n- HealthKit and Health Connect: `@gj-kit/expo-workouts`\n- Nest operations and notifications: `@gj-kit/nest-operations-jobs`, `@gj-kit/nest-notifications`\n- Payments, Nest composition, and PostgreSQL stores: the `@gj-kit/toss-payments` family',
+    proofStrip,
+    '',
+    `## ${korean ? '왜 이렇게 만들었나' : 'Why they are built this way'}`,
+    '',
+    '<CardGrid>',
+    pillars,
+    '</CardGrid>',
     '',
     ...sections,
     '',
@@ -327,6 +399,8 @@ function renderPackage(snapshotPackage, locale, index) {
   const quickStart = quickStartBySlug[product.slug]?.[locale];
   if (!quickStart) fail(`missing ${locale} quick start for ${product.name}`);
   const korean = locale === 'ko';
+  const where = `${locale} ${product.slug}`;
+  const pkgMdx = (text, label) => mdx(text, label, product.slug);
   const apiLink = markdownLink(locale, packageIndexRoute(product.slug), korean ? '전체 API reference' : 'complete API reference');
   const related = product.related
     .map((slug) => {
@@ -342,27 +416,52 @@ function renderPackage(snapshotPackage, locale, index) {
     const href = pagePath(locale, `${packageIndexRoute(product.slug)}#${entry.id}`);
     return `| [\`${entryLabel(entry)}\`](${href}) | ${entry.symbols.length} |`;
   });
-  const title = product.name;
+
+  // The page opens the way the README does: the payoff, then the failure modes
+  // it removes, then what it does about them. Install instructions are worth
+  // nothing to a reader who has not yet decided the package is worth installing.
+  const proofStrip = `<div class="gjk-proof">\n\n${[
+    `npm \`${snapshotPackage.version}\``,
+    ...product.proof.map((item) => item[locale]),
+  ]
+    .map((item) => `- ${pkgMdx(item, `${where} proof`)}`)
+    .join('\n')}\n\n</div>`;
+
+  const highlights = product.highlights
+    .map((highlight) => `- **${pkgMdx(highlight.title[locale], `${where} highlight title`)}** — ${pkgMdx(highlight.body[locale], `${where} highlight body`)}`)
+    .join('\n');
+
+  const showcase = product.showcase
+    ? [
+      '',
+      `## ${korean ? '실제로는 이렇게 걸립니다' : 'What that looks like'}`,
+      pkgMdx(product.showcase.caption[locale], `${where} showcase caption`),
+      '',
+      fenced(product.showcase.language, product.showcase.code),
+    ]
+    : [];
+
   return [
-    frontmatter({ title, description: product.description[locale], order: index + 1 }),
-    product.description[locale],
+    frontmatter({ title: product.name, description: product.description[locale], order: index + 1 }),
+    `<p class="gjk-lead">${pkgMdx(product.tagline[locale], `${where} tagline`)}</p>`,
     '',
-    `> ${korean ? '현재 npm 최신판' : 'Current npm latest'}: \`${snapshotPackage.version}\``,
+    proofStrip,
     '',
-    `## ${korean ? '사용할 때' : 'Use it when'}`,
-    product.when[locale],
+    `## ${korean ? '왜 필요한가' : 'Why this exists'}`,
+    pkgMdx(product.problem[locale], `${where} problem`),
     '',
-    `## ${korean ? '사용하지 않을 때' : 'Do not use it when'}`,
-    product.avoid[locale],
+    `## ${korean ? '무엇으로 막는가' : 'What it does about it'}`,
+    '',
+    `<div class="gjk-highlights">\n\n${highlights}\n\n</div>`,
     '',
     `## ${korean ? 'Golden path' : 'Golden path'}`,
-    `> **${korean ? '완료 상태' : 'Outcome'}:** ${quickStart.outcome}`,
+    `> **${korean ? '완료 상태' : 'Outcome'}:** ${pkgMdx(quickStart.outcome, `${where} outcome`)}`,
     '',
     `### 1. ${korean ? '설치' : 'Install'}`,
     fenced('sh', `pnpm add ${product.name}`),
     '',
     `### 2. ${korean ? '앱이 소유할 경계를 정합니다' : 'Keep the app-owned boundary explicit'}`,
-    quickStart.boundary,
+    pkgMdx(quickStart.boundary, `${where} boundary`),
     '',
     `### 3. ${korean ? '최소 연결부터 시작합니다' : 'Start with the smallest integration'}`,
     korean
@@ -370,6 +469,13 @@ function renderPackage(snapshotPackage, locale, index) {
       : 'Copy this first, then replace only the app-owned values named above.',
     '',
     fenced(product.slug === 'expo-ui' ? 'tsx' : 'ts', product.code),
+    ...showcase,
+    '',
+    `## ${korean ? '사용할 때' : 'Use it when'}`,
+    pkgMdx(product.when[locale], `${where} when`),
+    '',
+    `## ${korean ? '사용하지 않을 때' : 'Do not use it when'}`,
+    pkgMdx(product.avoid[locale], `${where} avoid`),
     '',
     `## ${korean ? '환경과 peer' : 'Runtime and peers'}`,
     `${korean ? '엔진' : 'Engines'}: ${engines}`,
@@ -380,7 +486,7 @@ function renderPackage(snapshotPackage, locale, index) {
     '| Entry | Exported symbols |\n| --- | --- |\n' + entryRows.join('\n'),
     '',
     `## ${korean ? '안전 경계' : 'Safety boundary'}`,
-    product.safety[locale],
+    pkgMdx(product.safety[locale], `${where} safety`),
     '',
     `## ${korean ? 'API reference' : 'API reference'}`,
     korean
@@ -536,9 +642,15 @@ async function renderPortal(snapshot) {
   await rm(generatedDocsDir, { recursive: true, force: true });
   for (const locale of ['en', 'ko']) {
     const prefix = locale === 'ko' ? 'ko/' : '';
-    await write(`${prefix}index.md`, renderRoot(snapshot, locale));
+    // The landing and package pages are .mdx: they use Starlight's Card and
+    // LinkCard components. API pages stay .md — they are pure generated
+    // signatures, where MDX would only add a JSX parse hazard for no gain.
+    await write(`${prefix}index.mdx`, renderRoot(snapshot, locale));
     for (const [index, snapshotPackage] of snapshot.packages.entries()) {
-      await write(`${prefix}packages/${snapshotPackage.slug}/index.md`, renderPackage(snapshotPackage, locale, index));
+      // Flat file, not <slug>/index.mdx: `trailingSlash: 'always'` emits the same
+      // /packages/<slug>/ route either way, but a directory with a single child
+      // makes Starlight nest every package inside a group of its own name.
+      await write(`${prefix}packages/${snapshotPackage.slug}.mdx`, renderPackage(snapshotPackage, locale, index));
       await write(`${prefix}api/${snapshotPackage.slug}/index.md`, renderApiIndex(snapshotPackage, locale, index));
       for (const entry of snapshotPackage.entries) {
         for (const symbol of entry.symbols) {

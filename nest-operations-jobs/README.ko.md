@@ -4,7 +4,25 @@
 
 <!-- gj-kit-localized-overview -->
 
-명시적 store port를 갖춘 내구성, 인증, 관측 가능한 운영 작업을 위한 NestJS 조합 패키지입니다.
+[![npm](https://img.shields.io/npm/v/@gj-kit/nest-operations-jobs?label=npm&style=flat-square&color=0a7ea4)](https://www.npmjs.com/package/@gj-kit/nest-operations-jobs)
+[![CI](https://img.shields.io/github/actions/workflow/status/gj-kit/gj-kit/ci.yml?branch=main&label=CI&style=flat-square&color=0a7ea4)](https://github.com/gj-kit/gj-kit/actions/workflows/ci.yml)
+[![types included](https://img.shields.io/badge/types-included-0a7ea4?style=flat-square)](https://www.npmjs.com/package/@gj-kit/nest-operations-jobs)
+[![runtime dependencies: 0](https://img.shields.io/badge/runtime%20deps-0-0a7ea4?style=flat-square)](https://www.npmjs.com/package/@gj-kit/nest-operations-jobs)
+[![license](https://img.shields.io/npm/l/@gj-kit/nest-operations-jobs?label=license&style=flat-square&color=0a7ea4)](https://github.com/gj-kit/gj-kit/blob/main/nest-operations-jobs/LICENSE)
+
+> **인증 없는 trigger, 그리고 잡을 두 번 돌게 만드는 설정은 scheduler의 첫 호출이 아니라 컴파일과 부팅에서 걸립니다.**
+
+## 왜 필요한가
+
+직접 만든 cron endpoint의 장애는 대개 모든 대시보드가 초록인 채로 옵니다. claim에서 unique 위반을 통째로 삼키면 영구히 막힌 잡이 SKIPPED/200 스트림으로 둔갑하고, stale 판정 예산을 heartbeat 주기 아래로 내리면 건강한 실행이 다음 trigger에게 reap 대상으로 보여 두 번째 본문이 시작됩니다. 그 사이 trigger route는 짧은 shared secret을 ===로 비교한 채 배포되고, 저장된 실행 기록이 반환된 status와 어긋나도 아무도 모르며, scheduler의 attempt deadline을 잡의 timeout보다 짧게 잡으면 실제로 성공한 긴 실행이 실패로 기록됩니다.
+
+## 무엇으로 막는가
+
+- **`auth` 누락은 컴파일 에러입니다** — `auth`는 OperationsJobsModuleOptions의 필수 필드라, 이걸 빼고 배선한 module은 타입 검사부터 통과하지 못합니다. 빈 `auth`나 32자 미만 secret은 forRoot가 module을 조립하는 시점에 ERR_JOB_AUTH_MISCONFIGURED로 죽습니다.
+- **결과 필드는 좁힌 뒤에만 존재합니다** — JobExecutionResult에서 `error`·`reason`·`summary`는 `status`로 좁히기 전에는 접근할 수 없습니다. @ts-expect-error 픽스처 3개가 이를 고정합니다.
+- **단일 실행 보장을 지우는 튜닝을 거부합니다** — staleRunAfterMs가 heartbeatIntervalMs의 2배 미만이면 createJobRunner가 ERR_JOB_INVALID를 던져 부팅을 멈춥니다. 건강한 run의 watermark가 자기 beat 사이에서 liveness 예산보다 오래돼 보일 수 있는 하한입니다.
+- **저장소 원자성을 호스트 테스트에서 검사합니다** — jobRunStoreContractCases()는 프레임워크 없는 적합성 케이스 13개를 돌려줍니다. S1–S6 의무를 실제 database에 그대로 겁니다 — 동시 claim burst, 같은 세 행을 노리는 두 개의 동시 reap. `inspect`를 넘기면 S7까지 붙어 16개가 됩니다.
+- **/core에 Nest가 없음을 산출물로 증명합니다** — guard test가 src/core/**·src/testing/**와 빌드 산출물 dist/core.*·dist/testing.* 청크 전량을 훑어 @nestjs·rxjs·reflect-metadata 참조가 하나도 없음을 확인합니다. 같은 파일의 대조군이 dist/index.js에는 @nestjs가 있다고 못 박기 때문에, 빈 결과가 '스캐너가 아무것도 안 봤다'는 뜻일 수 없습니다.
 
 ## Golden path
 
@@ -36,6 +54,40 @@ export const operations = OperationsJobsModule.forRoot({
   trigger: { path: 'internal/jobs' },
 });
 ```
+
+## 실제로는 이렇게 걸립니다
+
+`status`로 좁히기 전에는 `error`에 접근할 수 없고, `recorded`는 모든 분기에 있습니다. 저장된 행이 반환된 status와 어긋나는 상황이야말로 알림을 걸 지점이기 때문입니다.
+
+```ts
+import type { JobExecutionResult } from '@gj-kit/nest-operations-jobs/core';
+
+declare const result: JobExecutionResult; // await runner.execute(...)
+declare function pageOncall(jobKey: string, runId: string): void; // the app owns this
+
+export function report(): void {
+  // console.error(result.error.code);
+  // -> error TS2339: Property 'error' does not exist on type 'JobExecutionResult'.
+  if (result.status === 'TIMED_OUT') {
+    console.error(result.jobKey, result.error.code); // 'ERR_JOB_TIMEOUT'
+  } else if (result.status === 'SKIPPED') {
+    console.warn(result.jobKey, result.reason); // 'overlap' - the only value
+  }
+
+  // `recorded` sits on every branch: 'superseded' means a reaper already
+  // finalised the row, so a second body may run under a different runId.
+  if (result.recorded === 'superseded') pageOncall(result.jobKey, result.runId);
+}
+```
+
+## 주장 대신 검증
+
+- unit test 230개 이상
+- @ts-expect-error 가드 11개
+- store 계약 case 13개
+- 런타임 의존성 0
+
+이 문서의 모든 코드 블록은 릴리스 전에 공개 선언 파일에 대해 타입 검사를 통과합니다. 열 개 패키지가 공유하는 게이트는 `pnpm verify:release` 하나입니다.
 
 ## 사용할 때
 

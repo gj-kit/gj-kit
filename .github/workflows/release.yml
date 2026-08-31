@@ -60,6 +60,11 @@ jobs:
     needs: release
     if: needs.release.outputs.published == 'true'
     runs-on: ubuntu-latest
+    # Shared with pages.yml: GitHub Pages accepts one deployment at a time, and
+    # a docs-only push can land while this release is still deploying.
+    concurrency:
+      group: github-pages
+      cancel-in-progress: false
     permissions:
       contents: read
       pages: write

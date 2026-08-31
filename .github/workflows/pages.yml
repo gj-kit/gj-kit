@@ -1,6 +1,16 @@
-name: Redeploy published documentation
+name: Deploy published documentation
 
 on:
+  # Docs-only changes never publish to npm, so release.yml's deploy job never
+  # fires for them and the portal would sit stale until the next release.
+  push:
+    branches:
+      - main
+    paths:
+      - 'website/**'
+      - 'scripts/verify-published-docs.mjs'
+      - 'scripts/sync-doc-metadata.mjs'
+      - '.github/workflows/pages.yml'
   workflow_dispatch:
 
 permissions:
@@ -8,9 +18,12 @@ permissions:
   pages: write
   id-token: write
 
+# Shared with release.yml's deploy-pages job: GitHub Pages accepts one
+# deployment at a time, and a release merge can trigger both at once. Queue
+# rather than cancel — cancelling mid-upload leaves the deployment half-applied.
 concurrency:
   group: github-pages
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   deploy:
@@ -31,12 +44,23 @@ jobs:
           cache: pnpm
 
       - run: pnpm install --frozen-lockfile
-      - run: node scripts/verify-published-docs.mjs
-      - run: pnpm run build
-      - run: pnpm run check:docs
-      - uses: actions/configure-pages@v5
-      - uses: actions/upload-pages-artifact@v3
+
+      # The site documents only what is live on npm. On push that is a skip
+      # (pending changesets are normal on main); on manual dispatch it is an
+      # error, so a requested redeploy explains itself instead of going quiet.
+      - id: gate
+        run: node scripts/verify-published-docs.mjs ${{ github.event_name == 'push' && '--soft' || '' }}
+
+      - if: steps.gate.outputs.deployable == 'true'
+        run: pnpm run build
+      - if: steps.gate.outputs.deployable == 'true'
+        run: pnpm run check:docs
+      - if: steps.gate.outputs.deployable == 'true'
+        uses: actions/configure-pages@v5
+      - if: steps.gate.outputs.deployable == 'true'
+        uses: actions/upload-pages-artifact@v3
         with:
           path: website/dist
-      - id: deployment
+      - if: steps.gate.outputs.deployable == 'true'
+        id: deployment
         uses: actions/deploy-pages@v4

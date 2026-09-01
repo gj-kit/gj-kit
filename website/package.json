@@ -7,7 +7,7 @@
     "dev": "astro dev",
     "generate:api": "node scripts/generate-api.mjs",
     "build": "pnpm run generate:api && astro build",
-    "check": "astro check && node scripts/check-api-examples.mjs && node scripts/check-docs.mjs",
+    "check": "astro check && node scripts/check-api-examples.mjs && node scripts/check-learning-examples.mjs && node scripts/check-docs.mjs",
     "preview": "astro preview"
   },
   "devDependencies": {

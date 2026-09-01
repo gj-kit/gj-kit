@@ -2,7 +2,7 @@ import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import ts from 'typescript';
-import { categoryBlurbs, family, packageBySlug, packages, quickStartBySlug, REPOSITORY_URL, SITE_URL } from '../src/data/catalog.mjs';
+import { categoryBlurbs, family, learningBySlug, packageBySlug, packages, quickStartBySlug, REPOSITORY_URL, SITE_URL, solutions } from '../src/data/catalog.mjs';
 import { compileGuardStats, copyTokens, resolveCopy } from '../src/data/verification.mjs';
 
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
@@ -304,6 +304,18 @@ function packageRoute(slug) {
   return `packages/${slug}/`;
 }
 
+function packageConceptRoute(slug) {
+  return `packages/${slug}/concepts/`;
+}
+
+function packageRecipesRoute(slug) {
+  return `packages/${slug}/recipes/`;
+}
+
+function solutionRoute(slug) {
+  return `solutions/${slug}/`;
+}
+
 function packageIndexRoute(slug) {
   return `api/${slug}/`;
 }
@@ -363,6 +375,9 @@ function renderRoot(snapshot, locale) {
       .join('\n');
     return `## ${category}\n\n${mdx(blurb, `${locale} ${category} blurb`)}\n\n<CardGrid>\n${cards}\n</CardGrid>`;
   });
+  const solutionCards = solutions
+    .map((solution) => `<LinkCard title=${JSON.stringify(solution.title[locale])} href=${JSON.stringify(pagePath(locale, solutionRoute(solution.slug)))} description=${JSON.stringify(mdx(solution.description[locale], `${locale} ${solution.slug} description`))} />`)
+    .join('\n');
 
   const machineIndexPath = (target) => (korean ? `../${target}` : target);
   return [
@@ -388,27 +403,66 @@ function renderRoot(snapshot, locale) {
     '',
     ...sections,
     '',
+    `## ${korean ? '목표로 시작하기' : 'Start with a scenario'}`,
+    '',
+    korean
+      ? '이 가이드는 패키지 사이에 실제 조합 경계가 있을 때만 제공합니다. 각 패키지는 여기 없이도 단독으로 도입할 수 있습니다.'
+      : 'These guides exist only where there is a concrete composition boundary. Every package remains independently adoptable without them.',
+    '',
+    '<CardGrid>',
+    solutionCards,
+    '</CardGrid>',
+    '',
     korean
       ? `## 에이전트·자동화\n\n사람이 읽는 페이지 외에 [llms.txt](${machineIndexPath('llms.txt')})와 [API JSON index](${machineIndexPath('api/index.json')})를 제공합니다. 자동화는 반드시 JSON의 package version과 import path를 확인하세요.`
       : `## Agents and automation\n\nAlongside these pages, GJ Kit publishes [llms.txt](${machineIndexPath('llms.txt')}) and an [API JSON index](${machineIndexPath('api/index.json')}). Automation should always check the JSON package version and import path.`,
   ].join('\n');
 }
 
+function learningFor(product) {
+  const learning = learningBySlug[product.slug];
+  if (!learning) fail(`missing learning content for ${product.name}`);
+  return learning;
+}
+
+function packageName(slug) {
+  const product = packageBySlug.get(slug);
+  if (!product) fail(`unknown package relationship target "${slug}"`);
+  return product.name;
+}
+
+function relationshipTable(product, locale) {
+  const learning = learningFor(product);
+  const korean = locale === 'ko';
+  const rows = [];
+  if (learning.relationship.kind === 'standalone') {
+    rows.push(`| ${korean ? '단독 사용' : 'Standalone'} | — | ${korean ? '다른 GJ Kit 패키지 없이 도입할 수 있습니다.' : 'This package can be adopted without another GJ Kit package.'} |`);
+  }
+  for (const slug of learning.relationship.requires) {
+    rows.push(`| ${korean ? '필수' : 'Required'} | ${markdownLink(locale, packageRoute(slug), `\`${packageName(slug)}\``)} | ${korean ? '이 패키지의 공개 계약을 구현하거나 사용합니다.' : 'This package implements or consumes its public contract.'} |`);
+  }
+  for (const item of learning.relationship.optionalCompanions) {
+    rows.push(`| ${korean ? '선택 조합' : 'Optional companion'} | ${markdownLink(locale, packageRoute(item.slug), `\`${packageName(item.slug)}\``)} | ${mdx(item.reason[locale], `${locale} ${product.slug} companion ${item.slug}`)} |`);
+  }
+  const header = korean
+    ? '| 관계 | 패키지 | 함께 쓰는 이유 |\n| --- | --- | --- |'
+    : '| Relationship | Package | Why combine them |\n| --- | --- | --- |';
+  return `${header}\n${rows.join('\n')}`;
+}
+
 function renderPackage(snapshotPackage, locale, index) {
   const product = packageBySlug.get(snapshotPackage.slug);
+  const learning = learningFor(product);
   const quickStart = quickStartBySlug[product.slug]?.[locale];
   if (!quickStart) fail(`missing ${locale} quick start for ${product.name}`);
   const korean = locale === 'ko';
   const where = `${locale} ${product.slug}`;
   const pkgMdx = (text, label) => mdx(text, label, product.slug);
   const apiLink = markdownLink(locale, packageIndexRoute(product.slug), korean ? '전체 API reference' : 'complete API reference');
-  const related = product.related
-    .map((slug) => {
-      const relatedProduct = packageBySlug.get(slug);
-      return relatedProduct ? markdownLink(locale, packageRoute(slug), `\`${relatedProduct.name}\``) : null;
-    })
-    .filter(Boolean)
-    .join(', ');
+  const learningCards = [
+    `<LinkCard title=${JSON.stringify(korean ? '핵심 개념' : 'Core concepts')} href=${JSON.stringify(pagePath(locale, packageConceptRoute(product.slug)))} description=${JSON.stringify(korean ? '안전 경계와 타입이 강제하는 모델을 이해합니다.' : 'Understand the safety boundaries and model the types enforce.')} />`,
+    `<LinkCard title=${JSON.stringify(korean ? '레시피 2개' : 'Two recipes')} href=${JSON.stringify(pagePath(locale, packageRecipesRoute(product.slug)))} description=${JSON.stringify(korean ? '공개 계약으로 검증된 시작점과 안전한 패턴을 복사합니다.' : 'Copy a verified starting point and a safe application pattern using public contracts.')} />`,
+  ].join('\n');
   const engines = Object.entries(snapshotPackage.engines)
     .map(([name, range]) => `\`${name} ${range}\``)
     .join(', ') || (korean ? '별도 엔진 제한 없음' : 'No additional engine restriction');
@@ -442,10 +496,25 @@ function renderPackage(snapshotPackage, locale, index) {
     : [];
 
   return [
-    frontmatter({ title: product.name, description: product.description[locale], order: index + 1 }),
+    frontmatter({
+      title: product.name,
+      description: product.description[locale],
+      // These three pages live inside an independently ordered package group.
+      // Keep the learning path stable regardless of the package's catalog index.
+      order: 0,
+      label: product.name,
+    }),
+    "import { CardGrid, LinkCard } from '@astrojs/starlight/components';",
+    '',
     `<p class="gjk-lead">${pkgMdx(product.tagline[locale], `${where} tagline`)}</p>`,
     '',
     proofStrip,
+    '',
+    `## ${korean ? '계속 학습하기' : 'Keep learning'}`,
+    '',
+    '<CardGrid>',
+    learningCards,
+    '</CardGrid>',
     '',
     `## ${korean ? '왜 필요한가' : 'Why this exists'}`,
     pkgMdx(product.problem[locale], `${where} problem`),
@@ -493,10 +562,161 @@ function renderPackage(snapshotPackage, locale, index) {
       ? `${apiLink}에는 선언 파일에서 생성한 모든 공개 함수, 클래스, 타입, 상수, 오류 계약이 있습니다. 각 항목은 import path, release signature, package version을 표시합니다.`
       : `${apiLink} contains every public function, class, type, constant, and error contract generated from release declarations. Each item shows its import path, release signature, and package version.`,
     '',
-    `## ${korean ? '관련 패키지' : 'Related packages'}`,
-    related || (korean ? '없음' : 'None'),
+    `## ${korean ? '패키지 관계' : 'Package relationships'}`,
+    relationshipTable(product, locale),
     '',
     `[npm](https://www.npmjs.com/package/${product.name}) · [GitHub](${REPOSITORY_URL}/tree/main/${product.slug})`,
+  ].join('\n');
+}
+
+function recipeExample(product, recipeEntry) {
+  if (recipeEntry.source === 'quick-start') {
+    return {
+      language: product.slug === 'expo-ui' ? 'tsx' : 'ts',
+      code: product.code,
+      caption: null,
+    };
+  }
+  if (recipeEntry.source === 'showcase' && product.showcase) {
+    return product.showcase;
+  }
+  fail(`invalid recipe source "${recipeEntry.source}" for ${product.name}`);
+}
+
+function renderPackageConcepts(snapshotPackage, locale, index) {
+  const product = packageBySlug.get(snapshotPackage.slug);
+  const learning = learningFor(product);
+  const korean = locale === 'ko';
+  const where = `${locale} ${product.slug} concepts`;
+  const pkgMdx = (text, label) => mdx(text, label, product.slug);
+  const highlights = product.highlights
+    .map((highlight) => `- **${pkgMdx(highlight.title[locale], `${where} highlight title`)}** — ${pkgMdx(highlight.body[locale], `${where} highlight body`)}`)
+    .join('\n');
+  const conceptSections = learning.concepts
+    .map((entry) => [
+      `## ${pkgMdx(entry.title[locale], `${where} concept title`)}`,
+      pkgMdx(entry.body[locale], `${where} concept body`),
+    ].join('\n\n'))
+    .join('\n\n');
+
+  return [
+    frontmatter({
+      title: korean ? `${product.name} 핵심 개념` : `${product.name} core concepts`,
+      description: korean ? `${product.name}의 안전 경계와 타입 모델입니다.` : `Safety boundaries and type model for ${product.name}.`,
+      order: 1,
+      label: korean ? '핵심 개념' : 'Concepts',
+    }),
+    `<p class="gjk-lead">${pkgMdx(product.tagline[locale], `${where} tagline`)}</p>`,
+    '',
+    `## ${korean ? '왜 이 경계가 필요한가' : 'Why this boundary exists'}`,
+    pkgMdx(product.problem[locale], `${where} problem`),
+    '',
+    conceptSections,
+    '',
+    `## ${korean ? '패키지가 강제하는 것' : 'What the package enforces'}`,
+    '',
+    `<div class="gjk-highlights">\n\n${highlights}\n\n</div>`,
+    '',
+    `## ${korean ? '앱에 남는 책임' : 'What remains application-owned'}`,
+    pkgMdx(product.safety[locale], `${where} safety`),
+    '',
+    korean
+      ? `다음은 [검증된 레시피](${pagePath(locale, packageRecipesRoute(product.slug))}) 두 개입니다.`
+      : `Continue with the two [verified recipes](${pagePath(locale, packageRecipesRoute(product.slug))}).`,
+  ].join('\n');
+}
+
+function renderPackageRecipes(snapshotPackage, locale, index) {
+  const product = packageBySlug.get(snapshotPackage.slug);
+  const learning = learningFor(product);
+  const quickStart = quickStartBySlug[product.slug]?.[locale];
+  if (!quickStart) fail(`missing ${locale} quick start for ${product.name}`);
+  const korean = locale === 'ko';
+  const where = `${locale} ${product.slug} recipes`;
+  const pkgMdx = (text, label) => mdx(text, label, product.slug);
+  const sections = learning.recipes.map((entry, recipeIndex) => {
+    const example = recipeExample(product, entry);
+    const intro = entry.source === 'quick-start'
+      ? [
+        `> **${korean ? '완료 상태' : 'Outcome'}:** ${pkgMdx(quickStart.outcome, `${where} outcome`)}`,
+        '',
+        korean ? '앱 소유 경계: ' : 'Application-owned boundary: ',
+        pkgMdx(quickStart.boundary, `${where} boundary`),
+      ].join('\n')
+      : pkgMdx(example.caption[locale], `${where} showcase caption`);
+    return [
+      `## ${recipeIndex + 1}. ${pkgMdx(entry.title[locale], `${where} recipe title`)}`,
+      pkgMdx(entry.summary[locale], `${where} recipe summary`),
+      '',
+      intro,
+      '',
+      fenced(example.language, example.code),
+    ].join('\n\n');
+  }).join('\n\n');
+
+  return [
+    frontmatter({
+      title: korean ? `${product.name} 레시피` : `${product.name} recipes`,
+      description: korean ? `${product.name} 공개 계약으로 검증한 두 가지 시작점입니다.` : `Two verified starting points using public ${product.name} contracts.`,
+      order: 2,
+      label: korean ? '레시피' : 'Recipes',
+    }),
+    korean
+      ? '각 코드 블록은 패키지 README에서 이미 타입 검사하는 public-contract 예제를 재사용합니다.'
+      : 'Each code block reuses a public-contract example already type-checked in the package README.',
+    '',
+    sections,
+    '',
+    korean
+      ? `[전체 API reference](${pagePath(locale, packageIndexRoute(product.slug))})에서 모든 export와 import path를 확인하세요.`
+      : `Use the [complete API reference](${pagePath(locale, packageIndexRoute(product.slug))}) for every export and import path.`,
+  ].join('\n');
+}
+
+function solutionPackageLinks(solution, locale) {
+  return solution.packages
+    .map((slug) => markdownLink(locale, packageRoute(slug), `\`${packageName(slug)}\``))
+    .join(', ');
+}
+
+function renderSolution(solution, locale, index) {
+  const korean = locale === 'ko';
+  const where = `${locale} solution ${solution.slug}`;
+  const choices = solution.choices
+    .map((choice) => {
+      const choicePackages = choice.packages
+        .map((slug) => markdownLink(locale, packageRoute(slug), `\`${packageName(slug)}\``))
+        .join(', ');
+      return `<Card title=${JSON.stringify(mdx(choice.title[locale], `${where} choice title`))}>\n${mdx(choice.body[locale], `${where} choice body`)}\n\n${korean ? '사용 패키지' : 'Packages'}: ${choicePackages}\n</Card>`;
+    })
+    .join('\n');
+  const steps = solution.steps
+    .map((step) => `## ${mdx(step.title[locale], `${where} step title`)}\n\n${mdx(step.body[locale], `${where} step body`)}`)
+    .join('\n\n');
+
+  return [
+    frontmatter({
+      title: solution.title[locale],
+      description: solution.description[locale],
+      order: index + 1,
+      label: solution.title[locale],
+    }),
+    "import { Card, CardGrid } from '@astrojs/starlight/components';",
+    '',
+    `<p class="gjk-lead">${mdx(solution.description[locale], `${where} description`)}</p>`,
+    '',
+    `## ${korean ? '먼저 선택하세요' : 'Choose the smallest fit'}`,
+    '',
+    '<CardGrid>',
+    choices,
+    '</CardGrid>',
+    '',
+    `## ${korean ? '이 조합의 경계' : 'Composition boundary'}`,
+    korean
+      ? `이 가이드는 ${solutionPackageLinks(solution, locale)}를 함께 설명하지만, 표에 표시한 경우를 제외하면 설치 의존성을 만들지 않습니다.`
+      : `This guide explains ${solutionPackageLinks(solution, locale)} together, but it does not create an installation dependency unless the package relationship table says so.`,
+    '',
+    steps,
   ].join('\n');
 }
 
@@ -638,6 +858,82 @@ async function writeMachineFiles(snapshot) {
   }
 }
 
+function assertLocalizedCopy(value, where) {
+  if (!value || typeof value.en !== 'string' || value.en.trim().length === 0 || typeof value.ko !== 'string' || value.ko.trim().length === 0) {
+    fail(`${where} must provide non-empty en and ko copy`);
+  }
+}
+
+function validateLearningCatalog(snapshot) {
+  const packageSlugs = new Set(snapshot.packages.map((pkg) => pkg.slug));
+  const learningSlugs = Object.keys(learningBySlug);
+  if (learningSlugs.length !== packageSlugs.size || learningSlugs.some((slug) => !packageSlugs.has(slug))) {
+    fail('learning catalog must contain exactly one entry for every published package');
+  }
+
+  for (const product of packages) {
+    const learning = learningFor(product);
+    const where = `learning ${product.slug}`;
+    if (!['standalone', 'requires'].includes(learning.relationship.kind)) {
+      fail(`${where} relationship kind must be standalone or requires`);
+    }
+    if (!Array.isArray(learning.relationship.requires) || !Array.isArray(learning.relationship.optionalCompanions)) {
+      fail(`${where} relationship entries must be arrays`);
+    }
+    if (learning.relationship.kind === 'requires' && learning.relationship.requires.length === 0) {
+      fail(`${where} requires relationship must name at least one package`);
+    }
+    for (const required of learning.relationship.requires) {
+      if (!packageSlugs.has(required) || required === product.slug) fail(`${where} has invalid required package ${required}`);
+    }
+    for (const item of learning.relationship.optionalCompanions) {
+      if (!packageSlugs.has(item.slug) || item.slug === product.slug) fail(`${where} has invalid optional companion ${item.slug}`);
+      assertLocalizedCopy(item.reason, `${where} optional companion ${item.slug}`);
+    }
+    if (!Array.isArray(learning.concepts) || learning.concepts.length < 2) fail(`${where} must contain at least two concepts`);
+    for (const entry of learning.concepts) {
+      assertLocalizedCopy(entry.title, `${where} concept title`);
+      assertLocalizedCopy(entry.body, `${where} concept body`);
+    }
+    if (!Array.isArray(learning.recipes) || learning.recipes.length !== 2) fail(`${where} must contain exactly two recipes`);
+    const sources = new Set();
+    const recipeSlugs = new Set();
+    for (const entry of learning.recipes) {
+      if (!entry.slug || recipeSlugs.has(entry.slug)) fail(`${where} recipe slugs must be unique`);
+      recipeSlugs.add(entry.slug);
+      if (!['quick-start', 'showcase'].includes(entry.source) || sources.has(entry.source)) fail(`${where} recipes must use one quick-start and one showcase source`);
+      sources.add(entry.source);
+      if (entry.source === 'showcase' && !product.showcase) fail(`${where} showcase recipe has no showcase source`);
+      assertLocalizedCopy(entry.title, `${where} recipe title`);
+      assertLocalizedCopy(entry.summary, `${where} recipe summary`);
+    }
+  }
+
+  if (solutions.length !== 2) fail('exactly two solution guides are required');
+  const solutionSlugs = new Set();
+  for (const solution of solutions) {
+    if (!solution.slug || solutionSlugs.has(solution.slug)) fail('solution guide slugs must be unique');
+    solutionSlugs.add(solution.slug);
+    assertLocalizedCopy(solution.title, `solution ${solution.slug} title`);
+    assertLocalizedCopy(solution.description, `solution ${solution.slug} description`);
+    for (const slug of solution.packages) if (!packageSlugs.has(slug)) fail(`solution ${solution.slug} references unknown package ${slug}`);
+    if (!Array.isArray(solution.choices) || solution.choices.length < 2 || !Array.isArray(solution.steps) || solution.steps.length < 2) {
+      fail(`solution ${solution.slug} must provide choices and steps`);
+    }
+    for (const choice of solution.choices) {
+      assertLocalizedCopy(choice.title, `solution ${solution.slug} choice title`);
+      assertLocalizedCopy(choice.body, `solution ${solution.slug} choice body`);
+      for (const slug of choice.packages) {
+        if (!solution.packages.includes(slug)) fail(`solution ${solution.slug} choice references a package outside the solution`);
+      }
+    }
+    for (const step of solution.steps) {
+      assertLocalizedCopy(step.title, `solution ${solution.slug} step title`);
+      assertLocalizedCopy(step.body, `solution ${solution.slug} step body`);
+    }
+  }
+}
+
 async function renderPortal(snapshot) {
   await rm(generatedDocsDir, { recursive: true, force: true });
   for (const locale of ['en', 'ko']) {
@@ -647,10 +943,12 @@ async function renderPortal(snapshot) {
     // signatures, where MDX would only add a JSX parse hazard for no gain.
     await write(`${prefix}index.mdx`, renderRoot(snapshot, locale));
     for (const [index, snapshotPackage] of snapshot.packages.entries()) {
-      // Flat file, not <slug>/index.mdx: `trailingSlash: 'always'` emits the same
-      // /packages/<slug>/ route either way, but a directory with a single child
-      // makes Starlight nest every package inside a group of its own name.
-      await write(`${prefix}packages/${snapshotPackage.slug}.mdx`, renderPackage(snapshotPackage, locale, index));
+      // A package now has three pages, so the nested directory is intentional:
+      // Starlight renders one collapsed package group with Overview, Concepts,
+      // and Recipes instead of a flat list of ten long introduction pages.
+      await write(`${prefix}packages/${snapshotPackage.slug}/index.mdx`, renderPackage(snapshotPackage, locale, index));
+      await write(`${prefix}packages/${snapshotPackage.slug}/concepts.mdx`, renderPackageConcepts(snapshotPackage, locale, index));
+      await write(`${prefix}packages/${snapshotPackage.slug}/recipes.mdx`, renderPackageRecipes(snapshotPackage, locale, index));
       await write(`${prefix}api/${snapshotPackage.slug}/index.md`, renderApiIndex(snapshotPackage, locale, index));
       for (const entry of snapshotPackage.entries) {
         for (const symbol of entry.symbols) {
@@ -660,6 +958,9 @@ async function renderPortal(snapshot) {
           );
         }
       }
+    }
+    for (const [index, solution] of solutions.entries()) {
+      await write(`${prefix}solutions/${solution.slug}.mdx`, renderSolution(solution, locale, index));
     }
   }
   await writeMachineFiles(snapshot);
@@ -675,5 +976,6 @@ const snapshot = await loadSnapshot();
 if (snapshot.schemaVersion !== 1 || !Array.isArray(snapshot.packages)) {
   fail(`${path.relative(repositoryDir, snapshotTarget)} has an unsupported schema`);
 }
+validateLearningCatalog(snapshot);
 await renderPortal(snapshot);
 console.log(`Generated GJ Kit portal from ${path.relative(repositoryDir, snapshotTarget)} (${snapshot.packages.length} packages).`);

@@ -1225,5 +1225,221 @@ export const quickStartBySlug = {
   },
 };
 
+const bilingual = (en, ko) => ({ en, ko });
+const concept = (enTitle, koTitle, enBody, koBody) => ({
+  title: bilingual(enTitle, koTitle),
+  body: bilingual(enBody, koBody),
+});
+const recipe = (slug, source, enTitle, koTitle, enSummary, koSummary) => ({
+  slug,
+  source,
+  title: bilingual(enTitle, koTitle),
+  summary: bilingual(enSummary, koSummary),
+});
+const companion = (slug, enReason, koReason) => ({
+  slug,
+  reason: bilingual(enReason, koReason),
+});
+
+/**
+ * Catalog-owned learning content. Recipes only point at `product.code` and
+ * `product.showcase.code`, the same snippets already type-checked in package
+ * READMEs. The portal therefore cannot create a second, unverified example.
+ */
+export const learningBySlug = {
+  'expo-ui': {
+    relationship: {
+      kind: 'standalone',
+      requires: [],
+      optionalCompanions: [
+        companion('expo-media', 'Render media selection and upload state with accessible primitives.', '접근성 primitive로 미디어 선택·업로드 상태를 표현할 때 함께 사용합니다.'),
+        companion('expo-auth', 'Show application-owned session state without coupling either package.', '두 패키지를 결합하지 않은 채 앱 소유 세션 상태를 표시할 때 함께 사용합니다.'),
+      ],
+    },
+    concepts: [
+      concept('Accessibility is part of the component contract', '접근성은 컴포넌트 계약의 일부입니다', 'Accessible names, press handlers, and range labels are required by component types, not left as a review checklist after layout work.', '접근성 이름, press handler, range label은 컴포넌트 타입이 요구하며 레이아웃 뒤에 확인할 리뷰 체크리스트가 아닙니다.'),
+      concept('Controlled state has a complete shape', '제어 상태는 완전한 형태를 가집니다', 'Tabs carry literal item values through to their panels, so a missing panel becomes a type error instead of an empty screen.', 'Tabs는 literal item value를 panel까지 전달하므로 누락한 panel은 빈 화면이 아니라 타입 오류가 됩니다.'),
+    ],
+    recipes: [
+      recipe('provider-and-accessible-button', 'quick-start', 'Install one provider and render an accessible control', 'provider 하나를 설치하고 접근성 control을 렌더링하기', 'Create the application theme once, then place UiProvider above the primitives that consume it.', '앱 테마를 한 번 만들고 이를 소비하는 primitive 위에 UiProvider를 둡니다.'),
+      recipe('typed-tabs', 'showcase', 'Keep tab values and panels in sync', 'tab value와 panel을 동기화하기', 'Use a literal item list so every tab value requires a non-null panel and an accessible tablist name.', 'literal item 목록을 사용해 각 tab value가 non-null panel과 접근성 tablist 이름을 요구하게 합니다.'),
+    ],
+  },
+  'expo-media': {
+    relationship: {
+      kind: 'standalone',
+      requires: [],
+      optionalCompanions: [companion('expo-auth', 'Keep media upload authorization in an application session.', '미디어 업로드 권한을 앱 세션에 둘 때 함께 사용합니다.')],
+    },
+    concepts: [
+      concept('A selected asset is not always upload-safe', '선택한 asset이 항상 업로드 가능한 것은 아닙니다', 'Device-library URIs may not outlive the uploader. The adapter boundary makes durable staging and cleanup an explicit application decision.', '기기 라이브러리 URI는 업로더가 끝날 때까지 유지되지 않을 수 있습니다. adapter 경계는 지속 staging과 정리를 명시적인 앱 결정으로 만듭니다.'),
+      concept('Upload recovery names the uncertain state', '업로드 복구는 불확실한 상태에 이름을 붙입니다', 'A network failure can mean uploaded, possibly-uploaded, or never reached storage. Public recovery metadata preserves that distinction without leaking URLs.', '네트워크 실패는 업로드됐거나, 업로드됐을 수 있거나, 저장소에 도달하지 못했다는 뜻일 수 있습니다. 공개 recovery metadata는 URL을 노출하지 않고 그 차이를 보존합니다.'),
+    ],
+    recipes: [
+      recipe('declare-upload-limits', 'quick-start', 'Create a media kit with explicit upload limits', '명시적인 업로드 제한으로 media kit 만들기', 'Wire only the application upload API and a declared size policy before adding platform adapters.', 'platform adapter를 붙이기 전에 앱 upload API와 선언된 용량 정책만 연결합니다.'),
+      recipe('recover-an-interrupted-upload', 'showcase', 'Classify and recover an interrupted upload', '중단된 업로드를 분류하고 복구하기', 'Narrow unknown errors into safe recovery metadata before the application reconciles storage.', '앱이 저장소 정합을 처리하기 전에 unknown error를 안전한 recovery metadata로 좁힙니다.'),
+    ],
+  },
+  'expo-auth': {
+    relationship: {
+      kind: 'standalone',
+      requires: [],
+      optionalCompanions: [companion('expo-media', 'Provide a session-owned authorization callback for application media APIs.', '앱 미디어 API에 세션 소유 authorization callback을 제공할 때 함께 사용합니다.')],
+    },
+    concepts: [
+      concept('Refresh is a coordination problem', 'refresh는 조정 문제입니다', 'Multiple requests can discover an expired token together. Injected storage and locking let the host choose the platform mechanism while one session coordinates refresh.', '여러 요청이 동시에 만료된 token을 발견할 수 있습니다. 주입한 storage와 lock으로 호스트는 플랫폼 메커니즘을 선택하고 세션은 refresh를 조정합니다.'),
+      concept('A transient failure is not a sign-out', '일시적 실패는 로그아웃이 아닙니다', 'Closed refresh outcomes distinguish retryable service failures from invalid credentials, so a 5xx cannot silently clear a valid session.', '닫힌 refresh outcome은 재시도 가능한 서비스 실패와 무효 credential을 구분하므로 5xx가 유효한 세션을 조용히 지울 수 없습니다.'),
+    ],
+    recipes: [
+      recipe('assemble-a-session', 'quick-start', 'Assemble one application session', '앱 세션 하나 조립하기', 'Choose storage and a refresh callback once; the package coordinates callers around that application-owned boundary.', 'storage와 refresh callback을 한 번 선택하면 패키지가 그 앱 소유 경계 주변의 호출자를 조정합니다.'),
+      recipe('handle-every-refresh-outcome', 'showcase', 'Handle every refresh outcome explicitly', '모든 refresh outcome을 명시적으로 처리하기', 'Use the matcher so an omitted transient or rotated branch is a compile error.', 'matcher를 사용해 transient 또는 rotated 분기를 빼먹으면 컴파일 오류가 나게 합니다.'),
+    ],
+  },
+  'expo-workouts': {
+    relationship: {
+      kind: 'standalone',
+      requires: [],
+      optionalCompanions: [companion('format', 'Format workout timestamps and totals with application-selected display rules.', '앱이 선택한 표시 규칙으로 운동 timestamp와 합계를 포맷할 때 함께 사용합니다.')],
+    },
+    concepts: [
+      concept('The native boundary stays visible', 'native 경계는 드러난 채로 둡니다', 'HealthKit and Health Connect require a development build and platform permission. Availability is exposed instead of pretending Expo Go or web can perform native work.', 'HealthKit과 Health Connect에는 development build와 플랫폼 권한이 필요합니다. Expo Go나 웹이 native 작업을 할 수 있는 척하지 않고 availability를 노출합니다.'),
+      concept('Write results must be narrowed', '쓰기 결과는 narrowing해야 합니다', 'A locked device, denied permission, and a saved workout are distinct results. A native ID is available only after the saved branch is proven.', '잠긴 기기, 거부된 권한, 저장된 운동은 서로 다른 결과입니다. native ID는 saved 분기를 증명한 뒤에만 사용할 수 있습니다.'),
+    ],
+    recipes: [
+      recipe('check-platform-readiness', 'quick-start', 'Check native availability before requesting access', 'access를 요청하기 전에 native availability 확인하기', 'Start with availability and permissions in a development build, not a web or Expo Go fallback.', '웹이나 Expo Go fallback이 아니라 development build에서 availability와 permission부터 시작합니다.'),
+      recipe('narrow-a-write-result', 'showcase', 'Narrow a workout write result safely', '운동 쓰기 결과를 안전하게 narrowing하기', 'Read a native ID only in the saved state and preserve why the platform cannot write.', 'saved 상태에서만 native ID를 읽고 플랫폼이 쓸 수 없을 때는 그 사유를 보존합니다.'),
+    ],
+  },
+  format: {
+    relationship: {
+      kind: 'standalone',
+      requires: [],
+      optionalCompanions: [companion('expo-workouts', 'Present workout dates and measurements with an explicit display policy.', '명시적인 표시 정책으로 운동 날짜와 측정값을 보여 줄 때 함께 사용합니다.')],
+    },
+    concepts: [
+      concept('Display policy belongs at the call site', '표시 정책은 호출 위치에 둡니다', 'Timezone, locale, and separators are user-visible policy. Requiring them prevents a device default from changing an operational timestamp or shared label.', '시간대, locale, separator는 사용자에게 보이는 정책입니다. 이를 요구하면 기기 기본값이 운영 timestamp나 공유 label을 바꾸지 못합니다.'),
+      concept('Values keep their display semantics', '값은 표시 의미를 보존합니다', 'Currency, bytes, and empty values need a declared representation; a formatter must not guess whether zero means absence or an available measurement.', '통화, byte, 빈 값에는 선언된 표현이 필요합니다. formatter가 0이 부재인지 사용할 수 있는 측정값인지 추측해서는 안 됩니다.'),
+    ],
+    recipes: [
+      recipe('format-a-timestamp', 'quick-start', 'Format a timestamp with an explicit timezone', '명시적인 시간대로 timestamp 포맷하기', 'Keep timezone and separator beside the display call so screens cannot inherit different defaults.', '화면마다 다른 기본값을 상속하지 않도록 timezone과 separator를 display 호출 옆에 둡니다.'),
+      recipe('format-money-and-bytes', 'showcase', 'Format money and bytes without hidden meaning', '숨은 의미 없이 금액과 byte 포맷하기', 'Select currency and zero-value behavior in code rather than allowing a formatter to guess policy.', 'formatter가 정책을 추측하게 두지 말고 코드에서 통화와 0값 동작을 선택합니다.'),
+    ],
+  },
+  'nest-operations-jobs': {
+    relationship: {
+      kind: 'standalone',
+      requires: [],
+      optionalCompanions: [companion('nest-notifications', 'Notify operators or users after an application-owned job result.', '앱 소유 job 결과 뒤에 운영자나 사용자에게 알릴 때 함께 사용합니다.')],
+    },
+    concepts: [
+      concept('A trigger is an operations boundary', 'trigger는 운영 경계입니다', 'A scheduled or operator-triggered route needs host-owned authorization and durable run storage. The package coordinates execution but never defines business work.', 'scheduler 또는 운영자 trigger route에는 호스트 소유 authorization과 내구성 실행 저장소가 필요합니다. 패키지는 실행을 조정하지만 비즈니스 작업을 정의하지 않습니다.'),
+      concept('Run state is a discriminated result', '실행 상태는 discriminated result입니다', 'Completed, failed, skipped, and superseded runs do not share fields. Narrowing prevents a summary from claiming an execution state that never happened.', 'completed, failed, skipped, superseded 실행은 field를 공유하지 않습니다. narrowing하면 발생하지 않은 실행 상태를 summary가 주장하지 않게 됩니다.'),
+    ],
+    recipes: [
+      recipe('register-an-authenticated-trigger', 'quick-start', 'Register an authenticated operations trigger', '인증된 운영 trigger 등록하기', 'Provide a run store and explicit authentication before exposing the trigger route.', 'trigger route를 노출하기 전에 run store와 명시적인 authentication을 제공합니다.'),
+      recipe('read-a-job-result', 'showcase', 'Read a job result by its actual state', '실제 상태에 따라 job result 읽기', 'Switch on status before accessing branch-specific error, reason, and recording fields.', '분기 전용 error, reason, recording field에 접근하기 전에 status로 분기합니다.'),
+    ],
+  },
+  'nest-notifications': {
+    relationship: {
+      kind: 'standalone',
+      requires: [],
+      optionalCompanions: [companion('nest-operations-jobs', 'Schedule application-owned relay or dispatch work through a protected operations boundary.', '보호된 운영 경계에서 앱 소유 relay 또는 dispatch 작업을 예약할 때 함께 사용합니다.')],
+    },
+    concepts: [
+      concept('Durability lives in the host store', '내구성은 호스트 store에 있습니다', 'The package supplies ordering and relay rules, while the application implements the durable store, presenter, push gateway, and product policy.', '패키지는 순서와 relay 규칙을 제공하고, 내구성 store, presenter, push gateway, 제품 정책은 앱이 구현합니다.'),
+      concept('Time policy needs a timezone', '시간 정책에는 시간대가 필요합니다', 'Quiet hours and batching are not fixed offsets. A timezone and valid daily window keep DST and aggregation behavior explainable.', 'quiet hours와 batching은 고정 offset이 아닙니다. timezone과 올바른 일일 window가 DST와 집계 동작을 설명 가능하게 유지합니다.'),
+    ],
+    recipes: [
+      recipe('register-a-dispatcher', 'quick-start', 'Register a durable notification dispatcher', '내구성 있는 알림 dispatcher 등록하기', 'Pass application stores, a presenter, policy, and push gateway into the Nest module explicitly.', '앱 store, presenter, policy, push gateway를 Nest module에 명시적으로 전달합니다.'),
+      recipe('test-store-and-quiet-hours', 'showcase', 'Test store behavior and quiet-hours policy', 'store 동작과 quiet-hours policy 테스트하기', 'Run shipped contract cases against the application store and declare a timezone for quiet hours.', '제공된 contract case를 앱 store에 실행하고 quiet hours에는 timezone을 선언합니다.'),
+    ],
+  },
+  'toss-payments': {
+    relationship: {
+      kind: 'standalone',
+      requires: [],
+      optionalCompanions: [
+        companion('toss-payments-nestjs', 'Register the typed core kit through Nest dependency injection.', 'typed core kit을 Nest dependency injection으로 등록할 때 함께 사용합니다.'),
+        companion('toss-payments-postgresql', 'Use PostgreSQL implementations for application-owned payment stores.', '앱 소유 payment store에 PostgreSQL 구현을 사용할 때 함께 사용합니다.'),
+      ],
+    },
+    concepts: [
+      concept('Available flows reflect supplied stores', '사용 가능한 flow는 제공한 store를 반영합니다', 'Confirmation, billing, and webhook capabilities do not appear until the server supplies their corresponding stores, making an unwired payment path impossible to call.', 'confirmation, billing, webhook capability는 서버가 대응 store를 제공하기 전에는 나타나지 않아 배선하지 않은 결제 경로를 호출할 수 없습니다.'),
+      concept('Verification precedes trust', '검증이 신뢰보다 먼저입니다', 'Redirects and webhook payloads are inputs, not payment truth. The server verifies order amount, raw-body event, and trust grade before settlement.', 'redirect와 webhook payload는 결제 진실이 아니라 입력입니다. 서버는 확정 전에 주문 금액, raw-body event, trust grade를 검증합니다.'),
+    ],
+    recipes: [
+      recipe('assemble-a-confirmation-flow', 'quick-start', 'Assemble a confirmation flow with an order store', 'order store로 confirmation flow 조립하기', 'Parse the server key at boot and make the host order store explicit before confirmation becomes available.', '부팅 때 server key를 파싱하고 confirmation이 가능해지기 전에 호스트 order store를 명시합니다.'),
+      recipe('add-billing-and-webhook-boundaries', 'showcase', 'Add billing and webhook boundaries deliberately', 'billing과 webhook 경계를 의도적으로 추가하기', 'Wire only the stores needed by each flow so absent capabilities cannot be used accidentally.', '각 flow에 필요한 store만 연결해 없는 capability를 실수로 사용할 수 없게 합니다.'),
+    ],
+  },
+  'toss-payments-nestjs': {
+    relationship: {
+      kind: 'requires',
+      requires: ['toss-payments'],
+      optionalCompanions: [companion('toss-payments-postgresql', 'Supply PostgreSQL-backed core stores to the Nest module when the host chooses PostgreSQL.', '호스트가 PostgreSQL을 선택했다면 Nest module에 PostgreSQL 기반 core store를 제공합니다.')],
+    },
+    concepts: [
+      concept('Nest DI must preserve the core kit type', 'Nest DI는 core kit type을 보존해야 합니다', 'A generic DI token loses configuration-specific capabilities. The package rebuilds the typed core kit from registered configuration at the injection point.', 'generic DI token은 configuration별 capability를 잃습니다. 이 패키지는 주입 지점에서 등록한 configuration으로 typed core kit을 다시 만듭니다.'),
+      concept('Webhook verification needs raw bytes', 'webhook 검증에는 raw bytes가 필요합니다', 'Once Nest JSON middleware parses a request, re-serializing cannot recover its signature input. Raw-body setup is a prerequisite.', 'Nest JSON middleware가 요청을 파싱한 뒤에는 재직렬화로 signature input을 복구할 수 없습니다. raw-body 설정은 선행 조건입니다.'),
+    ],
+    recipes: [
+      recipe('register-a-typed-provider', 'quick-start', 'Register one typed payment provider', 'typed payment provider 하나 등록하기', 'Build the core configuration first, then register the module once for typed injection.', '먼저 core configuration을 만든 다음 typed injection을 위해 module을 한 번 등록합니다.'),
+      recipe('inject-only-wired-flows', 'showcase', 'Inject only flows the configuration wired', 'configuration이 배선한 flow만 주입하기', 'Recover the configuration-specific type so an unwired billing flow has no property.', 'configuration별 type을 복구해 배선하지 않은 billing flow에는 property가 없게 합니다.'),
+    ],
+  },
+  'toss-payments-postgresql': {
+    relationship: {
+      kind: 'requires',
+      requires: ['toss-payments'],
+      optionalCompanions: [companion('toss-payments-nestjs', 'Pass PostgreSQL-backed stores through a typed Nest payment provider.', 'PostgreSQL 기반 store를 typed Nest payment provider로 전달할 때 함께 사용합니다.')],
+    },
+    concepts: [
+      concept('Sensitive values require an application protector', '민감값에는 앱 protector가 필요합니다', 'Pool lifecycle and key custody remain in the host application. Required protection prevents omitted encryption from persisting billing data in plaintext.', 'pool lifecycle과 key custody는 호스트 앱에 남습니다. 필수 protection은 빠뜨린 암호화가 billing 데이터를 plaintext로 저장하지 못하게 합니다.'),
+      concept('Migrations are an explicit deployment action', 'migration은 명시적인 배포 작업입니다', 'The store aggregate exposes one migration step for deployment automation. Request handling and application startup can repeat under normal traffic.', 'store aggregate는 배포 자동화를 위한 migration 단계 하나를 노출합니다. request 처리와 application startup은 일반 트래픽에서도 반복될 수 있습니다.'),
+    ],
+    recipes: [
+      recipe('assemble-protected-stores', 'quick-start', 'Assemble protected PostgreSQL stores', '보호된 PostgreSQL store 조립하기', 'Adapt the host pool and pass an application-owned protector before exposing any payment store.', 'payment store를 노출하기 전에 호스트 pool을 adapter에 연결하고 앱 소유 protector를 전달합니다.'),
+      recipe('lock-an-opaque-customer-key', 'showcase', 'Mutate billing data behind an opaque lock key', 'opaque lock key 뒤에서 billing data 변경하기', 'Use the branded opaque key and supplied lock order rather than passing raw customer identifiers to storage.', 'raw customer identifier를 storage에 넘기지 말고 branded opaque key와 제공된 lock 순서를 사용합니다.'),
+    ],
+  },
+};
+
+/** The only cross-package guides. Both explain optional adoption paths. */
+export const solutions = [
+  {
+    slug: 'toss-payment-service',
+    title: bilingual('Build a Toss payment service', 'Toss 결제 서비스 만들기'),
+    description: bilingual('Choose the smallest payment boundary first, then add Nest dependency injection or PostgreSQL stores only when the host application needs them.', '가장 작은 결제 경계부터 선택하고, 호스트 앱에 필요할 때만 Nest dependency injection 또는 PostgreSQL store를 추가합니다.'),
+    packages: ['toss-payments', 'toss-payments-nestjs', 'toss-payments-postgresql'],
+    choices: [
+      { title: bilingual('Core payment service', 'Core 결제 서비스'), packages: ['toss-payments'], body: bilingual('Use the server-only core when the application owns framework composition and payment stores.', '앱이 framework 조합과 payment store를 직접 소유한다면 server-only core를 사용합니다.') },
+      { title: bilingual('NestJS payment service', 'NestJS 결제 서비스'), packages: ['toss-payments', 'toss-payments-nestjs'], body: bilingual('Add the Nest package for typed provider registration and raw-body webhook handling.', 'typed provider 등록과 raw-body webhook 처리가 필요할 때 Nest 패키지를 추가합니다.') },
+      { title: bilingual('PostgreSQL-backed payment service', 'PostgreSQL 기반 결제 서비스'), packages: ['toss-payments', 'toss-payments-postgresql'], body: bilingual('Add PostgreSQL stores for the shipped migration and encrypted persistence implementation.', '제공된 migration과 암호화 영속 구현이 필요할 때 PostgreSQL store를 추가합니다.') },
+    ],
+    steps: [
+      { title: bilingual('1. Start with verification', '1. 검증부터 시작하기'), body: bilingual('Create the core kit with the order and payment boundaries the server actually owns.', '서버가 실제로 소유하는 order와 payment 경계로 core kit을 만듭니다.') },
+      { title: bilingual('2. Add a host adapter only when needed', '2. 필요할 때만 호스트 adapter 추가하기'), body: bilingual('Nest DI and PostgreSQL stores are extension choices, not prerequisites for a core integration.', 'Nest DI와 PostgreSQL store는 core 통합의 선행 조건이 아니라 확장 선택지입니다.') },
+      { title: bilingual('3. Keep secrets and policy in the application', '3. secret과 policy는 앱에 두기'), body: bilingual('Key custody, refund policy, and application audit decisions remain outside the packages.', 'key custody, 환불 정책, 앱 감사 결정은 패키지 밖에 남습니다.') },
+    ],
+  },
+  {
+    slug: 'nest-operations-notifications',
+    title: bilingual('Run operations work and notifications', '운영 작업과 알림 실행하기'),
+    description: bilingual('Use protected operations jobs and durable notifications together when one application-owned workflow needs both. Each package still works without the other.', '앱 소유 workflow 하나에 둘 다 필요할 때 보호된 operations job과 내구성 있는 notification을 함께 사용합니다. 각 패키지는 다른 패키지 없이도 동작합니다.'),
+    packages: ['nest-operations-jobs', 'nest-notifications'],
+    choices: [
+      { title: bilingual('Run protected work', '보호된 작업 실행'), packages: ['nest-operations-jobs'], body: bilingual('Use jobs alone for authenticated scheduled or operator-triggered work with durable run state.', '내구성 실행 상태가 있는 인증된 scheduler 또는 운영자 trigger 작업에는 job만 사용합니다.') },
+      { title: bilingual('Deliver durable notifications', '내구성 있는 알림 전달'), packages: ['nest-notifications'], body: bilingual('Use notifications alone for outbox, relay, quiet-hours, and dispatch policy.', 'outbox, relay, quiet hours, dispatch policy에는 notification만 사용합니다.') },
+      { title: bilingual('Compose at the application boundary', '앱 경계에서 조합'), packages: ['nest-operations-jobs', 'nest-notifications'], body: bilingual('After a job result, application code may enqueue a notification. Neither package imports, schedules, or authorizes the other.', 'job 결과 뒤에 앱 코드가 notification을 enqueue할 수 있습니다. 두 패키지는 서로를 import, schedule, authorize하지 않습니다.') },
+    ],
+    steps: [
+      { title: bilingual('1. Implement both host stores independently', '1. 두 host store를 독립적으로 구현하기'), body: bilingual('Keep run persistence and notification persistence in the application database boundary.', '실행 영속과 notification 영속을 앱 database 경계에 둡니다.') },
+      { title: bilingual('2. Schedule only the work you own', '2. 소유한 작업만 schedule하기'), body: bilingual('A job may ask application code to dispatch due notifications, but the application owns cadence and authorization.', 'job은 앱 코드에 due notification dispatch를 요청할 수 있지만 cadence와 authorization은 앱이 소유합니다.') },
+      { title: bilingual('3. Verify each store contract', '3. 각 store contract 검증하기'), body: bilingual('Run package-provided contract cases against each host implementation before connecting workflows.', 'workflow를 연결하기 전에 각 host 구현에 제공된 contract case를 실행합니다.') },
+    ],
+  },
+];
+
 export const packageBySlug = new Map(packages.map((entry) => [entry.slug, entry]));
 export const categoryBlurbFor = (category, locale) => categoryBlurbs[category]?.[locale] ?? '';

@@ -22,13 +22,25 @@ export default defineConfig({
       customCss: ['./src/styles/custom.css'],
       sidebar: [
         {
-          label: 'Explore',
-          translations: { ko: '둘러보기' },
-          items: ['index', { autogenerate: { directory: 'packages' } }],
+          label: 'Overview',
+          translations: { 'ko-KR': '개요' },
+          items: ['index'],
+        },
+        {
+          label: 'Packages',
+          translations: { 'ko-KR': '패키지' },
+          collapsed: true,
+          items: [{ autogenerate: { directory: 'packages', collapsed: true } }],
+        },
+        {
+          label: 'Solutions',
+          translations: { 'ko-KR': '솔루션' },
+          collapsed: true,
+          items: [{ autogenerate: { directory: 'solutions' } }],
         },
         {
           label: 'API reference',
-          translations: { ko: 'API 레퍼런스' },
+          translations: { 'ko-KR': 'API 레퍼런스' },
           collapsed: true,
           items: [{ autogenerate: { directory: 'api', collapsed: true } }],
         },

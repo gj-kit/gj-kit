@@ -1,6 +1,6 @@
 {
   "name": "@gj-kit/expo-auth",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Token lifecycle primitives for Expo, React Native, and web applications with coordinated refresh and platform storage adapters.",
   "keywords": [
     "expo",

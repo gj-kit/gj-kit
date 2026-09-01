@@ -1,6 +1,6 @@
 {
   "name": "@gj-kit/nest-operations-jobs",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "NestJS primitives for authenticated, durable, observable scheduled and operator-triggered jobs.",
   "keywords": [
     "nestjs",

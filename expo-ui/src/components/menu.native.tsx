@@ -9,10 +9,9 @@ import {
 } from "react-native";
 import type { GestureResponderEvent, StyleProp, TextStyle } from "react-native";
 import type { Theme } from "../theme/tokens";
-import { PRESSABLE_FEEDBACK_CLASS } from "./button";
 import type { DialogFocusRef } from "./dialog";
 import { renderIconSlot } from "./icons";
-import { mergeClassNames, nativeWindProps, themedStyles } from "./internal";
+import { nativeWindProps, themedStyles } from "./internal";
 import { NativeAnchoredMenuSelectPanel } from "./menu-select-anchored.native";
 import type { NativeAnchoredMenuSelectDismissDetails } from "./menu-select-anchored.native";
 import { assertMenuProps } from "./menu-select-validation";
@@ -322,6 +321,9 @@ export function Menu<const T extends string>(
     [busy, disabled, onSelect, requestOpenChange]
   );
 
+  // Keep default interaction feedback on the owning Pressable. A precompiled
+  // className with :active/:hover can reach RN's inner View in NativeWind apps,
+  // which upgrades it to a second Pressable and consumes the action's touch.
   const ownedTrigger =
     renderTrigger !== undefined ? null : (
       <Pressable
@@ -343,9 +345,7 @@ export function Menu<const T extends string>(
             : () => setTriggerHovered(false)
         }
         testID={triggerTestID}
-        {...nativeWindProps(
-          mergeClassNames(PRESSABLE_FEEDBACK_CLASS, triggerClassName)
-        )}
+        {...nativeWindProps(triggerClassName)}
         style={({ pressed }) => [
           styles.trigger,
           {
@@ -358,6 +358,7 @@ export function Menu<const T extends string>(
                 : palette.backgroundColor,
             borderColor: palette.borderColor,
             opacity: disabled ? 0.58 : 1,
+            transform: [{ scale: pressed && !disabled ? 0.98 : 1 }],
           },
           triggerStyle,
           !disabled && triggerHovered && triggerHoverStyle !== undefined
@@ -451,9 +452,7 @@ export function Menu<const T extends string>(
                 item.testID ??
                 (testID === undefined ? undefined : `${testID}-item-${index}`)
               }
-              {...nativeWindProps(
-                mergeClassNames(PRESSABLE_FEEDBACK_CLASS, itemClassName)
-              )}
+              {...nativeWindProps(itemClassName)}
               style={({ pressed }) => [
                 styles.item,
                 {
@@ -470,6 +469,7 @@ export function Menu<const T extends string>(
                     ? theme.colors.primary
                     : theme.colors.textSubtle,
                   opacity: itemDisabled ? 0.52 : 1,
+                  transform: [{ scale: pressed && !itemDisabled ? 0.98 : 1 }],
                 },
                 itemStyle,
                 !itemDisabled &&

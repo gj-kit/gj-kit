@@ -8,6 +8,7 @@
 import { useState } from 'react';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { StyleSheet, type PressableProps } from 'react-native';
 import { Menu as NativeMenu } from '../../src/components/menu.native';
 import { Menu as WebMenu } from '../../src/components/menu.web';
 import { Select as NativeSelect } from '../../src/components/select.native';
@@ -15,6 +16,21 @@ import { Select as WebSelect } from '../../src/components/select.web';
 import type { MenuItem } from '../../src/components/menu.types';
 import { OverlayProvider } from '../../src/components/overlay/provider';
 import { UiProvider } from '../../src/components/provider';
+
+// Observe the props at the compiled native Pressable boundary. RNW drops the
+// unknown className, so inspecting the DOM would falsely pass on the old code.
+const nativePressableProps = vi.hoisted(() => new Map<string, PressableProps & { className?: string }>());
+vi.mock('react-native', async () => {
+  const actual = await vi.importActual<typeof import('react-native')>('react-native');
+  const React = await import('react');
+  return {
+    ...actual,
+    Pressable: React.forwardRef<React.ElementRef<typeof actual.Pressable>, React.ComponentProps<typeof actual.Pressable> & { className?: string }>((props, ref) => {
+      if (props.testID) nativePressableProps.set(props.testID, props);
+      return React.createElement(actual.Pressable, { ...props, ref });
+    }),
+  };
+});
 
 const menuItems = [
   { kind: 'action', value: 'open', label: 'Open' },
@@ -39,6 +55,7 @@ function installMeasuredLayout(): void {
 
 afterEach(() => {
   cleanup();
+  nativePressableProps.clear();
   vi.restoreAllMocks();
 });
 
@@ -232,5 +249,80 @@ describe('OverlayProvider absence keeps the throw with an actionable message', (
         />,
       ),
     ).toThrow(/topmost-first Escape\/outside-press ownership.*<UiProvider>/);
+  });
+});
+
+describe('native Menu/Select compiled NativeWind consumer boundary', () => {
+  // Compiled package JSX bypasses the consumer's NativeWind transform. Automatic
+  // pseudo-classes then reach RN Pressable's inner View, which NativeWind upgrades
+  // into another Pressable. That inner responder steals taps in the native Modal.
+  // RNW cannot reproduce the native responder tree, so guard its input here and
+  // exercise the actual native fork callbacks; device QA covers touch dispatch.
+  function expectNoImplicitInteractionClasses(element: HTMLElement) {
+    const testID = element.getAttribute('data-testid')!;
+    expect(nativePressableProps.has(testID)).toBe(true);
+    expect(nativePressableProps.get(testID)?.className ?? '').not.toMatch(/(?:hover|active):/);
+    const style = nativePressableProps.get(testID)?.style;
+    expect(typeof style).toBe('function');
+    if (typeof style !== 'function') throw new Error('Native press feedback is missing');
+    // Fabric must receive an identity transform on release. Removing the array
+    // can pass null into processTransform during a same-tap Modal transition.
+    expect(StyleSheet.flatten(style({ pressed: true })).transform).toEqual([{ scale: 0.98 }]);
+    expect(StyleSheet.flatten(style({ pressed: false })).transform).toEqual([{ scale: 1 }]);
+  }
+
+  it.each([true, false])('Menu action keeps closeOnSelect=%s without injecting a second responder', (closeOnSelect) => {
+    const onSelect = vi.fn();
+    const onOpenChange = vi.fn();
+    render(
+      <UiProvider>
+        <NativeMenu
+          triggerLabel="More"
+          triggerTestID="native-feedback-trigger"
+          testID="native-feedback"
+          items={[{ kind: 'action', value: 'cancel', label: 'Cancel plan', closeOnSelect }]}
+          open
+          onSelect={onSelect}
+          onOpenChange={onOpenChange}
+        />
+      </UiProvider>,
+    );
+    const trigger = screen.getByTestId('native-feedback-trigger');
+    const action = screen.getByTestId('native-feedback-item-0');
+    expectNoImplicitInteractionClasses(trigger);
+    expectNoImplicitInteractionClasses(action);
+    fireEvent.click(action);
+    expect(onSelect).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ value: 'cancel' }));
+    if (closeOnSelect) {
+      expect(onOpenChange).toHaveBeenCalledExactlyOnceWith(false, expect.objectContaining({ reason: 'action-select' }));
+    } else {
+      expect(onOpenChange).not.toHaveBeenCalled();
+    }
+  });
+
+  it('Select option commits once without injecting a second responder', () => {
+    const onValueChange = vi.fn();
+    const onOpenChange = vi.fn();
+    render(
+      <UiProvider>
+        <NativeSelect
+          label="Sort order"
+          placeholder="Choose"
+          triggerTestID="native-feedback-trigger"
+          testID="native-feedback"
+          items={selectItems}
+          value="recent"
+          open
+          onValueChange={onValueChange}
+          onOpenChange={onOpenChange}
+        />
+      </UiProvider>,
+    );
+    const option = screen.getByTestId('native-feedback-item-1');
+    expectNoImplicitInteractionClasses(screen.getByTestId('native-feedback-trigger'));
+    expectNoImplicitInteractionClasses(option);
+    fireEvent.click(option);
+    expect(onValueChange).toHaveBeenCalledExactlyOnceWith('oldest');
+    expect(onOpenChange).toHaveBeenCalledExactlyOnceWith(false, expect.objectContaining({ reason: 'option-select' }));
   });
 });

@@ -9,10 +9,9 @@ import {
 } from "react-native";
 import type { GestureResponderEvent, StyleProp, TextStyle } from "react-native";
 import type { Theme } from "../theme/tokens";
-import { PRESSABLE_FEEDBACK_CLASS } from "./button";
 import type { DialogFocusRef } from "./dialog";
 import { renderIconSlot } from "./icons";
-import { mergeClassNames, nativeWindProps, themedStyles } from "./internal";
+import { nativeWindProps, themedStyles } from "./internal";
 import { NativeAnchoredMenuSelectPanel } from "./menu-select-anchored.native";
 import type { NativeAnchoredMenuSelectDismissDetails } from "./menu-select-anchored.native";
 import { assertSelectProps } from "./menu-select-validation";
@@ -340,9 +339,7 @@ export function Select<const T extends string>(
               item.testID ??
               (testID === undefined ? undefined : `${testID}-item-${index}`)
             }
-            {...nativeWindProps(
-              mergeClassNames(PRESSABLE_FEEDBACK_CLASS, itemClassName)
-            )}
+            {...nativeWindProps(itemClassName)}
             style={({ pressed }) => [
               styles.item,
               {
@@ -356,6 +353,7 @@ export function Select<const T extends string>(
                   ? theme.colors.primary
                   : theme.colors.textSubtle,
                 opacity: itemDisabled ? 0.52 : 1,
+                transform: [{ scale: pressed && !itemDisabled ? 0.98 : 1 }],
               },
               itemStyle,
               !itemDisabled &&
@@ -469,9 +467,7 @@ export function Select<const T extends string>(
             : () => setTriggerHovered(false)
         }
         testID={triggerTestID}
-        {...nativeWindProps(
-          mergeClassNames(PRESSABLE_FEEDBACK_CLASS, triggerClassName)
-        )}
+        {...nativeWindProps(triggerClassName)}
         style={({ pressed }) => [
           styles.trigger,
           {
@@ -485,6 +481,7 @@ export function Select<const T extends string>(
                 ? theme.colors.textSubtle
                 : theme.colors.danger,
             opacity: disabled ? 0.58 : 1,
+            transform: [{ scale: pressed && !disabled ? 0.98 : 1 }],
           },
           triggerStyle,
           !disabled && triggerHovered && triggerHoverStyle !== undefined

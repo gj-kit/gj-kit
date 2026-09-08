@@ -34,7 +34,7 @@ pnpm add @gj-kit/expo-ui
 
 ### 2. Keep the app-owned boundary explicit
 
-Create themes once and mount `UiProvider` at the component that wraps your app.
+Create themes once and mount `UiProvider` at the component that wraps your app. Native Menu and Select own their press feedback through native styles; their default interactions do not require NativeWind.
 
 ### 3. Start with the smallest integration
 

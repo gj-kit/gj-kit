@@ -1,5 +1,11 @@
 # @gj-kit/expo-ui
 
+## 0.8.3
+
+### Patch Changes
+
+- f5ed161: Fix native Menu and Select triggers and options ignoring taps in NativeWind consumers. Render the default press feedback through native styles instead of automatically injecting interaction classes that create a nested Pressable. Web behavior, controlled state, disabled/busy handling, and anchored placement remain unchanged.
+
 ## 0.8.2
 
 ### Patch Changes

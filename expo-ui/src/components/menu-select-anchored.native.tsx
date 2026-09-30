@@ -10,13 +10,13 @@
  * the accessibility escape are inherited from Dialog unchanged. A re-measured
  * trigger that leaves the collision boundary closes the panel with reason
  * 'anchor-detached', matching the web popup. The Modal draws with translucent
- * status/navigation bars on Android so its window shares the coordinate
- * origin `measureInWindow` reports (real-device verification is tracked as a
- * design-doc §12 residual risk — jsdom cannot model the Android Modal window).
+ * status/navigation bars on Android. Android measureInWindow excludes the
+ * visible-window inset, so a measured Modal-origin probe converts the trigger
+ * into this full-window surface before placement.
  */
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { ReactElement, ReactNode, RefObject } from 'react';
-import { ScrollView, StyleSheet, useWindowDimensions, View } from 'react-native';
+import { Platform, ScrollView, StyleSheet, useWindowDimensions, View } from 'react-native';
 import type { LayoutChangeEvent, StyleProp, ViewStyle } from 'react-native';
 import type { Theme } from '../theme/tokens';
 import { Dialog } from './dialog';
@@ -144,6 +144,28 @@ export function NativeAnchoredMenuSelectPanel({
   const { width: windowWidth, height: windowHeight } = useWindowDimensions();
   const [anchor, setAnchor] = useState<OverlayRect | null>(null);
   const [panelSize, setPanelSize] = useState<OverlaySize | null>(null);
+  const modalOriginRef = useRef<View>(null);
+  const [modalOrigin, setModalOrigin] = useState<{ x: number; y: number } | null>(null);
+  const android = Platform.OS === 'android';
+
+  const measureModalOrigin = useCallback((): void => {
+    if (!visible || !android) return;
+    modalOriginRef.current?.measureInWindow((x, y) => {
+      if (!Number.isFinite(x) || !Number.isFinite(y)) return;
+      setModalOrigin((previous) =>
+        previous?.x === x && previous.y === y ? previous : { x, y },
+      );
+    });
+  }, [android, visible]);
+
+  useEffect(() => {
+    if (!visible) {
+      setModalOrigin(null);
+      return;
+    }
+    const request = requestAnimationFrame(measureModalOrigin);
+    return () => cancelAnimationFrame(request);
+  }, [measureModalOrigin, visible, windowHeight, windowWidth]);
 
   const measureAnchor = useCallback((): void => {
     const host = triggerRef.current as MeasurableTriggerHost | null;
@@ -202,10 +224,12 @@ export function NativeAnchoredMenuSelectPanel({
   );
 
   const frame =
-    anchor === null || panelSize === null
+    anchor === null || panelSize === null || (android && modalOrigin === null)
       ? null
       : computeAnchoredPanelFrame({
-          anchor,
+          anchor: android && modalOrigin !== null
+            ? { ...anchor, x: anchor.x - modalOrigin.x, y: anchor.y - modalOrigin.y }
+            : anchor,
           panel: panelSize,
           window: { width: windowWidth, height: windowHeight },
           placement,
@@ -233,8 +257,7 @@ export function NativeAnchoredMenuSelectPanel({
       // anchored 표면은 즉시 나타난다 — 위치가 측정 후 확정되므로 입장
       // 애니메이션이 오히려 위치 점프처럼 보인다.
       animationType="none"
-      // Android: Modal 창 좌표계를 measureInWindow 좌표계(전체 화면)와
-      // 일치시킨다 — 비투명 Modal 창은 status bar 높이만큼 어긋난다.
+      // 원점 차이는 아래 probe로 측정한다. 상태 표시줄 높이를 상수로 더하지 않는다.
       statusBarTranslucent
       navigationBarTranslucent
       initialFocusRef={initialFocusRef}
@@ -263,6 +286,24 @@ export function NativeAnchoredMenuSelectPanel({
       ]}
       testID={testID}
     >
+      {android ? (
+        <View
+          ref={modalOriginRef}
+          collapsable={false}
+          accessible={false}
+          pointerEvents="none"
+          testID={testID === undefined ? undefined : `${testID}-origin`}
+          onLayout={measureModalOrigin}
+          style={{
+            position: 'absolute',
+            // Dialog content가 이동해도 probe는 Modal의 (0,0)에 남는다.
+            left: -(frame?.left ?? 0),
+            top: -(frame?.top ?? 0),
+            width: 1,
+            height: 1,
+          }}
+        />
+      ) : null}
       <View
         onLayout={handlePanelLayout}
         {...nativeWindProps(contentClassName)}

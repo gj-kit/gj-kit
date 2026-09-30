@@ -1,5 +1,11 @@
 # @gj-kit/expo-ui
 
+## 0.8.4
+
+### Patch Changes
+
+- Fix Android anchored Menu and Select panels overlapping their triggers when measureInWindow excludes the status-bar inset. Measure the actual Modal origin and convert the trigger coordinates before collision placement; preserve iOS and web behavior and existing public APIs.
+
 ## 0.8.3
 
 ### Patch Changes

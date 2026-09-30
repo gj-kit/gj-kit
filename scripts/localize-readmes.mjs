@@ -383,6 +383,9 @@ ${product.safety.ko}${errorSection}
 }
 
 function withKoreanOverview(source, product, manifest, errorCodes, hasLicenseFile) {
+  for (const correction of product.readmeReplacements ?? []) {
+    source = source.replace(correction.before, correction.after);
+  }
   const switched = withLanguageSwitch(source);
   const existingOverviewStart = switched.indexOf('<!-- gj-kit-localized-overview -->');
   if (existingOverviewStart !== -1) {

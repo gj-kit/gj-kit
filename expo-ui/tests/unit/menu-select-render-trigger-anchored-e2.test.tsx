@@ -330,6 +330,38 @@ function withWindowSize(width: number, height: number): () => void {
 }
 
 describe("native anchored presentation", () => {
+  it.each([-54, 0])("converts the Android Modal origin %s before placing below the trigger", async (originY) => {
+    const originalOS = Platform.OS;
+    Platform.OS = "android";
+    const restoreWindowSize = withWindowSize(390, 800);
+    try {
+      render(<NativeMenuHarness presentation="anchored" />);
+      const trigger = screen.getByTestId("custom-trigger");
+      // The same physical trigger at y=172 has different measureInWindow
+      // coordinates with an inset viewport and with an edge-to-edge viewport.
+      stubMeasureInWindow(trigger, { x: 200, y: 172 + originY, width: 24, height: 32 });
+      fireEvent.click(trigger);
+      finishModalAnimationFrom(screen.getByTestId("native-menu-anchored"));
+      await screen.findByRole("dialog");
+      const origin = screen.getByTestId("native-menu-anchored-origin");
+      stubMeasureInWindow(origin, { x: 0, y: originY, width: 1, height: 1 });
+      firePanelLayout(origin, { width: 1, height: 1 });
+      firePanelLayout(screen.getByTestId("native-menu-anchored-panel"), { width: 111, height: 84 });
+      const content = screen.getByTestId("native-menu-anchored-content");
+      expect(content.style.top).toBe("204px");
+      expect(content.style.left).toBe("200px");
+      expect(origin.style.top).toBe("-204px");
+      // Changing the measured origin while open recomputes the frame rather
+      // than accumulating a status-bar correction on every measurement.
+      firePanelLayout(origin, { width: 1, height: 1 });
+      expect(content.style.top).toBe("204px");
+    } finally {
+      cleanup();
+      Platform.OS = originalOS;
+      restoreWindowSize();
+    }
+  });
+
   it("positions the panel by the measured trigger, paints no backdrop, and has no cancel action", async () => {
     const restoreWindowSize = withWindowSize(390, 640);
     try {

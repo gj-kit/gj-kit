@@ -107,6 +107,10 @@ export const categoryBlurbs = {
 export const packages = [
   {
     slug: "expo-ui",
+    readmeReplacements: [{
+      before: "Android에서는 anchored Modal이 status/navigation bar 아래까지 그려지도록 `statusBarTranslucent`/`navigationBarTranslucent`를 켜 Modal 창 좌표계를 `measureInWindow` 좌표계와 일치시킨다 — jsdom이 Android Modal 창을 모델링하지 못해 실기기 검증은 잔존 리스크로 추적한다(설계 문서 §12). 두 prop은 `Dialog`의 공개 prop으로도 열려 있어 앱이 자체 anchored 표면을 만들 때 같은 보정을 쓸 수 있다.",
+      after: "Android에서는 anchored Modal이 status/navigation bar 아래까지 그려지도록 `statusBarTranslucent`/`navigationBarTranslucent`를 켜며, 이것만으로 `measureInWindow`와 원점이 같아지지는 않는다. Android 트리거는 `measure`의 root 기준 page 좌표로 측정해 full-window Modal과 같은 좌표에서 위치·충돌을 계산한다. 상태 표시줄 높이를 고정값으로 더하지 않는다. iOS·웹 경로와 공개 API는 유지한다. Android 16 및 iOS 26.5 시뮬레이터에서 위치를 비교했으며 실물 기기 검증은 별도다.",
+    }],
     name: "@gj-kit/expo-ui",
     category: { en: "Expo & React Native", ko: "Expo · React Native" },
     description: {
@@ -122,6 +126,13 @@ export const packages = [
       ko: "React Native 디자인 시스템의 사고는 조용히 일어납니다. accessibility label 없는 IconButton이 그대로 배포되고, Tabs의 value 오타 하나로 panel이 빈 화면이 되고, EmptyState의 action이 onPress 없이 눌러도 아무 일 없는 버튼으로 렌더되고, 손으로 조립한 theme 객체가 style에 undefined를 흘립니다. 어느 것도 빌드를 깨뜨리지 않으니 스크린 리더에서, 프로덕션에서, 남의 기기에서야 드러납니다.",
     },
     highlights: [
+      {
+        title: { en: "Measured Android popup coordinates", ko: "Android 팝업 좌표를 실제로 측정합니다" },
+        body: {
+          en: "Android anchored Menu and Select measure root-relative trigger page coordinates to match the full-window Modal. Status-bar insets are not hardcoded; iOS and web retain their existing placement paths.",
+          ko: "Android anchored Menu·Select는 root 기준 트리거 page 좌표를 측정해 full-window Modal과 맞춥니다. 상태 표시줄 높이를 고정값으로 더하지 않으며 iOS·웹의 기존 배치 경로는 유지합니다.",
+        },
+      },
       {
         title: {
           en: "Accessible names the type demands",

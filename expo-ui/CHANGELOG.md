@@ -4,7 +4,7 @@
 
 ### Patch Changes
 
-- Fix Android anchored Menu and Select panels overlapping their triggers when measureInWindow excludes the status-bar inset. Measure the actual Modal origin and convert the trigger coordinates before collision placement; preserve iOS and web behavior and existing public APIs.
+- Fix Android anchored Menu and Select panels overlapping their triggers when measureInWindow excludes the status-bar inset. Use root-relative measure page coordinates on Android to match the full-window Modal before collision placement; preserve iOS and web behavior and existing public APIs.
 
 ## 0.8.3
 

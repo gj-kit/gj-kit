@@ -18,7 +18,7 @@ React Native 디자인 시스템의 사고는 조용히 일어납니다. accessi
 
 ## 무엇으로 막는가
 
-- **Android 팝업 좌표를 실제로 측정합니다** — anchored Menu·Select는 Modal 원점을 측정한 뒤 트리거 좌표를 변환합니다. 상태 표시줄 높이를 고정값으로 더하지 않으며 iOS·웹의 기존 배치 경로는 유지합니다.
+- **Android 팝업 좌표를 실제로 측정합니다** — Android anchored Menu·Select는 root 기준 트리거 page 좌표를 측정해 full-window Modal과 맞춥니다. 상태 표시줄 높이를 고정값으로 더하지 않으며 iOS·웹의 기존 배치 경로는 유지합니다.
 - **접근성 이름을 타입이 요구합니다** — accessibilityLabel 없는 IconButton, 이름을 유추할 수 없는 rich children Button, thumb이 둘인데 label은 하나인 range Slider가 모두 타입 검사에서 거부됩니다.
 - **죽은 버튼은 컴파일되지 않습니다** — Button·IconButton의 interaction prop이 union이라 disabled도 loading도 아니면 onPress가 필수이고, EmptyState의 action은 label과 onPress를 함께 요구합니다. 눌러도 아무 일 없는 버튼은 애초에 컴파일되지 않습니다.
 - **Tabs는 panel을 잃지 않습니다** — panels 타입이 `Readonly<Record<NoInfer<ItemValue>, NonNullable<ReactNode>>>`이고 value에도 NoInfer가 걸려 있어, items에 없는 value 오타는 물론 panel 하나 누락이나 null panel까지 타입 검사에서 걸립니다.

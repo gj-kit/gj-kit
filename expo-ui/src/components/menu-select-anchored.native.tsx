@@ -11,10 +11,10 @@
  * trigger that leaves the collision boundary closes the panel with reason
  * 'anchor-detached', matching the web popup. The Modal draws with translucent
  * status/navigation bars on Android. Android measureInWindow excludes the
- * visible-window inset, so a measured Modal-origin probe converts the trigger
- * into this full-window surface before placement.
+ * visible-window inset. Android uses measure page coordinates relative to the
+ * React root, matching the full-window Modal surface before placement.
  */
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import type { ReactElement, ReactNode, RefObject } from 'react';
 import { Platform, ScrollView, StyleSheet, useWindowDimensions, View } from 'react-native';
 import type { LayoutChangeEvent, StyleProp, ViewStyle } from 'react-native';
@@ -35,6 +35,9 @@ import { useTheme } from './provider';
 
 /** The imperative measurement surface every RN host (and RNW node) exposes. */
 type MeasurableTriggerHost = {
+  readonly measure?: (
+    callback: (x: number, y: number, width: number, height: number, pageX: number, pageY: number) => void,
+  ) => void;
   readonly measureInWindow?: (
     callback: (x: number, y: number, width: number, height: number) => void,
   ) => void;
@@ -144,34 +147,10 @@ export function NativeAnchoredMenuSelectPanel({
   const { width: windowWidth, height: windowHeight } = useWindowDimensions();
   const [anchor, setAnchor] = useState<OverlayRect | null>(null);
   const [panelSize, setPanelSize] = useState<OverlaySize | null>(null);
-  const modalOriginRef = useRef<View>(null);
-  const [modalOrigin, setModalOrigin] = useState<{ x: number; y: number } | null>(null);
-  const android = Platform.OS === 'android';
-
-  const measureModalOrigin = useCallback((): void => {
-    if (!visible || !android) return;
-    modalOriginRef.current?.measureInWindow((x, y) => {
-      if (!Number.isFinite(x) || !Number.isFinite(y)) return;
-      setModalOrigin((previous) =>
-        previous?.x === x && previous.y === y ? previous : { x, y },
-      );
-    });
-  }, [android, visible]);
-
-  useEffect(() => {
-    if (!visible) {
-      setModalOrigin(null);
-      return;
-    }
-    const request = requestAnimationFrame(measureModalOrigin);
-    return () => cancelAnimationFrame(request);
-  }, [measureModalOrigin, visible, windowHeight, windowWidth]);
-
   const measureAnchor = useCallback((): void => {
     const host = triggerRef.current as MeasurableTriggerHost | null;
     if (host === null || host === undefined) return;
-    if (typeof host.measureInWindow !== 'function') return;
-    host.measureInWindow((x, y, width, height) => {
+    const updateAnchor = (x: number, y: number, width: number, height: number): void => {
       // 분리 중인 host는 NaN을 보고할 수 있다 — 마지막 유효 프레임을 유지한다.
       if (
         !Number.isFinite(x) ||
@@ -183,7 +162,18 @@ export function NativeAnchoredMenuSelectPanel({
       }
       const next: OverlayRect = { x, y, width, height };
       setAnchor((previous) => (sameRect(previous, next) ? previous : next));
-    });
+    };
+    if (Platform.OS === 'android') {
+      // measureInWindow adds ReactSurfaceView viewportOffset, which subtracts
+      // the visible-window inset even with an edge-to-edge React root. The
+      // full-window Modal has no such offset. Root-relative page coordinates
+      // keep both surfaces in the same frame without a fixed status-bar inset.
+      host.measure?.((_x, _y, width, height, pageX, pageY) => {
+        updateAnchor(pageX, pageY, width, height);
+      });
+    } else {
+      host.measureInWindow?.(updateAnchor);
+    }
   }, [triggerRef]);
 
   useEffect(() => {
@@ -224,12 +214,10 @@ export function NativeAnchoredMenuSelectPanel({
   );
 
   const frame =
-    anchor === null || panelSize === null || (android && modalOrigin === null)
+    anchor === null || panelSize === null
       ? null
       : computeAnchoredPanelFrame({
-          anchor: android && modalOrigin !== null
-            ? { ...anchor, x: anchor.x - modalOrigin.x, y: anchor.y - modalOrigin.y }
-            : anchor,
+          anchor,
           panel: panelSize,
           window: { width: windowWidth, height: windowHeight },
           placement,
@@ -257,7 +245,7 @@ export function NativeAnchoredMenuSelectPanel({
       // anchored 표면은 즉시 나타난다 — 위치가 측정 후 확정되므로 입장
       // 애니메이션이 오히려 위치 점프처럼 보인다.
       animationType="none"
-      // 원점 차이는 아래 probe로 측정한다. 상태 표시줄 높이를 상수로 더하지 않는다.
+      // Android 트리거는 full-window Modal과 같은 root 좌표로 측정한다.
       statusBarTranslucent
       navigationBarTranslucent
       initialFocusRef={initialFocusRef}
@@ -286,24 +274,6 @@ export function NativeAnchoredMenuSelectPanel({
       ]}
       testID={testID}
     >
-      {android ? (
-        <View
-          ref={modalOriginRef}
-          collapsable={false}
-          accessible={false}
-          pointerEvents="none"
-          testID={testID === undefined ? undefined : `${testID}-origin`}
-          onLayout={measureModalOrigin}
-          style={{
-            position: 'absolute',
-            // Dialog content가 이동해도 probe는 Modal의 (0,0)에 남는다.
-            left: -(frame?.left ?? 0),
-            top: -(frame?.top ?? 0),
-            width: 1,
-            height: 1,
-          }}
-        />
-      ) : null}
       <View
         onLayout={handlePanelLayout}
         {...nativeWindProps(contentClassName)}

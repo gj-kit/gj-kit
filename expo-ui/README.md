@@ -16,7 +16,7 @@ In a React Native design system the failures are silent: an IconButton ships wit
 
 ## What it does about it
 
-- **Measured Android popup coordinates** — Anchored Menu and Select measure their Modal origin before converting trigger coordinates. Status-bar insets are not hardcoded; iOS and web retain their existing placement paths.
+- **Measured Android popup coordinates** — Android anchored Menu and Select measure root-relative trigger page coordinates to match the full-window Modal. Status-bar insets are not hardcoded; iOS and web retain their existing placement paths.
 - **Accessible names the type demands** — IconButton without accessibilityLabel, a rich-children Button with no name, and a range Slider given one label instead of a two-thumb tuple are all rejected.
 - **Dead buttons do not compile** — ButtonInteractionProps is a union: onPress is required unless disabled or loading is literally true, and an EmptyState action must carry both label and onPress.
 - **Tabs cannot lose a panel** — panels is typed `Readonly<Record<NoInfer<ItemValue>, NonNullable<ReactNode>>>` and value is NoInfer-wrapped, so a typo’d value, a missing panel, and a null panel all fail typecheck.

@@ -7,7 +7,7 @@
  */
 import { forwardRef } from 'react';
 import type { ComponentRef, ReactElement, ReactNode } from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, Text as RNText } from 'react-native';
+import { ActivityIndicator, Platform, Pressable, StyleSheet, Text as RNText } from 'react-native';
 import type { StyleProp, TextStyle, ViewStyle } from 'react-native';
 import type { Theme } from '../theme/tokens';
 import { mergeClassNames, nativeWindProps, themedStyles } from './internal';
@@ -105,6 +105,9 @@ function buttonDimensions(theme: Theme, size: ButtonSize) {
   return { minHeight: theme.metrics.control[size], fontSize, ...padding };
 }
 
+// Packed JSX bypasses the host NativeWind transform. On native, implicit
+// pseudo-classes reach Pressable's inner View and can create a second responder
+// without onPress. Native feedback belongs in the Pressable style callback.
 export const PRESSABLE_FEEDBACK_CLASS = 'hover:brightness-90 active:scale-[0.98]';
 
 type ButtonAction = () => void;
@@ -287,7 +290,7 @@ export const Button = forwardRef<ComponentRef<typeof Pressable>, ButtonProps>(fu
       testID={testID}
       disabled={disabled || loading}
       onPress={onPress}
-      {...nativeWindProps(mergeClassNames(PRESSABLE_FEEDBACK_CLASS, className))}
+      {...nativeWindProps(mergeClassNames(Platform.OS === 'web' ? PRESSABLE_FEEDBACK_CLASS : undefined, className))}
       style={({ pressed }) => [
         styles.button,
         {
@@ -402,7 +405,7 @@ export function IconButton({
       disabled={disabled || loading}
       onPress={onPress}
       testID={testID}
-      {...nativeWindProps(mergeClassNames(PRESSABLE_FEEDBACK_CLASS, className))}
+      {...nativeWindProps(mergeClassNames(Platform.OS === 'web' ? PRESSABLE_FEEDBACK_CLASS : undefined, className))}
       style={({ pressed }) => [
         styles.circle,
         {

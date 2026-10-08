@@ -37,7 +37,7 @@ pnpm add @gj-kit/expo-ui
 
 ### 2. 앱이 소유할 경계를 정합니다
 
-테마는 한 번만 만들고 앱을 감싸는 컴포넌트에 `UiProvider`를 둡니다. 네이티브 Menu·Select는 누름 피드백을 네이티브 스타일로 처리하므로 기본 상호작용에 NativeWind가 필요하지 않습니다.
+테마는 한 번만 만들고 앱을 감싸는 컴포넌트에 `UiProvider`를 둡니다. 네이티브 Button·IconButton·Menu·Select는 누름 피드백을 네이티브 스타일로 처리하므로 기본 상호작용에 NativeWind가 필요하지 않습니다.
 
 ### 3. 최소 연결부터 시작합니다
 

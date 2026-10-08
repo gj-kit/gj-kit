@@ -1137,11 +1137,11 @@ export const quickStartBySlug = {
   "expo-ui": {
     en: {
       outcome: "A themed, accessible button rendered from one application-wide provider.",
-      boundary: "Create themes once and mount `UiProvider` at the component that wraps your app. Native Menu and Select own their press feedback through native styles; their default interactions do not require NativeWind.",
+      boundary: "Create themes once and mount `UiProvider` at the component that wraps your app. Native Button, IconButton, Menu and Select own their press feedback through native styles; their default interactions do not require NativeWind.",
     },
     ko: {
       outcome: "앱 전체 provider 하나에서 테마와 접근성이 적용된 버튼을 렌더링합니다.",
-      boundary: "테마는 한 번만 만들고 앱을 감싸는 컴포넌트에 `UiProvider`를 둡니다. 네이티브 Menu·Select는 누름 피드백을 네이티브 스타일로 처리하므로 기본 상호작용에 NativeWind가 필요하지 않습니다.",
+      boundary: "테마는 한 번만 만들고 앱을 감싸는 컴포넌트에 `UiProvider`를 둡니다. 네이티브 Button·IconButton·Menu·Select는 누름 피드백을 네이티브 스타일로 처리하므로 기본 상호작용에 NativeWind가 필요하지 않습니다.",
     },
   },
   "expo-media": {
